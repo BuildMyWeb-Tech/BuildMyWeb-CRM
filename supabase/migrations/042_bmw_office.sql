@@ -1,157 +1,343 @@
 -- ============================================================
--- 043_bmw_office.sql — BMW CRM Phase 4: BMW Office
+-- 042_bmw_office.sql — BMW CRM Phase 4: BMW Office
 --
--- Two pieces:
+-- This migration creates:
 --
--- 1. office_access — the checkbox. A row here grants a non-admin
---    account member VIEW access to Office (its file tree from
---    042_file_manager.sql, plus Company Info below). Admins always
---    have full access regardless of this table; this only ever
---    ADDS reach for non-admins, it never restricts an admin.
---    Editing (uploads, company info edits) stays admin-only even
---    for a member with office_access — this grants viewing, not
---    editing. Loosen that later if you decide non-admins should be
---    able to edit too.
+-- 1. office_access
+--    Grants non-admin account members access to the BMW Office.
 --
--- 2. company_info_fields / company_info_values — a small EAV pair
---    mirroring the app's existing custom_fields/contact_custom_values
---    pattern (001_initial_schema.sql) rather than a fixed-column
---    table, since BMW wants admin-defined field names with a
---    required/optional flag, not a hardcoded form. Starts empty —
---    no fields are seeded; the first thing an admin does on this
---    page is add their own.
+-- 2. has_office_access()
+--    Helper function used by Office-related RLS policies.
 --
--- Bills are NOT a separate table by design — they're just PDFs in
--- the Phase 3 File Manager (e.g. a "Bills" folder you create
--- yourself under Office). Keeping that as plain files avoided
--- building a second, redundant upload system.
+-- 3. company_info_fields
+--    Admin-defined company information fields.
+--
+-- 4. company_info_values
+--    Values stored against those fields.
+--
+-- IMPORTANT:
+-- This migration intentionally DOES NOT reference file_folders,
+-- files, or storage.objects.
+--
+-- The File Manager is created by 044_file_manager.sql.
+-- Referencing file_folders here would make migration 042 depend
+-- on a later migration and cause:
+--
+--   ERROR: relation "file_folders" does not exist
+--
+-- File Manager / Office storage policies should therefore be
+-- handled in 044 or in a later migration.
+--
+-- UUID generation:
+-- Uses gen_random_uuid(), which is available in modern Supabase
+-- PostgreSQL installations.
 --
 -- Idempotent — safe to run multiple times.
 -- ============================================================
 
+
 -- ============================================================
 -- OFFICE_ACCESS
 -- ============================================================
+--
+-- One row grants a member access to BMW Office.
+--
+-- Admins do not need a row here because admins automatically
+-- have Office access through has_office_access().
+--
+-- Non-admin members need an explicit row.
+--
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS office_access (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  granted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  account_id UUID NOT NULL
+    REFERENCES accounts(id)
+    ON DELETE CASCADE,
+
+  user_id UUID NOT NULL
+    REFERENCES auth.users(id)
+    ON DELETE CASCADE,
+
+  granted_by UUID
+    REFERENCES auth.users(id)
+    ON DELETE SET NULL,
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
   UNIQUE (account_id, user_id)
 );
 
+
+CREATE INDEX IF NOT EXISTS idx_office_access_account
+  ON office_access(account_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_office_access_user
+  ON office_access(user_id);
+
+
 ALTER TABLE office_access ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Admins can manage office access" ON office_access;
-CREATE POLICY "Admins can manage office access" ON office_access FOR ALL
-  USING (is_account_member(account_id, 'admin'))
-  WITH CHECK (is_account_member(account_id, 'admin'));
-
--- A member can see their OWN grant row (so the UI can tell them
--- they have access) without being able to see the whole roster of
--- who else has it — that stays admin-only, above.
-DROP POLICY IF EXISTS "Members can see their own office access" ON office_access;
-CREATE POLICY "Members can see their own office access" ON office_access FOR SELECT
-  USING (user_id = auth.uid());
 
 -- ============================================================
--- has_office_access() — admin, OR an explicit grant row.
--- Used by Office-scoped rows in file_folders/files (updated below)
--- and by company_info_fields/company_info_values.
+-- OFFICE_ACCESS POLICIES
 -- ============================================================
-CREATE OR REPLACE FUNCTION has_office_access(target_account_id UUID)
+
+DROP POLICY IF EXISTS "Admins can manage office access"
+  ON office_access;
+
+CREATE POLICY "Admins can manage office access"
+  ON office_access
+  FOR ALL
+  USING (
+    is_account_member(account_id, 'admin')
+  )
+  WITH CHECK (
+    is_account_member(account_id, 'admin')
+  );
+
+
+-- A member can see their own Office access row.
+--
+-- This allows the frontend to determine whether the current
+-- user has been granted Office access without exposing the
+-- complete Office-access roster to ordinary members.
+--
+-- Admins can already see/manage everything through the policy
+-- above.
+
+DROP POLICY IF EXISTS "Members can see their own office access"
+  ON office_access;
+
+CREATE POLICY "Members can see their own office access"
+  ON office_access
+  FOR SELECT
+  USING (
+    user_id = auth.uid()
+  );
+
+
+-- ============================================================
+-- HAS_OFFICE_ACCESS()
+-- ============================================================
+--
+-- Returns TRUE when:
+--
+-- 1. The current user is an account admin
+-- OR
+-- 2. The current user has an explicit office_access row
+--
+-- SECURITY DEFINER is intentional because this function is used
+-- inside RLS policies.
+--
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION has_office_access(
+  target_account_id UUID
+)
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT is_account_member(target_account_id, 'admin')
+  SELECT
+    is_account_member(target_account_id, 'admin')
     OR EXISTS (
-      SELECT 1 FROM office_access
-      WHERE account_id = target_account_id AND user_id = auth.uid()
+      SELECT 1
+      FROM office_access
+      WHERE office_access.account_id = target_account_id
+        AND office_access.user_id = auth.uid()
     );
 $$;
 
-GRANT EXECUTE ON FUNCTION has_office_access(UUID) TO authenticated, service_role;
+
+GRANT EXECUTE
+  ON FUNCTION has_office_access(UUID)
+  TO authenticated, service_role;
+
 
 -- ============================================================
--- Widen Phase 3's Office-scoped SELECT policies from admin-only to
--- has_office_access() now that the checkbox exists. The manage
--- (INSERT/UPDATE/DELETE) policies are untouched — editing Office
--- files stays admin-only, see the note at the top of this file.
+-- COMPANY_INFO_FIELDS
 -- ============================================================
-DROP POLICY IF EXISTS "Viewers can read project folders" ON file_folders;
-CREATE POLICY "Viewers can read project folders" ON file_folders FOR SELECT
-  USING (
-    (project_id IS NOT NULL AND is_account_member(account_id, 'viewer'))
-    OR (project_id IS NULL AND has_office_access(account_id))
-  );
-
-DROP POLICY IF EXISTS "Viewers can read project files" ON files;
-CREATE POLICY "Viewers can read project files" ON files FOR SELECT
-  USING (
-    (project_id IS NOT NULL AND is_account_member(account_id, 'viewer'))
-    OR (project_id IS NULL AND has_office_access(account_id))
-  );
-
--- Storage bucket SELECT policy from 042 already floors at
--- account-viewer, which is looser than has_office_access() — an
--- account viewer without an office_access grant still can't
--- discover an Office file's storage_path (blocked by the `files`
--- table policy above), so there is nothing for the looser bucket
--- policy to actually expose. No change needed there.
-
+--
+-- Admin-defined company information fields.
+--
+-- Examples:
+--
+-- Company Name
+-- Company Registration Number
+-- GST Number
+-- PAN Number
+-- Address
+-- Phone
+-- Email
+-- Website
+-- Founder
+-- Bank Name
+-- etc.
+--
+-- The actual fields are intentionally NOT hardcoded.
+--
 -- ============================================================
--- COMPANY_INFO_FIELDS — admin-defined field list
--- ============================================================
+
 CREATE TABLE IF NOT EXISTS company_info_fields (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  account_id UUID NOT NULL
+    REFERENCES accounts(id)
+    ON DELETE CASCADE,
+
   field_name TEXT NOT NULL,
+
   is_required BOOLEAN NOT NULL DEFAULT FALSE,
+
   position INTEGER NOT NULL DEFAULT 0,
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_company_info_fields_account ON company_info_fields(account_id);
+
+CREATE INDEX IF NOT EXISTS idx_company_info_fields_account
+  ON company_info_fields(account_id);
+
 
 ALTER TABLE company_info_fields ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Office access can read company fields" ON company_info_fields;
-CREATE POLICY "Office access can read company fields" ON company_info_fields FOR SELECT
-  USING (has_office_access(account_id));
-
-DROP POLICY IF EXISTS "Admins can manage company fields" ON company_info_fields;
-CREATE POLICY "Admins can manage company fields" ON company_info_fields FOR ALL
-  USING (is_account_member(account_id, 'admin'))
-  WITH CHECK (is_account_member(account_id, 'admin'));
 
 -- ============================================================
--- COMPANY_INFO_VALUES — one value per field, per account
+-- COMPANY_INFO_FIELDS SELECT
 -- ============================================================
+
+DROP POLICY IF EXISTS "Office access can read company fields"
+  ON company_info_fields;
+
+CREATE POLICY "Office access can read company fields"
+  ON company_info_fields
+  FOR SELECT
+  USING (
+    has_office_access(account_id)
+  );
+
+
+-- ============================================================
+-- COMPANY_INFO_FIELDS ADMIN MANAGEMENT
+-- ============================================================
+
+DROP POLICY IF EXISTS "Admins can manage company fields"
+  ON company_info_fields;
+
+CREATE POLICY "Admins can manage company fields"
+  ON company_info_fields
+  FOR ALL
+  USING (
+    is_account_member(account_id, 'admin')
+  )
+  WITH CHECK (
+    is_account_member(account_id, 'admin')
+  );
+
+
+-- ============================================================
+-- COMPANY_INFO_VALUES
+-- ============================================================
+--
+-- Stores the value for each company information field.
+--
+-- Example:
+--
+-- company_info_fields:
+--   "Company Name"
+--
+-- company_info_values:
+--   "BuildMyWeb"
+--
+-- One value per account + field.
+--
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS company_info_values (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  field_id UUID NOT NULL REFERENCES company_info_fields(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  account_id UUID NOT NULL
+    REFERENCES accounts(id)
+    ON DELETE CASCADE,
+
+  field_id UUID NOT NULL
+    REFERENCES company_info_fields(id)
+    ON DELETE CASCADE,
+
   value TEXT,
+
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+
+  updated_by UUID
+    REFERENCES auth.users(id)
+    ON DELETE SET NULL,
+
   UNIQUE (account_id, field_id)
 );
 
+
+CREATE INDEX IF NOT EXISTS idx_company_info_values_account
+  ON company_info_values(account_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_company_info_values_field
+  ON company_info_values(field_id);
+
+
 ALTER TABLE company_info_values ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Office access can read company values" ON company_info_values;
-CREATE POLICY "Office access can read company values" ON company_info_values FOR SELECT
-  USING (has_office_access(account_id));
 
-DROP POLICY IF EXISTS "Admins can manage company values" ON company_info_values;
-CREATE POLICY "Admins can manage company values" ON company_info_values FOR ALL
-  USING (is_account_member(account_id, 'admin'))
-  WITH CHECK (is_account_member(account_id, 'admin'));
+-- ============================================================
+-- COMPANY_INFO_VALUES SELECT
+-- ============================================================
 
-DROP TRIGGER IF EXISTS set_updated_at ON company_info_values;
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON company_info_values
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP POLICY IF EXISTS "Office access can read company values"
+  ON company_info_values;
+
+CREATE POLICY "Office access can read company values"
+  ON company_info_values
+  FOR SELECT
+  USING (
+    has_office_access(account_id)
+  );
+
+
+-- ============================================================
+-- COMPANY_INFO_VALUES ADMIN MANAGEMENT
+-- ============================================================
+
+DROP POLICY IF EXISTS "Admins can manage company values"
+  ON company_info_values;
+
+CREATE POLICY "Admins can manage company values"
+  ON company_info_values
+  FOR ALL
+  USING (
+    is_account_member(account_id, 'admin')
+  )
+  WITH CHECK (
+    is_account_member(account_id, 'admin')
+  );
+
+
+-- ============================================================
+-- UPDATED_AT TRIGGER
+-- ============================================================
+
+DROP TRIGGER IF EXISTS set_updated_at
+  ON company_info_values;
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON company_info_values
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ============================================================
+-- END OF 042_bmw_office.sql
+-- ============================================================

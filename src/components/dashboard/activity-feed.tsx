@@ -1,7 +1,3 @@
-"use client"
-
-import Link from 'next/link'
-import { useState } from 'react'
 import {
   MessageSquare,
   UserPlus,
@@ -9,12 +5,16 @@ import {
   Radio,
   Zap,
   Inbox,
+  KanbanSquare,
+  FileText,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { ActivityItem, ActivityKind } from '@/lib/dashboard/types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from './empty-state'
 import { Skeleton } from './skeleton'
+import { useState } from "react";
+import Link from "next/link";
 
 interface ActivityFeedProps {
   items: ActivityItem[] | null
@@ -36,6 +36,8 @@ const KIND_THEME: Record<ActivityKind, KindTheme> = {
   deal: { icon: Briefcase, badge: 'bg-primary/10 text-primary' },
   broadcast: { icon: Radio, badge: 'bg-amber-500/10 text-amber-400' },
   automation: { icon: Zap, badge: 'bg-rose-500/10 text-rose-400' },
+  project: { icon: KanbanSquare, badge: 'bg-violet-500/10 text-violet-400' },
+  file: { icon: FileText, badge: 'bg-teal-500/10 text-teal-400' },
 }
 
 import { useTranslations } from 'next-intl'

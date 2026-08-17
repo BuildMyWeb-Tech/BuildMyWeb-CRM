@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Building2, FileText, Folder, Users } from "lucide-react";
 import { FileManager } from "@/components/files/file-manager";
 import { CompanyInfo } from "@/components/office/company-info";
@@ -9,15 +10,34 @@ import { useAuth } from "@/hooks/use-auth";
 
 type OfficeTab = "info" | "files" | "access";
 
+function isOfficeTab(value: string | null): value is OfficeTab {
+  return value === "info" || value === "files" || value === "access";
+}
+
 // BMW Office — three sections:
 //   Company Info — admin-defined custom fields (see company-info.tsx)
 //   Files — the Phase 3 File Manager, Office-scoped (project_id null).
 //           Bills are just PDFs here (e.g. a "Bills" folder you make
 //           yourself) — no separate bills system, per BMW's call.
 //   Access — admin-only: tick teammates to grant them Office viewing
+//
+// `useSearchParams` opts this page out of static prerendering unless
+// wrapped in Suspense — same reasoning as settings/page.tsx. Lets the
+// Office dashboard's shortcuts deep-link straight to a tab via
+// /office?tab=files instead of always landing on Company Info.
 export default function OfficePage() {
+  return (
+    <Suspense fallback={null}>
+      <OfficePageInner />
+    </Suspense>
+  );
+}
+
+function OfficePageInner() {
   const { accountId, user, canManageMembers } = useAuth();
-  const [tab, setTab] = useState<OfficeTab>("info");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<OfficeTab>(isOfficeTab(initialTab) ? initialTab : "info");
 
   if (!accountId || !user) return null;
 

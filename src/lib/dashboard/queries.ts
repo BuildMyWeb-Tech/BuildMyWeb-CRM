@@ -11,8 +11,10 @@ import type {
   ActivityItem,
   ConversationsSeriesPoint,
   MetricsBundle,
+  OfficeMetrics,
   PipelineDonutData,
   PipelineStageSlice,
+  ProjectsMetrics,
   ResponseTimeBucket,
   ResponseTimeSummary,
 } from './types'
@@ -395,4 +397,130 @@ export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> 
   return items
     .sort((a, b) => (a.at > b.at ? -1 : a.at < b.at ? 1 : 0))
     .slice(0, limit)
+}
+
+// --- 6. Projects module (Phase 5) --------------------------------------
+
+export async function loadProjectsMetrics(db: DB): Promise<ProjectsMetrics> {
+  const weekFromNow = new Date()
+  weekFromNow.setDate(weekFromNow.getDate() + 7)
+  const todayKey = startOfLocalDay().toISOString().slice(0, 10)
+  const weekFromNowKey = weekFromNow.toISOString().slice(0, 10)
+
+  const [activeProjects, dueThisWeek, overdue, totalTasks] = await Promise.all([
+    db.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    db
+      .from('project_tasks')
+      .select('id', { count: 'exact', head: true })
+      .gte('due_date', todayKey)
+      .lte('due_date', weekFromNowKey),
+    db.from('project_tasks').select('id', { count: 'exact', head: true }).lt('due_date', todayKey),
+    db.from('project_tasks').select('id', { count: 'exact', head: true }),
+  ])
+
+  return {
+    activeProjects: activeProjects.count ?? 0,
+    tasksDueThisWeek: dueThisWeek.count ?? 0,
+    tasksOverdue: overdue.count ?? 0,
+    totalTasks: totalTasks.count ?? 0,
+  }
+}
+
+export async function loadProjectsActivity(db: DB, limit = 10): Promise<ActivityItem[]> {
+  const [projects, tasks] = await Promise.all([
+    db
+      .from('projects')
+      .select('id, name, created_at')
+      .order('created_at', { ascending: false })
+      .limit(6),
+    db
+      .from('project_tasks')
+      .select('id, title, project_id, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(10),
+  ])
+
+  const items: ActivityItem[] = []
+
+  for (const p of (projects.data ?? []) as Array<{ id: string; name: string; created_at: string }>) {
+    items.push({
+      id: `proj-${p.id}`,
+      kind: 'project',
+      text: `Project "${p.name}" created`,
+      at: p.created_at,
+      href: `/projects/${p.id}`,
+    })
+  }
+
+  for (const t of (tasks.data ?? []) as Array<{
+    id: string
+    title: string
+    project_id: string
+    updated_at: string
+  }>) {
+    items.push({
+      id: `task-${t.id}`,
+      kind: 'project',
+      text: `Task "${t.title}" updated`,
+      at: t.updated_at,
+      href: `/projects/${t.project_id}`,
+    })
+  }
+
+  return items
+    .sort((a, b) => (a.at > b.at ? -1 : a.at < b.at ? 1 : 0))
+    .slice(0, limit)
+}
+
+// --- 7. Office module (Phase 5) -----------------------------------------
+
+export async function loadOfficeMetrics(db: DB): Promise<OfficeMetrics> {
+  const weekAgo = daysAgoStart(6).toISOString()
+
+  const [fields, values, totalFiles, filesThisWeek] = await Promise.all([
+    db.from('company_info_fields').select('id, is_required'),
+    db.from('company_info_values').select('field_id, value'),
+    db.from('files').select('id', { count: 'exact', head: true }).is('project_id', null),
+    db
+      .from('files')
+      .select('id', { count: 'exact', head: true })
+      .is('project_id', null)
+      .gte('created_at', weekAgo),
+  ])
+
+  const requiredFields = ((fields.data ?? []) as Array<{ id: string; is_required: boolean }>).filter(
+    (f) => f.is_required,
+  )
+  const valueByField = new Map(
+    ((values.data ?? []) as Array<{ field_id: string; value: string | null }>).map((v) => [
+      v.field_id,
+      v.value,
+    ]),
+  )
+  const requiredFieldsFilled = requiredFields.filter((f) => (valueByField.get(f.id) ?? '').trim() !== '')
+    .length
+
+  return {
+    requiredFieldsTotal: requiredFields.length,
+    requiredFieldsFilled,
+    totalFiles: totalFiles.count ?? 0,
+    filesThisWeek: filesThisWeek.count ?? 0,
+  }
+}
+
+export async function loadOfficeActivity(db: DB, limit = 10): Promise<ActivityItem[]> {
+  const { data } = await db
+    .from('files')
+    .select('id, name, created_at')
+    .is('project_id', null)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  return ((data ?? []) as Array<{ id: string; name: string; created_at: string }>).map((f) => ({
+    id: `file-${f.id}`,
+    kind: 'file' as const,
+    at: f.created_at,
+    text: `File "${f.name}" uploaded`,
+    href: '/office?tab=files',
+  }))
 }

@@ -54,6 +54,8 @@ export type ActivityKind =
   | 'broadcast'
   | 'automation'
   | 'contact'
+  | 'project'
+  | 'file'
 
 export interface ActivityItem {
   id: string
@@ -64,4 +66,26 @@ export interface ActivityItem {
   at: string
   /** Optional deep-link for the whole row (not all items have a target). */
   href?: string
+}
+
+// ------------------------------------------------------------
+// Projects module (Phase 5)
+// ------------------------------------------------------------
+
+export interface ProjectsMetrics {
+  activeProjects: number
+  tasksDueThisWeek: number
+  tasksOverdue: number
+  totalTasks: number
+}
+
+// ------------------------------------------------------------
+// Office module (Phase 5)
+// ------------------------------------------------------------
+
+export interface OfficeMetrics {
+  requiredFieldsTotal: number
+  requiredFieldsFilled: number
+  totalFiles: number
+  filesThisWeek: number
 }
