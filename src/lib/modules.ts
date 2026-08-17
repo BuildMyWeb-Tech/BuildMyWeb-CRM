@@ -30,6 +30,7 @@ import {
   Users,
   Workflow,
   Zap,
+  Sparkles,
 } from "lucide-react";
 
 export interface ModuleNavItem {
@@ -62,12 +63,13 @@ export const CRM_MODULES: CrmModule[] = [
     labelKey: "moduleSales",
     minRole: "viewer",
     items: [
+      { href: "/leads/generate", labelKey: "leadSourcing", icon: Sparkles, minRole: "agent" },
       { href: "/inbox", labelKey: "inbox", icon: MessageSquare, minRole: "viewer" },
       { href: "/contacts", labelKey: "contacts", icon: Users, minRole: "viewer" },
       { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer" },
       { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent" },
       { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent" },
-      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true },
+      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent"},
       { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent" },
     ],
   },
