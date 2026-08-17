@@ -15,7 +15,7 @@
     "createAccount": "Create account"
   },
   "Sidebar": {
-    "title": "CRM Template for WhatsApp",
+    "title": "BuildMyWeb CRM",
     "dashboard": "Dashboard",
     "inbox": "Inbox",
     "notifications": "Notifications",
@@ -26,6 +26,11 @@
     "flows": "Flows",
     "aiAgents": "AI Agents",
     "settings": "Settings",
+    "moduleSales": "Sales",
+    "moduleProjects": "Projects",
+    "moduleOffice": "Office",
+    "projects": "Projects",
+    "office": "Office",
     "beta": "Beta",
     "unreadConversations": "{count} unread {count, plural, =1 {conversation} other {conversations}}",
     "unreadNotifications": "{count} unread {count, plural, =1 {notification} other {notifications}}",

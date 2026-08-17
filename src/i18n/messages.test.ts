@@ -10,7 +10,11 @@ import { describe, expect, it } from 'vitest';
 
 const MESSAGES_DIR = join(process.cwd(), 'messages');
 const SOURCE_LOCALE = 'en';
-const TRANSLATED_LOCALES = ['ko'];
+// BMW CRM ships English-only for now — Korean (messages/ko.json) was
+// dropped since it wasn't serving the project. Add locale codes back
+// here (and restore/create the matching messages/<locale>.json) if
+// multi-language support is ever needed.
+const TRANSLATED_LOCALES: string[] = [];
 
 function loadKeys(locale: string): Set<string> {
   const raw = readFileSync(join(MESSAGES_DIR, `${locale}.json`), 'utf8');

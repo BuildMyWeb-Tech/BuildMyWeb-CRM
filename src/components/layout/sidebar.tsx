@@ -7,24 +7,16 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
+import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/modules";
 import {
-  Bell,
-  Bot,
   Crown,
-  GitBranch,
-  LayoutDashboard,
   LogOut,
-  MessageSquare,
-  Radio,
   Settings,
   Shield,
   User,
   UserCog,
-  Users,
   UsersRound,
-  Workflow,
   X,
-  Zap,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
 
@@ -32,35 +24,49 @@ import type { AccountRole } from "@/lib/auth/roles";
 // Members tab roster. Keeping this near both consumers in a single
 // place avoids drift between the two surfaces — when a designer
 // wants to recolour "agent" rows, this is the one diff.
+// Per-role chip metadata used in the sidebar's account strip + the
+// Members tab roster. Keeping this near both consumers in a single
+// place avoids drift between the two surfaces — when a designer
+// wants to recolour "agent" rows, this is the one diff.
+// Per-role chip metadata used in the sidebar's account strip + the
+// Members tab roster. Keeping this near both consumers in a single
+// place avoids drift between the two surfaces — when a designer
+// wants to recolour "agent" rows, this is the one diff.
+// Per-role chip metadata used in the sidebar's account strip + the
+// Members tab roster. Keeping this near both consumers in a single
+// place avoids drift between the two surfaces.
 const ROLE_CHIP: Record<
   AccountRole,
-  { icon: typeof Crown; labelKey: string; className: string }
+  {
+    icon: typeof Crown;
+    labelKey: string;
+    className: string;
+  }
 > = {
   owner: {
     icon: Crown,
     labelKey: "roleOwner",
-    // Amber: scarce, immutable, "the boss" — gets visual emphasis.
     className:
       "border-amber-500/40 bg-amber-500/10 text-amber-300",
   },
+
   admin: {
     icon: Shield,
     labelKey: "roleAdmin",
-    // Primary-tinted: significant but not as scarce as owner.
     className:
       "border-primary/40 bg-primary/10 text-primary",
   },
+
   agent: {
     icon: UserCog,
     labelKey: "roleAgent",
-    // Neutral slate: the operational default.
     className:
       "border-border bg-muted text-foreground",
   },
+
   viewer: {
     icon: User,
     labelKey: "roleViewer",
-    // Muted slate: read-only role; visually quieter than agent.
     className:
       "border-border bg-card text-muted-foreground",
   },
@@ -78,29 +84,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface NavItem {
-  href: string;
-  labelKey: string;
-  icon: typeof LayoutDashboard;
-  /**
-   * When true, the nav row renders a small "Beta" chip after the label.
-   * Purely informational — doesn't affect routing or access.
-   */
-  beta?: boolean;
-}
-
-const navItems: NavItem[] = [
-  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
-  { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
-  { href: "/notifications", labelKey: "notifications", icon: Bell },
-  { href: "/contacts", labelKey: "contacts", icon: Users },
-  { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
-  { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
-  { href: "/automations", labelKey: "automations", icon: Zap },
-  { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
-  { href: "/agents", labelKey: "aiAgents", icon: Bot },
-];
-
 const bottomNavItems = [
   { href: "/settings", labelKey: "settings", icon: Settings },
 ];
@@ -113,12 +96,104 @@ interface SidebarProps {
 
 import { useTranslations } from "next-intl";
 
+// Brand mark — two overlapping chevrons forming the BuildMyWeb "B",
+// approximated as an SVG from the supplied logo files so it stays
+// theme-agnostic (works on both light and dark chrome, unlike the
+// black-background JPG exports). Swap this for an exact exported
+// SVG from the design source whenever one's available — the shape
+// here is a close approximation, not a pixel-perfect trace.
+function BrandMark({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={(size * 262) / 164} viewBox="0 0 164 262" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0 0L130 66L36 132V90L74 66L0 24V0Z" fill="#ADBADA" />
+      <path d="M0 90L130 156L36 222V180L74 156L0 114V90Z" fill="#7191E6" />
+    </svg>
+  );
+}
+
+function NavLink({
+  item,
+  pathname,
+  t,
+  onClose,
+  totalUnread,
+  unreadNotifications,
+}: {
+  item: ModuleNavItem;
+  pathname: string;
+  t: ReturnType<typeof useTranslations>;
+  onClose?: () => void;
+  totalUnread: number;
+  unreadNotifications: number;
+}) {
+  const isActive =
+    pathname === item.href ||
+    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+  const showUnreadDot = item.href === "/inbox" && totalUnread > 0 && !isActive;
+
+  // Unlike the inbox dot, the notifications count stays visible
+  // even while the page is active — it reflects unread state
+  // (cleared by marking notifications read), not "currently
+  // viewing this section".
+  const showNotificationBadge =
+    item.href === "/notifications" && unreadNotifications > 0;
+
+  return (
+    <li key={item.href}>
+      <Link
+        href={item.href}
+        onClick={onClose}
+        className={cn(
+          // Taller on mobile so fingers can hit the row reliably (≥44px).
+          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+          isActive
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )}
+      >
+        <item.icon className="h-4 w-4" />
+        <span className="flex-1">{t(item.labelKey)}</span>
+        {item.beta && (
+          <span
+            aria-label={t("beta")}
+            className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+          >
+            {t("beta")}
+          </span>
+        )}
+        {showUnreadDot && (
+          <span
+            aria-label={t("unreadConversations", { count: totalUnread })}
+            className="relative flex h-2 w-2"
+          >
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+        )}
+        {showNotificationBadge && (
+          <span
+            aria-label={t("unreadNotifications", { count: unreadNotifications })}
+            className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+          >
+            {unreadNotifications > 9 ? "9+" : unreadNotifications}
+          </span>
+        )}
+      </Link>
+    </li>
+  );
+}
+
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
+
+  const globalItems = visibleGlobalItems(accountRole);
+  const modules = visibleModules(accountRole);
+
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -188,9 +263,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-            </div>
+            <BrandMark size={22} />
             <span className="text-sm font-semibold text-foreground">
               {t("title")}
             </span>
@@ -205,68 +278,48 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Main navigation */}
+        {/* Main navigation — driven entirely by src/lib/modules.ts.
+            Global items (Dashboard, Notifications) render first,
+            then one section per visible module (Sales/Projects/
+            Office/future third-party modules), then Settings at
+            the bottom. A module section is omitted entirely when
+            the current role can't see any of its items. */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-              const showUnreadDot =
-                item.href === "/inbox" && totalUnread > 0 && !isActive;
-
-              // Unlike the inbox dot, the notifications count stays visible
-              // even while the page is active — it reflects unread state
-              // (cleared by marking notifications read), not "currently
-              // viewing this section".
-              const showNotificationBadge =
-                item.href === "/notifications" && unreadNotifications > 0;
-
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
-                    {item.beta && (
-                      <span
-                        aria-label={t("beta")}
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
-                      >
-                        {t("beta")}
-                      </span>
-                    )}
-                    {showUnreadDot && (
-                      <span
-                        aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
-                      >
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                      </span>
-                    )}
-                    {showNotificationBadge && (
-                      <span
-                        aria-label={t("unreadNotifications", { count: unreadNotifications })}
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
-                      >
-                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
+            {globalItems.map((item) => (
+              <NavLink
+                key={item.href}
+                item={item}
+                pathname={pathname}
+                t={t}
+                onClose={onClose}
+                totalUnread={totalUnread}
+                unreadNotifications={unreadNotifications}
+              />
+            ))}
           </ul>
+
+          {modules.map((mod) => (
+            <div key={mod.id}>
+              <div className="my-4 border-t border-border" />
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t(mod.labelKey)}
+              </p>
+              <ul className="flex flex-col gap-1">
+                {mod.items.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    t={t}
+                    onClose={onClose}
+                    totalUnread={totalUnread}
+                    unreadNotifications={unreadNotifications}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
 
           <div className="my-4 border-t border-border" />
 
