@@ -37,7 +37,7 @@ Infer exactly ONE realistic, specific pain point. Do not exaggerate or claim to 
 Respond with ONLY a JSON object, no other text, no markdown fences:
 {"niche": "", "matched_product": "", "lead_score": 0, "priority": "", "pain_point": "", "reason": ""}`
 
-interface QualificationResult {
+export interface QualificationResult {
   niche: string
   matched_product: string
   lead_score: number
@@ -46,8 +46,8 @@ interface QualificationResult {
   reason: string
 }
 
-function parseQualification(raw: string): QualificationResult | null {
-  // Strip markdown fences defensively — models sometimes wrap JSON in
+export function parseQualification(raw: string): QualificationResult | null {
+      // Strip markdown fences defensively — models sometimes wrap JSON in
   // ```json ... ``` even when told not to.
   const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
   try {

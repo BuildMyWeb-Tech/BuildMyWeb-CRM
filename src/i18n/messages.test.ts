@@ -35,6 +35,17 @@ function loadKeys(locale: string): Set<string> {
 describe('message catalogue parity', () => {
   const source = loadKeys(SOURCE_LOCALE);
 
+  // Guards against `it.each(TRANSLATED_LOCALES)` silently producing
+  // zero test cases when the list is empty (BMW CRM ships English-only
+  // right now) — Vitest treats a suite with 0 generated tests as a
+  // hard failure ("No test found in suite"), not a pass. This test
+  // always runs regardless of how many locales are configured, so the
+  // file never goes test-less, and it doubles as a sanity check that
+  // en.json itself is valid and loadable.
+  it('has a loadable source locale', () => {
+    expect(source.size).toBeGreaterThan(0);
+  });
+
   it.each(TRANSLATED_LOCALES)('%s.json covers every en.json key', (locale) => {
     const translated = loadKeys(locale);
     const missing = [...source].filter((k) => !translated.has(k)).sort();
