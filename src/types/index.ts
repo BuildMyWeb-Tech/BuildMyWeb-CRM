@@ -452,6 +452,38 @@ export interface TaskAttachment {
   created_at: string;
 }
 
+// ============================================================
+// File Manager (Phase 3) — shared by Projects (project_id set)
+// and Office (project_id null), see 042_file_manager.sql
+// ============================================================
+
+export interface FileFolder {
+  id: string;
+  account_id: string;
+  project_id: string | null;
+  parent_id: string | null;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManagedFile {
+  id: string;
+  account_id: string;
+  project_id: string | null;
+  folder_id: string | null;
+  name: string;
+  storage_path: string;
+  file_size: number | null;
+  mime_type: string | null;
+  is_public: boolean;
+  share_token: string;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 

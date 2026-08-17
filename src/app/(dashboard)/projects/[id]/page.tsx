@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Settings, Loader2 } from "lucide-react";
+import { ArrowLeft, Settings, Loader2, LayoutGrid, Folder } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { TaskBoard } from "@/components/projects/task-board";
 import { TaskForm } from "@/components/projects/task-form";
 import { BoardSettings } from "@/components/projects/board-settings";
+import { FileManager } from "@/components/files/file-manager";
 import { useAuth } from "@/hooks/use-auth";
 import type {
   Project,
@@ -19,7 +20,8 @@ import { toast } from "sonner";
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
-  const { accountId } = useAuth();
+  const { accountId, user } = useAuth();
+  const [tab, setTab] = useState<"board" | "files">("board");
 
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -122,21 +124,62 @@ export default function ProjectDetailPage() {
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setBoardSettingsOpen(true)}>
+     <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setBoardSettingsOpen(true)}
+          className={tab === "files" ? "invisible" : undefined}
+        >
           <Settings className="mr-1.5 h-3.5 w-3.5" />
           Board settings
         </Button>
       </div>
 
-      <div className="mt-6">
-        <TaskBoard
-          stages={stages}
-          tasks={tasks}
-          onTaskMoved={handleTaskMoved}
-          onAddTask={handleAddTask}
-          onEditTask={handleEditTask}
-        />
+      <div className="mt-4 flex items-center gap-1 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setTab("board")}
+          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium ${
+            tab === "board"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <LayoutGrid className="h-3.5 w-3.5" />
+          Board
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("files")}
+          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium ${
+            tab === "files"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Folder className="h-3.5 w-3.5" />
+          Files
+        </button>
       </div>
+
+      {tab === "board" ? (
+        <div className="mt-6">
+          <TaskBoard
+            stages={stages}
+            tasks={tasks}
+            onTaskMoved={handleTaskMoved}
+            onAddTask={handleAddTask}
+            onEditTask={handleEditTask}
+          />
+        </div>
+      ) : (
+        accountId &&
+        user && (
+          <div className="mt-6">
+            <FileManager accountId={accountId} userId={user.id} projectId={project.id} />
+          </div>
+        )
+      )}
 
       {accountId && (
         <TaskForm

@@ -1,20 +1,33 @@
-import { Building2 } from "lucide-react";
+"use client";
 
-// Placeholder landing for the Office module (Phase 0). Real content
-// — company info, documents, bills — lands in Phase 3 once
-// 042_bmw_office.sql is applied. This stub exists purely so the
-// sidebar link in src/lib/modules.ts (admin+ only) resolves to a
-// real page instead of a 404.
+import { Building2 } from "lucide-react";
+import { FileManager } from "@/components/files/file-manager";
+import { useAuth } from "@/hooks/use-auth";
+
+// BMW Office — file manager ships in Phase 3. Company info and
+// bills (with the per-person access checkbox) land in Phase 4 as
+// additional sections on this same page.
 export default function OfficePage() {
+  const { accountId, user } = useAuth();
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Building2 className="h-6 w-6" />
+    <div>
+      <div className="flex items-center gap-2">
+        <Building2 className="h-6 w-6 text-primary" />
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          Office
+        </h1>
       </div>
-      <h1 className="text-lg font-semibold text-foreground">Office</h1>
-      <p className="max-w-sm text-sm text-muted-foreground">
-        Company info, documents, and bills land here in Phase 3.
+      <p className="mt-1 text-sm text-muted-foreground">
+        Company documents and files. Company info and bills are coming in
+        the next phase.
       </p>
+
+      <div className="mt-6">
+        {accountId && user ? (
+          <FileManager accountId={accountId} userId={user.id} projectId={null} />
+        ) : null}
+      </div>
     </div>
   );
 }
