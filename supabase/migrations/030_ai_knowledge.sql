@@ -1,5 +1,4 @@
-CREATE EXTENSION IF NOT EXISTS vector;
-
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 ALTER TABLE ai_configs
   ADD COLUMN IF NOT EXISTS embeddings_api_key text;
 
