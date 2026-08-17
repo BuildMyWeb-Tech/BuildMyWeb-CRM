@@ -1,151 +1,157 @@
 -- ============================================================
--- 042_bmw_office.sql — BMW CRM Phase 3: BMW Office module
+-- 043_bmw_office.sql — BMW CRM Phase 4: BMW Office
 --
--- Company info, documents (Storage-backed), and bills. Office data
--- is treated as "settings-class" like whatsapp_config/ai_config in
--- the base app — admin+ write, viewer+ read, per the role model
--- introduced in 017_account_sharing.
+-- Two pieces:
+--
+-- 1. office_access — the checkbox. A row here grants a non-admin
+--    account member VIEW access to Office (its file tree from
+--    042_file_manager.sql, plus Company Info below). Admins always
+--    have full access regardless of this table; this only ever
+--    ADDS reach for non-admins, it never restricts an admin.
+--    Editing (uploads, company info edits) stays admin-only even
+--    for a member with office_access — this grants viewing, not
+--    editing. Loosen that later if you decide non-admins should be
+--    able to edit too.
+--
+-- 2. company_info_fields / company_info_values — a small EAV pair
+--    mirroring the app's existing custom_fields/contact_custom_values
+--    pattern (001_initial_schema.sql) rather than a fixed-column
+--    table, since BMW wants admin-defined field names with a
+--    required/optional flag, not a hardcoded form. Starts empty —
+--    no fields are seeded; the first thing an admin does on this
+--    page is add their own.
+--
+-- Bills are NOT a separate table by design — they're just PDFs in
+-- the Phase 3 File Manager (e.g. a "Bills" folder you create
+-- yourself under Office). Keeping that as plain files avoided
+-- building a second, redundant upload system.
 --
 -- Idempotent — safe to run multiple times.
 -- ============================================================
 
 -- ============================================================
--- COMPANY_INFO — one row per account
+-- OFFICE_ACCESS
 -- ============================================================
-CREATE TABLE IF NOT EXISTS company_info (
+CREATE TABLE IF NOT EXISTS office_access (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  account_id UUID NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
-  legal_name TEXT,
-  gstin TEXT,
-  address TEXT,
-  bank_name TEXT,
-  bank_account_number TEXT,
-  bank_ifsc TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  granted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (account_id, user_id)
 );
 
-ALTER TABLE company_info ENABLE ROW LEVEL SECURITY;
+ALTER TABLE office_access ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Viewers can read company info" ON company_info;
-CREATE POLICY "Viewers can read company info" ON company_info FOR SELECT
-  USING (is_account_member(account_id, 'viewer'));
-
-DROP POLICY IF EXISTS "Admins can manage company info" ON company_info;
-CREATE POLICY "Admins can manage company info" ON company_info FOR ALL
+DROP POLICY IF EXISTS "Admins can manage office access" ON office_access;
+CREATE POLICY "Admins can manage office access" ON office_access FOR ALL
   USING (is_account_member(account_id, 'admin'))
   WITH CHECK (is_account_member(account_id, 'admin'));
 
-DROP TRIGGER IF EXISTS set_updated_at ON company_info;
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON company_info
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- A member can see their OWN grant row (so the UI can tell them
+-- they have access) without being able to see the whole roster of
+-- who else has it — that stays admin-only, above.
+DROP POLICY IF EXISTS "Members can see their own office access" ON office_access;
+CREATE POLICY "Members can see their own office access" ON office_access FOR SELECT
+  USING (user_id = auth.uid());
 
 -- ============================================================
--- DOCUMENTS — metadata; files live in the office-documents bucket
+-- has_office_access() — admin, OR an explicit grant row.
+-- Used by Office-scoped rows in file_folders/files (updated below)
+-- and by company_info_fields/company_info_values.
 -- ============================================================
-CREATE TABLE IF NOT EXISTS documents (
+CREATE OR REPLACE FUNCTION has_office_access(target_account_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT is_account_member(target_account_id, 'admin')
+    OR EXISTS (
+      SELECT 1 FROM office_access
+      WHERE account_id = target_account_id AND user_id = auth.uid()
+    );
+$$;
+
+GRANT EXECUTE ON FUNCTION has_office_access(UUID) TO authenticated, service_role;
+
+-- ============================================================
+-- Widen Phase 3's Office-scoped SELECT policies from admin-only to
+-- has_office_access() now that the checkbox exists. The manage
+-- (INSERT/UPDATE/DELETE) policies are untouched — editing Office
+-- files stays admin-only, see the note at the top of this file.
+-- ============================================================
+DROP POLICY IF EXISTS "Viewers can read project folders" ON file_folders;
+CREATE POLICY "Viewers can read project folders" ON file_folders FOR SELECT
+  USING (
+    (project_id IS NOT NULL AND is_account_member(account_id, 'viewer'))
+    OR (project_id IS NULL AND has_office_access(account_id))
+  );
+
+DROP POLICY IF EXISTS "Viewers can read project files" ON files;
+CREATE POLICY "Viewers can read project files" ON files FOR SELECT
+  USING (
+    (project_id IS NOT NULL AND is_account_member(account_id, 'viewer'))
+    OR (project_id IS NULL AND has_office_access(account_id))
+  );
+
+-- Storage bucket SELECT policy from 042 already floors at
+-- account-viewer, which is looser than has_office_access() — an
+-- account viewer without an office_access grant still can't
+-- discover an Office file's storage_path (blocked by the `files`
+-- table policy above), so there is nothing for the looser bucket
+-- policy to actually expose. No change needed there.
+
+-- ============================================================
+-- COMPANY_INFO_FIELDS — admin-defined field list
+-- ============================================================
+CREATE TABLE IF NOT EXISTS company_info_fields (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  folder TEXT NOT NULL DEFAULT 'general' CHECK (folder IN ('general', 'company', 'legal', 'hr', 'projects')),
-  name TEXT NOT NULL,
-  storage_path TEXT NOT NULL,
-  file_size INTEGER,
-  mime_type TEXT,
-  uploaded_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  field_name TEXT NOT NULL,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_documents_account_folder ON documents(account_id, folder);
+CREATE INDEX IF NOT EXISTS idx_company_info_fields_account ON company_info_fields(account_id);
 
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_info_fields ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Viewers can read documents" ON documents;
-CREATE POLICY "Viewers can read documents" ON documents FOR SELECT
-  USING (is_account_member(account_id, 'viewer'));
+DROP POLICY IF EXISTS "Office access can read company fields" ON company_info_fields;
+CREATE POLICY "Office access can read company fields" ON company_info_fields FOR SELECT
+  USING (has_office_access(account_id));
 
-DROP POLICY IF EXISTS "Admins can manage documents" ON documents;
-CREATE POLICY "Admins can manage documents" ON documents FOR ALL
+DROP POLICY IF EXISTS "Admins can manage company fields" ON company_info_fields;
+CREATE POLICY "Admins can manage company fields" ON company_info_fields FOR ALL
   USING (is_account_member(account_id, 'admin'))
   WITH CHECK (is_account_member(account_id, 'admin'));
 
 -- ============================================================
--- BILLS
+-- COMPANY_INFO_VALUES — one value per field, per account
 -- ============================================================
-CREATE TABLE IF NOT EXISTS bills (
+CREATE TABLE IF NOT EXISTS company_info_values (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  direction TEXT NOT NULL CHECK (direction IN ('payable', 'receivable')),
-  party_name TEXT NOT NULL,
-  amount NUMERIC(12, 2) NOT NULL,
-  currency TEXT NOT NULL DEFAULT 'INR',
-  due_date DATE,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue')),
-  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
-  notes TEXT,
-  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  field_id UUID NOT NULL REFERENCES company_info_fields(id) ON DELETE CASCADE,
+  value TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  UNIQUE (account_id, field_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_bills_account_status ON bills(account_id, status);
+ALTER TABLE company_info_values ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Office access can read company values" ON company_info_values;
+CREATE POLICY "Office access can read company values" ON company_info_values FOR SELECT
+  USING (has_office_access(account_id));
 
-DROP POLICY IF EXISTS "Viewers can read bills" ON bills;
-CREATE POLICY "Viewers can read bills" ON bills FOR SELECT
-  USING (is_account_member(account_id, 'viewer'));
-
-DROP POLICY IF EXISTS "Admins can manage bills" ON bills;
-CREATE POLICY "Admins can manage bills" ON bills FOR ALL
+DROP POLICY IF EXISTS "Admins can manage company values" ON company_info_values;
+CREATE POLICY "Admins can manage company values" ON company_info_values FOR ALL
   USING (is_account_member(account_id, 'admin'))
   WITH CHECK (is_account_member(account_id, 'admin'));
 
-DROP TRIGGER IF EXISTS set_updated_at ON bills;
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON bills
+DROP TRIGGER IF EXISTS set_updated_at ON company_info_values;
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON company_info_values
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================================
--- STORAGE: office-documents bucket
--- Path convention: office-documents/{account_id}/{filename}
--- Mirrors the avatars bucket pattern from 008, but private
--- (not public) since bills/legal docs aren't meant to be world-
--- readable — access goes through signed URLs the app requests
--- after checking is_account_member() itself.
--- ============================================================
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'office-documents',
-  'office-documents',
-  FALSE,
-  20971520, -- 20 MB
-  ARRAY['application/pdf', 'image/png', 'image/jpeg', 'image/webp',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
-)
-ON CONFLICT (id) DO UPDATE
-SET public = EXCLUDED.public,
-    file_size_limit = EXCLUDED.file_size_limit,
-    allowed_mime_types = EXCLUDED.allowed_mime_types;
-
-DROP POLICY IF EXISTS "Account members can read office documents" ON storage.objects;
-CREATE POLICY "Account members can read office documents"
-  ON storage.objects FOR SELECT
-  USING (
-    bucket_id = 'office-documents'
-    AND is_account_member((storage.foldername(name))[1]::uuid, 'viewer')
-  );
-
-DROP POLICY IF EXISTS "Admins can upload office documents" ON storage.objects;
-CREATE POLICY "Admins can upload office documents"
-  ON storage.objects FOR INSERT
-  WITH CHECK (
-    bucket_id = 'office-documents'
-    AND is_account_member((storage.foldername(name))[1]::uuid, 'admin')
-  );
-
-DROP POLICY IF EXISTS "Admins can delete office documents" ON storage.objects;
-CREATE POLICY "Admins can delete office documents"
-  ON storage.objects FOR DELETE
-  USING (
-    bucket_id = 'office-documents'
-    AND is_account_member((storage.foldername(name))[1]::uuid, 'admin')
-  );

@@ -484,6 +484,36 @@ export interface ManagedFile {
   updated_at: string;
 }
 
+// ============================================================
+// BMW Office (Phase 4)
+// ============================================================
+
+export interface OfficeAccess {
+  id: string;
+  account_id: string;
+  user_id: string;
+  granted_by: string | null;
+  created_at: string;
+}
+
+export interface CompanyInfoField {
+  id: string;
+  account_id: string;
+  field_name: string;
+  is_required: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface CompanyInfoValue {
+  id: string;
+  account_id: string;
+  field_id: string;
+  value: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
