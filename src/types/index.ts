@@ -387,8 +387,69 @@ export interface Deal {
   created_at: string;
   updated_at?: string;
   contact?: Contact;
-  stage?: PipelineStage;
+stage?: PipelineStage;
   assignee?: Profile;
+}
+
+// ============================================================
+// Client Projects module (Phase 2)
+// ============================================================
+
+export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'cancelled';
+
+export interface Project {
+  id: string;
+  account_id: string;
+  pipeline_id: string;
+  client_contact_id: string | null;
+  client_name: string | null;
+  name: string;
+  description: string | null;
+  status: ProjectStatus;
+  owner_user_id: string | null;
+  start_date: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact;
+  pipeline?: Pipeline;
+}
+
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface ChecklistItem {
+  text: string;
+  done: boolean;
+}
+
+export interface ProjectTask {
+  id: string;
+  account_id: string;
+  project_id: string;
+  stage_id: string;
+  title: string;
+  description: string | null;
+  assignee_user_id: string | null;
+  priority: TaskPriority;
+  due_date: string | null;
+  checklist: ChecklistItem[];
+  position: number;
+  created_at: string;
+  updated_at: string;
+  assignee?: AccountMember;
+  attachments?: TaskAttachment[];
+}
+
+export interface TaskAttachment {
+  id: string;
+  account_id: string;
+  task_id: string;
+  name: string;
+  storage_path: string;
+  file_size: number | null;
+  mime_type: string | null;
+  uploaded_by: string | null;
+  created_at: string;
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
