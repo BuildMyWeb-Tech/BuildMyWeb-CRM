@@ -34,22 +34,23 @@ export default function ProjectDetailPage() {
   const [defaultStageId, setDefaultStageId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    const [projectRes, membersRes] = await Promise.all([
-      fetch(`/api/projects/${params.id}`),
-      fetch("/api/account/members"),
-    ]);
-    if (projectRes.ok) {
-      const data = await projectRes.json();
-      setProject(data.project);
-      setStages(data.stages);
-      setTasks(data.tasks);
-    }
-    if (membersRes.ok) {
-      const data = await membersRes.json();
-      setMembers(data.members ?? []);
-    }
-    setLoading(false);
+  const load = useCallback(() => {
+    Promise.all([
+      fetch(`/api/projects/${params.id}`).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/account/members").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([projectData, membersData]) => {
+        if (projectData) {
+          setProject(projectData.project);
+          setStages(projectData.stages);
+          setTasks(projectData.tasks);
+        }
+        if (membersData) {
+          setMembers(membersData.members ?? []);
+        }
+      })
+      .catch((err) => console.error('[project-detail] load failed:', err))
+      .finally(() => setLoading(false));
   }, [params.id]);
 
   useEffect(() => {

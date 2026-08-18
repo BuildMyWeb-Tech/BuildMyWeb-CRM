@@ -100,7 +100,7 @@ export default function ProjectsPage() {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Each project gets its own task board. Not every project needs a
-        linked contact — type a client name if it's not in your Sales
+        linked contact — type a client name if it&apos;s not in your Sales
         contacts.
       </p>
 

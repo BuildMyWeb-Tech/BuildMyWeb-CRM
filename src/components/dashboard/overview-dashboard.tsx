@@ -40,9 +40,8 @@ export function OverviewDashboard({ onNavigate }: OverviewDashboardProps) {
   const [office, setOffice] = useState<OfficeMetrics | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const loadAll = useCallback(() => {
+const loadAll = useCallback(() => {
     const db = createClient()
-    setLoading(true)
     Promise.all([loadMetrics(db), loadProjectsMetrics(db), loadOfficeMetrics(db)])
       .then(([s, p, o]) => {
         setSales(s)

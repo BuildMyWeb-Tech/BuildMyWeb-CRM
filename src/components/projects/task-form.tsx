@@ -83,8 +83,7 @@ export function TaskForm({
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState(task?.attachments ?? []);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
+ useEffect(() => {
     if (!open) return;
     setTitle(task?.title ?? "");
     setDescription(task?.description ?? "");
@@ -96,7 +95,6 @@ export function TaskForm({
     setAttachments(task?.attachments ?? []);
     setNewChecklistItem("");
   }, [open, task, defaultStageId, stages]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   function addChecklistItem() {
     const text = newChecklistItem.trim();
