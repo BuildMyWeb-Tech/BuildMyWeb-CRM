@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Settings, Loader2, LayoutGrid, Folder } from "lucide-react";
+import { ArrowLeft, Settings, Loader2, LayoutGrid, Folder, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { TaskBoard } from "@/components/projects/task-board";
 import { TaskForm } from "@/components/projects/task-form";
 import { BoardSettings } from "@/components/projects/board-settings";
+import { ProjectSettings } from "@/components/projects/project-settings";
 import { FileManager } from "@/components/files/file-manager";
 import { useAuth } from "@/hooks/use-auth";
 import type {
@@ -33,6 +34,7 @@ export default function ProjectDetailPage() {
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
 
   const load = useCallback(() => {
     Promise.all([
@@ -125,15 +127,21 @@ export default function ProjectDetailPage() {
             </p>
           </div>
         </div>
-     <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setBoardSettingsOpen(true)}
-          className={tab === "files" ? "invisible" : undefined}
-        >
-          <Settings className="mr-1.5 h-3.5 w-3.5" />
-          Board settings
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setProjectSettingsOpen(true)}>
+            <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+            Project settings
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBoardSettingsOpen(true)}
+            className={tab === "files" ? "invisible" : undefined}
+          >
+            <Settings className="mr-1.5 h-3.5 w-3.5" />
+            Board settings
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 flex items-center gap-1 border-b border-border">
@@ -206,6 +214,14 @@ export default function ProjectDetailPage() {
           onChanged={load}
         />
       )}
+
+      <ProjectSettings
+        open={projectSettingsOpen}
+        onOpenChange={setProjectSettingsOpen}
+        project={project}
+        onSaved={(updated) => setProject({ ...project, ...updated })}
+        onDeleted={() => {}}
+      />
     </div>
   );
 }

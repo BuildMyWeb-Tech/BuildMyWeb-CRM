@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus, Loader2 } from "lucide-react";
+import { KanbanSquare, Plus, Loader2, MoreVertical, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ProjectSettings } from "@/components/projects/project-settings";
 import type { Project, ProjectStatus } from "@/types";
 import { toast } from "sonner";
 
@@ -41,6 +48,7 @@ export default function ProjectsPage() {
   const [clientName, setClientName] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   async function loadProjects() {
     const res = await fetch("/api/projects");
@@ -124,11 +132,39 @@ export default function ProjectsPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{p.name}</CardTitle>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[p.status]}`}
-                    >
-                      {p.status.replace("_", " ")}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[p.status]}`}
+                      >
+                        {p.status.replace("_", " ")}
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditingProject(p);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -195,6 +231,28 @@ export default function ProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {editingProject && (
+        <ProjectSettings
+          open={!!editingProject}
+          onOpenChange={(open) => !open && setEditingProject(null)}
+          project={editingProject}
+          onSaved={(updated) => {
+            setProjects((prev) =>
+              prev
+                ? prev.map((proj) =>
+                    proj.id === editingProject.id ? { ...proj, ...updated } : proj,
+                  )
+                : prev,
+            );
+            setEditingProject(null);
+          }}
+          onDeleted={() => {
+            setProjects((prev) => prev?.filter((proj) => proj.id !== editingProject.id) ?? prev);
+            setEditingProject(null);
+          }}
+        />
+      )}
     </div>
   );
 }

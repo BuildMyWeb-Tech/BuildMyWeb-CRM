@@ -245,9 +245,13 @@ export function TaskForm({
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Column</Label>
-              <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
+                            <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue className="truncate">
+                    {(value: string) =>
+                      stages.find((s) => s.id === value)?.name ?? "Select a column"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {[...stages]
@@ -262,9 +266,9 @@ export function TaskForm({
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Priority</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
+                            <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue className="truncate capitalize">{(value: string) => value}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PRIORITIES.map((p) => (
@@ -282,7 +286,13 @@ export function TaskForm({
               <Label className="text-muted-foreground">Assignee</Label>
               <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? "__unassigned__")}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue className="truncate">
+                    {(value: string) =>
+                      value === "__unassigned__"
+                        ? "Unassigned"
+                        : members.find((m) => m.user_id === value)?.full_name ?? "Unassigned"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__unassigned__">Unassigned</SelectItem>
