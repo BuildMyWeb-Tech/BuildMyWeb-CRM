@@ -97,6 +97,7 @@ interface Invitation {
 const EDITABLE_ROLES: { value: AccountRole }[] = [
   { value: 'admin' },
   { value: 'agent' },
+  { value: 'employee' },
   { value: 'viewer' },
 ];
 

@@ -387,7 +387,7 @@ export interface Deal {
   created_at: string;
   updated_at?: string;
   contact?: Contact;
-stage?: PipelineStage;
+  stage?: PipelineStage;
   assignee?: Profile;
 }
 
@@ -461,6 +461,7 @@ export interface FileFolder {
   id: string;
   account_id: string;
   project_id: string | null;
+  client_id: string | null;
   parent_id: string | null;
   name: string;
   created_by: string | null;
@@ -472,6 +473,7 @@ export interface ManagedFile {
   id: string;
   account_id: string;
   project_id: string | null;
+  client_id: string | null;
   folder_id: string | null;
   name: string;
   storage_path: string;
@@ -512,6 +514,126 @@ export interface CompanyInfoValue {
   value: string | null;
   updated_at: string;
   updated_by: string | null;
+}
+
+// ============================================================
+// Client Directory
+// ============================================================
+
+export type ClientStatus = "active" | "inactive" | "archived";
+
+export interface Client {
+  id: string;
+  account_id: string;
+  name: string;
+  logo_storage_path: string | null;
+  interface_name: string | null;
+  interface_contact_number: string | null;
+  accent_color: string | null;
+  client_since: string | null;
+  status: ClientStatus;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScopeOfWork {
+  id: string;
+  account_id: string;
+  client_id: string;
+  description: string | null;
+  total_monthly_unit: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Custom Fields engine (generic — client/scope_of_work/daily_task/kanban_card)
+// ============================================================
+
+export type CustomFieldEntityType = "client" | "scope_of_work" | "daily_task" | "kanban_card";
+export type CustomFieldType = "text" | "file" | "dropdown" | "checkbox" | "radio";
+
+export interface CustomFieldDef {
+  id: string;
+  account_id: string;
+  entity_type: CustomFieldEntityType;
+  field_name: string;
+  field_type: CustomFieldType;
+  field_options: string[];
+  is_required: boolean;
+  position: number;
+  created_at: string;
+}
+
+export interface CustomFieldValue {
+  id: string;
+  account_id: string;
+  field_id: string;
+  entity_type: CustomFieldEntityType;
+  entity_id: string;
+  value: string | null;
+  file_storage_path: string | null;
+  file_name: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+// ============================================================
+// Standalone Kanban
+// ============================================================
+
+export interface KanbanBoard {
+  id: string;
+  account_id: string;
+  pipeline_id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KanbanCard {
+  id: string;
+  account_id: string;
+  board_id: string;
+  stage_id: string;
+  title: string;
+  description: string | null;
+  assignee_user_id: string | null;
+  priority: TaskPriority;
+  due_date: string | null;
+  checklist: ChecklistItem[];
+  position: number;
+  created_at: string;
+  updated_at: string;
+  assignee?: AccountMember;
+}
+
+// ============================================================
+// Daily Task
+// ============================================================
+
+export interface DailyTask {
+  id: string;
+  account_id: string;
+  stage_id: string;
+  client_id: string | null;
+  project_id: string | null;
+  title: string;
+  brief: string | null;
+  assignee_user_id: string | null;
+  priority: TaskPriority;
+  target_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  client?: Client;
+  project?: Project;
+  assignee?: AccountMember;
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';

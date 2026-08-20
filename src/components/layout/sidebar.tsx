@@ -14,6 +14,7 @@ import {
   Settings,
   Shield,
   User,
+  UserCheck,
   UserCog,
   UsersRound,
   X,
@@ -24,49 +25,43 @@ import type { AccountRole } from "@/lib/auth/roles";
 // Members tab roster. Keeping this near both consumers in a single
 // place avoids drift between the two surfaces — when a designer
 // wants to recolour "agent" rows, this is the one diff.
-// Per-role chip metadata used in the sidebar's account strip + the
-// Members tab roster. Keeping this near both consumers in a single
-// place avoids drift between the two surfaces — when a designer
-// wants to recolour "agent" rows, this is the one diff.
-// Per-role chip metadata used in the sidebar's account strip + the
-// Members tab roster. Keeping this near both consumers in a single
-// place avoids drift between the two surfaces — when a designer
-// wants to recolour "agent" rows, this is the one diff.
-// Per-role chip metadata used in the sidebar's account strip + the
-// Members tab roster. Keeping this near both consumers in a single
-// place avoids drift between the two surfaces.
 const ROLE_CHIP: Record<
   AccountRole,
-  {
-    icon: typeof Crown;
-    labelKey: string;
-    className: string;
-  }
+  { icon: typeof Crown; labelKey: string; className: string }
 > = {
   owner: {
     icon: Crown,
     labelKey: "roleOwner",
+    // Amber: scarce, immutable, "the boss" — gets visual emphasis.
     className:
       "border-amber-500/40 bg-amber-500/10 text-amber-300",
   },
-
   admin: {
     icon: Shield,
     labelKey: "roleAdmin",
+    // Primary-tinted: significant but not as scarce as owner.
     className:
       "border-primary/40 bg-primary/10 text-primary",
   },
-
   agent: {
     icon: UserCog,
     labelKey: "roleAgent",
+    // Neutral slate: the operational default.
     className:
       "border-border bg-muted text-foreground",
   },
-
+  employee: {
+    icon: UserCheck,
+    labelKey: "roleEmployee",
+    // Same neutral treatment as agent — still operational, just a
+    // narrower (Read+Update only) permission set.
+    className:
+      "border-border bg-muted text-foreground",
+  },
   viewer: {
     icon: User,
     labelKey: "roleViewer",
+    // Muted slate: read-only role; visually quieter than agent.
     className:
       "border-border bg-card text-muted-foreground",
   },

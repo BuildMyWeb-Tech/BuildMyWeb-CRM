@@ -2,6 +2,7 @@ import {
   Crown,
   Shield,
   UserCog,
+  UserCheck,
   UserIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -38,6 +39,15 @@ export const ROLE_META: Record<
     icon: UserCog,
     label: 'agent',
     variant: 'muted',
+    className: 'border-border bg-muted text-muted-foreground',
+  },
+  employee: {
+    icon: UserCheck,
+    label: 'employee',
+    variant: 'muted',
+    // Read + Update only (no Create/Delete) — same quiet muted
+    // treatment as agent since it's still an operational role, not
+    // a special/administrative one.
     className: 'border-border bg-muted text-muted-foreground',
   },
   viewer: {

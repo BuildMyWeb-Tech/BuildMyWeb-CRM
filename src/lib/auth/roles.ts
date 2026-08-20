@@ -15,11 +15,12 @@
 // changes a one-file diff.
 // ============================================================
 
-export type AccountRole = "owner" | "admin" | "agent" | "viewer";
+export type AccountRole = "owner" | "admin" | "agent" | "employee" | "viewer";
 
 /** Ordered list of every valid role, lowest privilege first. */
 export const ACCOUNT_ROLES: readonly AccountRole[] = [
   "viewer",
+  "employee",
   "agent",
   "admin",
   "owner",
@@ -28,14 +29,25 @@ export const ACCOUNT_ROLES: readonly AccountRole[] = [
 /**
  * Numeric rank of a role. Higher = more privileged. Mirrors the
  * CASE expression in `is_account_member` so JS/SQL stay aligned.
+ *
+ * `employee` sits between viewer and agent: Read + Update only, no
+ * Create/Delete. It's a strict superset of viewer's Read-only and a
+ * strict subset of agent's full CRUD, so it still fits this same
+ * linear ordering — routes that create/delete require 'agent',
+ * routes that only update require 'employee', reads require
+ * 'viewer'. No route should ever gate solely on `role === 'employee'`
+ * (that would wrongly exclude agents/admins/owners who can also do
+ * everything an employee can) — always use hasMinRole/canX predicates.
  */
 export function roleRank(role: AccountRole): number {
   switch (role) {
     case "owner":
-      return 4;
+      return 5;
     case "admin":
-      return 3;
+      return 4;
     case "agent":
+      return 3;
+    case "employee":
       return 2;
     case "viewer":
       return 1;
@@ -83,10 +95,24 @@ export function canEditSettings(role: AccountRole): boolean {
 /**
  * Owner / admin / agent: write operational data — send messages,
  * create contacts, move deals, run broadcasts, edit automations.
- * Viewers are read-only.
+ * Viewers are read-only. Employees can update existing records
+ * (see canUpdateRecords) but not create or delete — use this
+ * predicate specifically for Create/Delete gates, not general
+ * "can write" checks.
  */
 export function canSendMessages(role: AccountRole): boolean {
   return hasMinRole(role, "agent");
+}
+
+/**
+ * Owner / admin / agent / employee: edit fields on an existing
+ * record (Client Directory, Daily Tasks, Kanban cards, etc.).
+ * Employee's whole role is Read+Update — no Create, no Delete —
+ * so this is the floor for PATCH-style routes on the new modules;
+ * POST (create) and DELETE routes should keep requiring 'agent'.
+ */
+export function canUpdateRecords(role: AccountRole): boolean {
+  return hasMinRole(role, "employee");
 }
 
 /**

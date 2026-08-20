@@ -25,6 +25,8 @@ import {
   GitBranch,
   KanbanSquare,
   LayoutDashboard,
+  LayoutGrid,
+  ListTodo,
   MessageSquare,
   Radio,
   Users,
@@ -69,8 +71,16 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer" },
       { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent" },
       { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent" },
-      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent"},
+      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true },
       { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent" },
+    ],
+  },
+  {
+    id: "clients",
+    labelKey: "moduleClients",
+    minRole: "viewer",
+    items: [
+      { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer" },
     ],
   },
   {
@@ -79,6 +89,8 @@ export const CRM_MODULES: CrmModule[] = [
     minRole: "viewer",
     items: [
       { href: "/projects", labelKey: "projects", icon: KanbanSquare, minRole: "viewer" },
+      { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer" },
+      { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer" },
     ],
   },
   {
