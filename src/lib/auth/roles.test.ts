@@ -7,6 +7,7 @@ import {
   canManageMembers,
   canSendMessages,
   canTransferOwnership,
+  canUpdateRecords,
   canViewOnly,
   hasMinRole,
   isAccountRole,
@@ -14,19 +15,21 @@ import {
 } from "./roles";
 
 describe("roleRank", () => {
-  it("orders owner > admin > agent > viewer", () => {
+  it("orders owner > admin > agent > employee > viewer", () => {
     expect(roleRank("owner")).toBeGreaterThan(roleRank("admin"));
     expect(roleRank("admin")).toBeGreaterThan(roleRank("agent"));
-    expect(roleRank("agent")).toBeGreaterThan(roleRank("viewer"));
+    expect(roleRank("agent")).toBeGreaterThan(roleRank("employee"));
+    expect(roleRank("employee")).toBeGreaterThan(roleRank("viewer"));
   });
 
   it("matches the SQL helper's numeric mapping", () => {
     // Keep these in lockstep with `is_account_member`'s CASE expression
-    // in supabase/migrations/017_account_sharing.sql — any change here
-    // means the SQL helper needs the same change.
-    expect(roleRank("owner")).toBe(4);
-    expect(roleRank("admin")).toBe(3);
-    expect(roleRank("agent")).toBe(2);
+    // in supabase/migrations/045_employee_role_ranking.sql — any change
+    // here means the SQL helper needs the same change.
+    expect(roleRank("owner")).toBe(5);
+    expect(roleRank("admin")).toBe(4);
+    expect(roleRank("agent")).toBe(3);
+    expect(roleRank("employee")).toBe(2);
     expect(roleRank("viewer")).toBe(1);
   });
 });
@@ -104,7 +107,16 @@ describe("capability predicates", () => {
     expect(canSendMessages("owner")).toBe(true);
     expect(canSendMessages("admin")).toBe(true);
     expect(canSendMessages("agent")).toBe(true);
+    expect(canSendMessages("employee")).toBe(false);
     expect(canSendMessages("viewer")).toBe(false);
+  });
+
+  it("canUpdateRecords: employee+ (Read+Update role's whole reason for existing)", () => {
+    expect(canUpdateRecords("owner")).toBe(true);
+    expect(canUpdateRecords("admin")).toBe(true);
+    expect(canUpdateRecords("agent")).toBe(true);
+    expect(canUpdateRecords("employee")).toBe(true);
+    expect(canUpdateRecords("viewer")).toBe(false);
   });
 
   it("canViewOnly: viewer only", () => {
