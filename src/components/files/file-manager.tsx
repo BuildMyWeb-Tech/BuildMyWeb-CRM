@@ -31,6 +31,7 @@ import {
   Globe,
   Lock,
   Download,
+  Eye,
   ChevronRight,
   Home,
   Loader2,
@@ -69,6 +70,25 @@ function formatBytes(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const OFFICE_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+type PreviewKind = "pdf" | "image" | "office" | "none";
+
+function previewKind(mimeType: string | null): PreviewKind {
+  if (!mimeType) return "none";
+  if (mimeType === "application/pdf") return "pdf";
+  if (mimeType.startsWith("image/")) return "image";
+  if (OFFICE_MIME_TYPES.has(mimeType)) return "office";
+  return "none";
+}
+
 export function FileManager({ accountId, userId, projectId, clientId = null }: FileManagerProps) {
   const supabase = createClient();
 
@@ -91,6 +111,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
   const [renameValue, setRenameValue] = useState("");
 
   const [shareTarget, setShareTarget] = useState<ManagedFile | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<{ file: ManagedFile; url: string } | null>(null);
   // Persists per-browser, not per-account — a quick display preference,
   // not data worth round-tripping to the server.
   const [viewMode, setViewMode] = useState<"list" | "grid">(() => {
@@ -266,7 +287,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
     load();
   }
 
-  async function handleDownload(file: ManagedFile) {
+    async function handleDownload(file: ManagedFile) {
     const { data, error } = await supabase.storage
       .from("files")
       .createSignedUrl(file.storage_path, 60, { download: file.name });
@@ -275,6 +296,23 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
       return;
     }
     window.open(data.signedUrl, "_blank");
+  }
+
+  async function handlePreview(file: ManagedFile) {
+    // Office viewer needs the URL reachable by Microsoft's servers
+    // with no auth header — a signed URL works fine for that (the
+    // token IS the auth, embedded in the URL itself), so this works
+    // for private files too, not just ones toggled public. 10 min is
+    // enough for someone to actually read the file before it expires;
+    // re-open Preview to get a fresh one if it does.
+    const { data, error } = await supabase.storage
+      .from("files")
+      .createSignedUrl(file.storage_path, 600);
+    if (error || !data) {
+      toast.error("Could not generate a preview link.");
+      return;
+    }
+    setPreviewTarget({ file, url: data.signedUrl });
   }
 
   async function handleTogglePublic(file: ManagedFile, next: boolean) {
@@ -393,17 +431,23 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             </div>
           ))}
 
-          {files.map((file) => (
+                   {files.map((file) => (
             <div key={file.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50">
               <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-foreground">{file.name}</p>
+              <button
+                type="button"
+                onClick={() => (previewKind(file.mime_type) !== "none" ? handlePreview(file) : handleDownload(file))}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="truncate text-sm text-foreground hover:underline">{file.name}</p>
                 <p className="text-xs text-muted-foreground">{formatBytes(file.file_size)}</p>
-              </div>
+              </button>
               {file.is_public && (
                 <Globe className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Publicly shared" />
               )}
               <FileActionsMenu
+                canPreview={previewKind(file.mime_type) !== "none"}
+                onPreview={() => handlePreview(file)}
                 onDownload={() => handleDownload(file)}
                 onShare={() => setShareTarget(file)}
                 onRename={() => openRename("file", file.id, file.name)}
@@ -436,14 +480,20 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             </div>
           ))}
 
-          {files.map((file) => (
+                    {files.map((file) => (
             <div
               key={file.id}
               className="group relative flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-muted/50"
             >
-              <FileIcon className="h-9 w-9 text-muted-foreground" />
-              <span className="line-clamp-2 text-center text-xs text-foreground">{file.name}</span>
-              <span className="text-[10px] text-muted-foreground">{formatBytes(file.file_size)}</span>
+              <button
+                type="button"
+                onClick={() => (previewKind(file.mime_type) !== "none" ? handlePreview(file) : handleDownload(file))}
+                className="flex flex-1 flex-col items-center gap-2 text-center"
+              >
+                <FileIcon className="h-9 w-9 text-muted-foreground" />
+                <span className="line-clamp-2 text-xs text-foreground">{file.name}</span>
+                <span className="text-[10px] text-muted-foreground">{formatBytes(file.file_size)}</span>
+              </button>
               {file.is_public && (
                 <Globe
                   className="absolute left-1.5 top-1.5 h-3.5 w-3.5 text-emerald-500"
@@ -452,6 +502,8 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
               )}
               <div className="absolute right-1.5 top-1.5">
                 <FileActionsMenu
+                  canPreview={previewKind(file.mime_type) !== "none"}
+                  onPreview={() => handlePreview(file)}
                   onDownload={() => handleDownload(file)}
                   onShare={() => setShareTarget(file)}
                   onRename={() => openRename("file", file.id, file.name)}
@@ -581,17 +633,53 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             <Button
               variant="outline"
               onClick={() => setShareTarget(null)}
-              className="border-border bg-transparent text-muted-foreground hover:bg-muted"
+                          className="border-border bg-transparent text-muted-foreground hover:bg-muted"
             >
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Preview dialog — PDFs and images render natively via
+          iframe/img; Office docs go through Microsoft's Office
+          Online Viewer, which needs a URL it can fetch itself (the
+          signed URL from handlePreview works — the token is baked
+          into the URL, no auth header needed). Nothing is uploaded
+          to Microsoft beyond that fetch; this is view-only, not
+          editing. */}
+      <Dialog open={!!previewTarget} onOpenChange={(open) => !open && setPreviewTarget(null)}>
+        <DialogContent className="sm:max-w-4xl bg-popover border-border max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="border-b border-border p-4">
+            <DialogTitle className="text-popover-foreground">{previewTarget?.file.name}</DialogTitle>
+          </DialogHeader>
+          {previewTarget && (
+            <div className="h-[75vh] w-full">
+              {previewKind(previewTarget.file.mime_type) === "image" ? (
+                <div className="flex h-full items-center justify-center bg-black/20 p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- signed URL, not a static asset */}
+                  <img
+                    src={previewTarget.url}
+                    alt={previewTarget.file.name}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : previewKind(previewTarget.file.mime_type) === "pdf" ? (
+                <iframe src={previewTarget.url} className="h-full w-full" title={previewTarget.file.name} />
+              ) : (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewTarget.url)}`}
+                  className="h-full w-full"
+                  title={previewTarget.file.name}
+                />
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
 // Shared between the list and grid layouts so the two views can't
 // drift out of sync with each other on what actions a folder/file
 // offers.
@@ -623,11 +711,15 @@ function FolderActionsMenu({
 }
 
 function FileActionsMenu({
+  canPreview,
+  onPreview,
   onDownload,
   onShare,
   onRename,
   onDelete,
 }: {
+  canPreview: boolean;
+  onPreview: () => void;
   onDownload: () => void;
   onShare: () => void;
   onRename: () => void;
@@ -639,6 +731,12 @@ function FileActionsMenu({
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {canPreview && (
+          <DropdownMenuItem onClick={onPreview}>
+            <Eye className="h-3.5 w-3.5" />
+            Preview
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={onDownload}>
           <Download className="h-3.5 w-3.5" />
           Download

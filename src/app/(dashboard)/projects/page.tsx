@@ -2,7 +2,26 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus, Loader2, MoreVertical, Pencil } from "lucide-react";
+import { KanbanSquare, Plus } from "lucide-react";
+import {
+  Folder,
+  File as FileIcon,
+  FolderPlus,
+  Upload,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Link2,
+  Globe,
+  Lock,
+  Download,
+  Eye,
+  ChevronRight,
+  Home,
+  Loader2,
+  List as ListIcon,
+  LayoutGrid,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

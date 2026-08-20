@@ -103,7 +103,10 @@ export default function ClientsPage() {
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {clients.map((c) => (
             <Link key={c.id} href={`/clients/${c.id}`}>
-              <Card className="h-full transition-colors hover:border-primary/40">
+              <Card
+                className="h-full border-l-4 transition-colors hover:border-primary/40"
+                style={c.accent_color ? { borderLeftColor: c.accent_color } : undefined}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{c.name}</CardTitle>
