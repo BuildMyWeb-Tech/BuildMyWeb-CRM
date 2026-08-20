@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
@@ -10,6 +10,8 @@ import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/modules";
 import {
   Crown,
+  ChevronDown,
+  Layers,
   LogOut,
   Settings,
   Shield,
@@ -80,6 +82,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const bottomNavItems = [
+  { href: "/workspace", labelKey: "workspace", icon: Layers },
   { href: "/settings", labelKey: "settings", icon: Settings },
 ];
 
@@ -189,6 +192,34 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const globalItems = visibleGlobalItems(accountRole);
   const modules = visibleModules(accountRole);
 
+  // Which module sections (Sales/Clients/Projects/Office/...) are
+  // collapsed, persisted per-browser so a choice sticks across
+  // reloads and sessions. Stores the SET of collapsed ids (not
+  // expanded) so newly-added modules default to expanded without
+  // needing a migration of stored state.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("sidebar-collapsed-sections");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  function toggleSection(id: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      window.localStorage.setItem("sidebar-collapsed-sections", JSON.stringify([...next]));
+      return next;
+    });
+  }
+
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -294,27 +325,43 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             ))}
           </ul>
 
-          {modules.map((mod) => (
-            <div key={mod.id}>
-              <div className="my-4 border-t border-border" />
-              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t(mod.labelKey)}
-              </p>
-              <ul className="flex flex-col gap-1">
-                {mod.items.map((item) => (
-                  <NavLink
-                    key={item.href}
-                    item={item}
-                    pathname={pathname}
-                    t={t}
-                    onClose={onClose}
-                    totalUnread={totalUnread}
-                    unreadNotifications={unreadNotifications}
+          {modules.map((mod) => {
+            const isCollapsed = collapsedSections.has(mod.id);
+            return (
+              <div key={mod.id}>
+                <div className="my-4 border-t border-border" />
+                <button
+                  type="button"
+                  onClick={() => toggleSection(mod.id)}
+                  className="mb-1 flex w-full items-center justify-between rounded px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                  aria-expanded={!isCollapsed}
+                >
+                  {t(mod.labelKey)}
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      isCollapsed ? "-rotate-90" : "",
+                    )}
                   />
-                ))}
-              </ul>
-            </div>
-          ))}
+                </button>
+                {!isCollapsed && (
+                  <ul className="flex flex-col gap-1">
+                    {mod.items.map((item) => (
+                      <NavLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        t={t}
+                        onClose={onClose}
+                        totalUnread={totalUnread}
+                        unreadNotifications={unreadNotifications}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
 
           <div className="my-4 border-t border-border" />
 
@@ -423,7 +470,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               <DropdownMenuItem
                 render={
                   <Link
-                    href="/settings?tab=whatsapp"
+                    href="/workspace?tab=whatsapp"
                     onClick={onClose}
                     className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
                   />

@@ -78,7 +78,12 @@ export async function POST(request: Request) {
 
   let scoutData: LeadScoutResponse
   try {
-    const res = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(25_000) })
+    // 45s, not 25s — a free-tier host (Render/Vercel) waking from
+    // sleep can take 15-30s on its own before it even starts
+    // handling the request. If this route itself also cold-started,
+    // budget for both. If timeouts persist even on a warm service,
+    // that's a real LeadScout-side problem, not a config issue here.
+    const res = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(45_000) })
     scoutData = await res.json()
     if (!res.ok) {
       return NextResponse.json(
@@ -87,8 +92,19 @@ export async function POST(request: Request) {
       )
     }
   } catch (err) {
-    console.error('[leads/generate] LeadScout request failed:', err)
-    return NextResponse.json({ error: 'Could not reach the lead scraper. Try again shortly.' }, { status: 502 })
+    const isTimeout = err instanceof Error && err.name === 'TimeoutError'
+    console.error(
+      `[leads/generate] LeadScout request failed (${isTimeout ? 'timeout' : 'network/parse error'}) — URL: ${searchUrl.toString()}:`,
+      err,
+    )
+    return NextResponse.json(
+      {
+        error: isTimeout
+          ? 'The lead scraper took too long to respond (45s) — it may be a cold start on a free-tier host. Try again in a moment.'
+          : `Could not reach the lead scraper at ${LEADSCOUT_API_URL}. Check LEADSCOUT_API_URL is set correctly and the service is running.`,
+      },
+      { status: 502 },
+    )
   }
 
   const db = supabaseAdmin()

@@ -4,33 +4,48 @@ import { Suspense, useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
-import { useAuth } from '@/hooks/use-auth';
-import { useTheme } from '@/hooks/use-theme';
-import { SettingsRail } from '@/components/settings/settings-rail';
+import { TopTabs } from '@/components/settings/top-tabs';
 import { SettingsOverview } from '@/components/settings/settings-overview';
 import { ProfileForm } from '@/components/settings/profile-form';
 import { SecurityPanel } from '@/components/settings/security-panel';
 import { AppearancePanel } from '@/components/settings/appearance-panel';
-import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
-import { TemplateManager } from '@/components/settings/template-manager';
-import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
-import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
-import { DealsSettings } from '@/components/settings/deals-settings';
-import { MembersTab } from '@/components/settings/members-tab';
-import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import {
-  resolveSection,
+  SECTION_META,
   type SettingsSection,
 } from '@/components/settings/settings-sections';
 
-// `useSearchParams` opts this page out of static prerendering unless it
-// sits under a Suspense boundary. Without one, the production build hits
-// the "missing Suspense with CSR bailout" error and the whole page bails
-// to client-side rendering — shipping a settings screen whose rail never
-// wires up its click handlers. You land on the section the URL carried
-// (the account-menu Settings link points at `?tab=whatsapp`) and can't
-// navigate away. Mirror the login/signup split: a thin wrapper supplies
-// the boundary; the inner component reads the query string.
+// Settings now covers PERSONAL sections only (Overview, Your
+// profile, Login & security, Appearance) — everything account-wide
+// (WhatsApp, Templates, Quick replies, Fields & tags, Deals &
+// currency, Team members, API keys) moved to /workspace. Overview
+// stays here as the shared dashboard-style landing and still
+// surfaces workspace items as cards — clicking one routes over to
+// /workspace?tab=X via sectionHref() below; clicking an account
+// item stays on this page.
+//
+// Top tab bar replaces the old left-rail sub-nav (SettingsRail) —
+// that component is left in place, just unused by this page, in
+// case anything else still references it.
+
+type LocalSection = 'overview' | 'profile' | 'security' | 'appearance';
+const LOCAL_SECTIONS: LocalSection[] = ['overview', 'profile', 'security', 'appearance'];
+
+function isLocalSection(value: string | null): value is LocalSection {
+  return !!value && (LOCAL_SECTIONS as string[]).includes(value);
+}
+
+function resolveLocalSection(raw: string | null): LocalSection {
+  return isLocalSection(raw) ? raw : 'overview';
+}
+
+/** Where an Overview card click should land — this page if it's a
+ * personal section, /workspace if it's an account-wide one. */
+function sectionHref(section: SettingsSection): string {
+  const meta = SECTION_META[section];
+  if (meta.group === 'workspace') return `/workspace?tab=${section}`;
+  return `/settings?tab=${section}`;
+}
+
 export default function SettingsPage() {
   return (
     <Suspense fallback={null}>
@@ -42,45 +57,40 @@ export default function SettingsPage() {
 function SettingsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { defaultCurrency } = useAuth();
-  const { mode } = useTheme();
   const t = useTranslations('Settings');
 
-  // The URL (`?tab=`) is the single source of truth for the active
-  // section — deep-linkable, and it keeps the existing links in the
-  // app sidebar/header working. Legacy tab values (tags, custom-fields)
-  // resolve onto their new home; unknown/empty → the Overview landing.
-  const section = resolveSection(searchParams.get('tab'));
+  const section = resolveLocalSection(searchParams.get('tab'));
 
-  const go = (next: SettingsSection) => {
+  const go = (next: LocalSection) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', next);
     router.replace(`/settings?${params.toString()}`, { scroll: false });
   };
 
-  // Cheap, fetch-free rail hints. The Overview landing carries the
-  // full live status/counts; the rail just surfaces the two that are
-  // already in context.
-  const hints: Partial<Record<SettingsSection, ReactNode>> = useMemo(
-    () => ({
-      appearance: mode.charAt(0).toUpperCase() + mode.slice(1),
-      deals: defaultCurrency,
-    }),
-    [mode, defaultCurrency],
+  const handleOverviewSelect = (target: SettingsSection) => {
+    const href = sectionHref(target);
+    if (href.startsWith('/settings')) {
+      go(target as LocalSection);
+    } else {
+      router.push(href);
+    }
+  };
+
+  const tabs = useMemo(
+    () =>
+      LOCAL_SECTIONS.map((id) => ({
+        id,
+        label: SECTION_META[id].label,
+        icon: SECTION_META[id].icon,
+      })),
+    [],
   );
 
-  const panel: Record<SettingsSection, ReactNode> = {
-    overview: <SettingsOverview onSelect={go} />,
+  const panel: Record<LocalSection, ReactNode> = {
+    overview: <SettingsOverview onSelect={handleOverviewSelect} />,
     profile: <ProfileForm />,
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
-    whatsapp: <WhatsAppConfig />,
-    templates: <TemplateManager />,
-    'quick-replies': <QuickRepliesManager />,
-    fields: <FieldsAndTagsPanel />,
-    deals: <DealsSettings />,
-    members: <MembersTab />,
-    api: <ApiKeysSettings />,
   };
 
   return (
@@ -94,10 +104,11 @@ function SettingsPageInner() {
         </p>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
-        <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="min-w-0">{panel[section]}</div>
+      <div className="mt-4">
+        <TopTabs tabs={tabs} active={section} onSelect={go} />
       </div>
+
+      <div className="mt-6 min-w-0">{panel[section]}</div>
     </div>
   );
 }
