@@ -402,6 +402,7 @@ export interface Project {
   account_id: string;
   pipeline_id: string;
   client_contact_id: string | null;
+  client_id: string | null;
   client_name: string | null;
   name: string;
   description: string | null;
@@ -412,6 +413,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   contact?: Contact;
+  client?: Client;
   pipeline?: Pipeline;
 }
 
@@ -634,6 +636,40 @@ export interface DailyTask {
   client?: Client;
   project?: Project;
   assignee?: AccountMember;
+}
+
+// ============================================================
+// Account Management — client payments + revenue-split allocations
+// ============================================================
+
+export type PaymentRecipientType = "company" | "team_member";
+
+export interface PaymentAllocation {
+  id: string;
+  account_id: string;
+  payment_id: string;
+  recipient_type: PaymentRecipientType;
+  recipient_user_id: string | null;
+  role_label: string | null;
+  amount: number;
+  created_at: string;
+}
+
+export interface ClientPayment {
+  id: string;
+  account_id: string;
+  client_id: string;
+  service_description: string | null;
+  received_date: string;
+  amount: number;
+  domain_fee: number | null;
+  hosting_fee: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  client?: Client;
+  allocations?: PaymentAllocation[];
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';

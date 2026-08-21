@@ -14,9 +14,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Client, ClientStatus } from "@/types";
 import { toast } from "sonner";
 
+const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
 const STATUS_STYLE: Record<ClientStatus, string> = {
   active: "bg-primary/10 text-primary",
   inactive: "bg-amber-500/15 text-amber-500",
@@ -32,6 +40,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");
+  const [status, setStatus] = useState<ClientStatus>("active");
   const [creating, setCreating] = useState(false);
 
   async function loadClients() {
@@ -54,7 +63,7 @@ export default function ClientsPage() {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({ name: trimmed, status }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -63,8 +72,9 @@ export default function ClientsPage() {
       }
       setDialogOpen(false);
       setName("");
+      setStatus("active");
       loadClients();
-      toast.success("Client created.");
+      toast.success("Client created — a matching project was set up for it too.");
     } finally {
       setCreating(false);
     }
@@ -136,8 +146,21 @@ export default function ClientsPage() {
               <Label className="text-muted-foreground">Name</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} className="border-border bg-muted text-foreground" autoFocus />
             </div>
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Status</Label>
+              <Select value={status} onValueChange={(v) => v && setStatus(v as ClientStatus)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue className="truncate capitalize">{(v: string) => v}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Everything else (logo, interface contact, accent color, notes) can be filled in after — only a name is required.
+              Everything else (logo, interface contact, accent color, notes) can be filled in after — only a name is required. A matching project + task board gets created automatically.
             </p>
           </div>
           <DialogFooter className="border-border bg-popover/50">

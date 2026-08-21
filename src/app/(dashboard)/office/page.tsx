@@ -2,24 +2,26 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Building2, FileText, Folder, Users } from "lucide-react";
+import { Building2, FileText, Folder, Users, IndianRupee } from "lucide-react";
 import { FileManager } from "@/components/files/file-manager";
 import { CompanyInfo } from "@/components/office/company-info";
 import { OfficeAccessTab } from "@/components/office/office-access-tab";
+import { AccountsTab } from "@/components/office/accounts-tab";
 import { useAuth } from "@/hooks/use-auth";
 
-type OfficeTab = "info" | "files" | "access";
+type OfficeTab = "info" | "files" | "access" | "accounts";
 
 function isOfficeTab(value: string | null): value is OfficeTab {
-  return value === "info" || value === "files" || value === "access";
+  return value === "info" || value === "files" || value === "access" || value === "accounts";
 }
 
-// BMW Office — three sections:
+// BMW Office — four sections:
 //   Company Info — admin-defined custom fields (see company-info.tsx)
 //   Files — the Phase 3 File Manager, Office-scoped (project_id null).
 //           Bills are just PDFs here (e.g. a "Bills" folder you make
 //           yourself) — no separate bills system, per BMW's call.
 //   Access — admin-only: tick teammates to grant them Office viewing
+//   Accounts — admin-only: client payments + revenue-split allocations
 //
 // `useSearchParams` opts this page out of static prerendering unless
 // wrapped in Suspense — same reasoning as settings/page.tsx. Lets the
@@ -61,6 +63,11 @@ function OfficePageInner() {
           Files
         </TabButton>
         {canManageMembers && (
+          <TabButton active={tab === "accounts"} onClick={() => setTab("accounts")} icon={IndianRupee}>
+            Accounts
+          </TabButton>
+        )}
+        {canManageMembers && (
           <TabButton active={tab === "access"} onClick={() => setTab("access")} icon={Users}>
             Access
           </TabButton>
@@ -75,6 +82,7 @@ function OfficePageInner() {
           <FileManager accountId={accountId} userId={user.id} projectId={null} />
         </div>
       )}
+      {tab === "accounts" && canManageMembers && <AccountsTab />}
       {tab === "access" && canManageMembers && (
         <OfficeAccessTab accountId={accountId} currentUserId={user.id} />
       )}
