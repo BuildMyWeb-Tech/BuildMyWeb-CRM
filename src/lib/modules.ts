@@ -22,7 +22,9 @@ import {
   Bell,
   Bot,
   Building2,
+  Folder,
   GitBranch,
+  IndianRupee,
   KanbanSquare,
   LayoutDashboard,
   LayoutGrid,
@@ -30,6 +32,7 @@ import {
   MessageSquare,
   Radio,
   Users,
+  Users2,
   Workflow,
   Zap,
   Sparkles,
@@ -42,6 +45,16 @@ export interface ModuleNavItem {
   minRole: AccountRole;
   /** Renders a small "Beta" chip after the label. Cosmetic only. */
   beta?: boolean;
+  /**
+   * Matches a key in src/lib/permissions/page-registry.ts. When set,
+   * the sidebar additionally hides this item for a user who has an
+   * EXPLICIT can_read:false row for this page — absence of any row
+   * (the default for everyone except users created through the new
+   * User Management wizard) never restricts anything, only an
+   * explicit denial does. Items without a pageKey (Dashboard,
+   * Notifications) are never restricted this way.
+   */
+  pageKey?: string;
 }
 
 export interface CrmModule {
@@ -65,14 +78,14 @@ export const CRM_MODULES: CrmModule[] = [
     labelKey: "moduleSales",
     minRole: "viewer",
     items: [
-      { href: "/leads/generate", labelKey: "leadSourcing", icon: Sparkles, minRole: "agent" },
-      { href: "/inbox", labelKey: "inbox", icon: MessageSquare, minRole: "viewer" },
-      { href: "/contacts", labelKey: "contacts", icon: Users, minRole: "viewer" },
-      { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer" },
-      { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent" },
-      { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent" },
-      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true },
-      { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent" },
+      { href: "/leads/generate", labelKey: "leadSourcing", icon: Sparkles, minRole: "agent", pageKey: "lead_sourcing" },
+      { href: "/inbox", labelKey: "inbox", icon: MessageSquare, minRole: "viewer", pageKey: "inbox" },
+      { href: "/contacts", labelKey: "contacts", icon: Users, minRole: "viewer", pageKey: "contacts" },
+      { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer", pageKey: "pipelines" },
+      { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent", pageKey: "broadcasts" },
+      { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent", pageKey: "automations" },
+      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true, pageKey: "flows" },
+      { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent", pageKey: "ai_agents" },
     ],
   },
   {
@@ -80,7 +93,7 @@ export const CRM_MODULES: CrmModule[] = [
     labelKey: "moduleClients",
     minRole: "viewer",
     items: [
-      { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer" },
+      { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer", pageKey: "client_directory" },
     ],
   },
   {
@@ -88,9 +101,9 @@ export const CRM_MODULES: CrmModule[] = [
     labelKey: "moduleProjects",
     minRole: "viewer",
     items: [
-      { href: "/projects", labelKey: "projects", icon: KanbanSquare, minRole: "viewer" },
-      { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer" },
-      { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer" },
+      { href: "/projects", labelKey: "projects", icon: KanbanSquare, minRole: "viewer", pageKey: "projects" },
+      { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer", pageKey: "kanban" },
+      { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer", pageKey: "daily_tasks" },
     ],
   },
   {
@@ -101,7 +114,10 @@ export const CRM_MODULES: CrmModule[] = [
     // base app. Loosen to "agent" here later if that's ever wrong.
     minRole: "admin",
     items: [
-      { href: "/office", labelKey: "office", icon: Building2, minRole: "admin" },
+      { href: "/office", labelKey: "companyDetails", icon: Building2, minRole: "admin", pageKey: "company_details" },
+      { href: "/files", labelKey: "files", icon: Folder, minRole: "admin", pageKey: "files" },
+      { href: "/accounts", labelKey: "accounts", icon: IndianRupee, minRole: "admin", pageKey: "accounts" },
+      { href: "/user-management", labelKey: "userManagement", icon: Users2, minRole: "admin", pageKey: "user_management" },
     ],
   },
 ];
@@ -116,10 +132,15 @@ export function visibleGlobalItems(role: AccountRole | null | undefined): Module
   return GLOBAL_NAV_ITEMS.filter((item) => hasMinRole(role, item.minRole));
 }
 
-export function visibleModules(role: AccountRole | null | undefined): CrmModule[] {
+export function visibleModules(
+  role: AccountRole | null | undefined,
+  deniedPageKeys?: ReadonlySet<string>,
+): CrmModule[] {
   if (!role) return [];
   return CRM_MODULES.map((m) => ({
     ...m,
-    items: m.items.filter((item) => hasMinRole(role, item.minRole)),
+    items: m.items.filter(
+      (item) => hasMinRole(role, item.minRole) && !(item.pageKey && deniedPageKeys?.has(item.pageKey)),
+    ),
   })).filter((m) => m.items.length > 0 && hasMinRole(role, m.minRole));
 }

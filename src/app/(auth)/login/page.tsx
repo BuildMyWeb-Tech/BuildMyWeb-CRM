@@ -49,8 +49,15 @@ function LoginPageInner() {
     setError(null);
     setLoading(true);
 
+    // Local username accounts (Office → User Management) have no
+    // real email — their Supabase Auth record uses a synthetic
+    // username@buildmyweb.info address the user never sees. If
+    // what's typed here has no "@", treat it as a username and
+    // translate it the same way /api/users does when creating one.
+    const identifier = email.includes("@") ? email : `${email.trim().toLowerCase()}@buildmyweb.info`;
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: identifier,
       password,
     });
 
@@ -104,11 +111,13 @@ function LoginPageInner() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="email" className="text-muted-foreground">
-                {t('emailLabel')}
+                Email or username
               </Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
                 placeholder={t('emailPlaceholder')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

@@ -82,9 +82,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const bottomNavItems = [
+  { href: "/workspace", labelKey: "workspace", icon: Layers },
   { href: "/settings", labelKey: "settings", icon: Settings },
-    { href: "/workspace", labelKey: "workspace", icon: Layers },
-
 ];
 
 interface SidebarProps {
@@ -186,12 +185,37 @@ function NavLink({
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, profileLoading, account, accountRole, signOut, user } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
 
+  // Granular per-page permission grid (Office → User Management) —
+  // only ever RESTRICTS beyond the coarse role, never grants beyond
+  // it. Absence of any row for a page (the default for every user
+  // except ones created through the wizard) never hides anything;
+  // only an explicit can_read:false row does. Fetched once per user
+  // change, not on every render. Uses `user.id` (the real auth user
+  // id) — NOT `profile.id`, which is the profiles table's own row
+  // primary key, a different value that the permissions RLS
+  // (user_id = auth.uid()) wouldn't match.
+  const [deniedPageKeys, setDeniedPageKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user?.id) {
+      setDeniedPageKeys(new Set());
+      return;
+    }
+    fetch(`/api/users/${user.id}/permissions`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const rows: Array<{ page_key: string; can_read: boolean }> = d?.permissions ?? [];
+        setDeniedPageKeys(new Set(rows.filter((r) => !r.can_read).map((r) => r.page_key)));
+      })
+      .catch(() => setDeniedPageKeys(new Set()));
+  }, [user?.id]);
+
   const globalItems = visibleGlobalItems(accountRole);
-  const modules = visibleModules(accountRole);
+  const modules = visibleModules(accountRole, deniedPageKeys);
 
   // Which module sections (Sales/Clients/Projects/Office/...) are
   // collapsed, persisted per-browser so a choice sticks across

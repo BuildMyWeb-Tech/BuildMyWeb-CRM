@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Loader2, Settings, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Loader2, Settings, AlertCircle, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 // Company Info — a small admin-defined form rather than a fixed
@@ -23,6 +23,11 @@ import { toast } from "sonner";
 // required or optional. Mirrors the app's existing
 // custom_fields/contact_custom_values EAV pattern
 // (001_initial_schema.sql) rather than inventing a new shape.
+//
+// Fields display READ-ONLY by default now (not a big always-open
+// form) — click the pencil on a field to edit just that one value
+// inline, matching BMW's ask for a "click pencil to edit" pattern
+// instead of one global Save button for everything at once.
 //
 // isAdmin gates editing (field management + saving values); a
 // member with office_access can view this page but not edit it —
@@ -39,7 +44,10 @@ export function CompanyInfo({ accountId, currentUserId, isAdmin }: CompanyInfoPr
   const [fields, setFields] = useState<CompanyInfoField[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [savingField, setSavingField] = useState(false);
 
   const [manageOpen, setManageOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState("");
@@ -122,34 +130,38 @@ export function CompanyInfo({ accountId, currentUserId, isAdmin }: CompanyInfoPr
     setFields(fields.map((f) => (f.id === field.id ? { ...f, is_required: !f.is_required } : f)));
   }
 
-  async function handleSaveValues() {
-    const missingRequired = fields.filter((f) => f.is_required && !values[f.id]?.trim());
-    if (missingRequired.length > 0) {
-      toast.error(`Fill in required field${missingRequired.length > 1 ? "s" : ""}: ${missingRequired.map((f) => f.field_name).join(", ")}`);
+  function openFieldEdit(field: CompanyInfoField) {
+    setEditingFieldId(field.id);
+    setEditingValue(values[field.id] ?? "");
+  }
+
+  function cancelFieldEdit() {
+    setEditingFieldId(null);
+    setEditingValue("");
+  }
+
+  async function saveFieldEdit(field: CompanyInfoField) {
+    if (field.is_required && !editingValue.trim()) {
+      toast.error(`${field.field_name} is required.`);
       return;
     }
-    setSaving(true);
+    setSavingField(true);
     try {
-      const rows = fields.map((f) => ({
-        account_id: accountId,
-        field_id: f.id,
-        value: values[f.id] ?? "",
-        updated_by: currentUserId,
-      }));
-      if (rows.length === 0) {
-        setSaving(false);
-        return;
-      }
       const { error } = await supabase
         .from("company_info_values")
-        .upsert(rows, { onConflict: "account_id,field_id" });
+        .upsert(
+          { account_id: accountId, field_id: field.id, value: editingValue, updated_by: currentUserId },
+          { onConflict: "account_id,field_id" },
+        );
       if (error) {
         toast.error("Could not save.");
         return;
       }
-      toast.success("Company info saved.");
+      setValues((prev) => ({ ...prev, [field.id]: editingValue }));
+      setEditingFieldId(null);
+      toast.success(`${field.field_name} updated.`);
     } finally {
-      setSaving(false);
+      setSavingField(false);
     }
   }
 
@@ -183,26 +195,46 @@ export function CompanyInfo({ accountId, currentUserId, isAdmin }: CompanyInfoPr
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
           {fields.map((field) => (
-            <div key={field.id} className="grid gap-1.5">
-              <Label className="flex items-center gap-1 text-muted-foreground">
-                {field.field_name}
-                {field.is_required && <span className="text-red-400">*</span>}
-              </Label>
-              <Input
-                value={values[field.id] ?? ""}
-                onChange={(e) => setValues({ ...values, [field.id]: e.target.value })}
-                disabled={!isAdmin}
-                className="border-border bg-muted text-foreground disabled:opacity-100"
-              />
+            <div key={field.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {field.field_name}
+                  {field.is_required && <span className="text-red-400">*</span>}
+                </p>
+                {editingFieldId === field.id ? (
+                  <div className="mt-1 flex items-center gap-2">
+                    <Input
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      autoFocus
+                      className="h-8 border-border bg-muted text-sm text-foreground"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveFieldEdit(field);
+                        if (e.key === "Escape") cancelFieldEdit();
+                      }}
+                    />
+                    <Button variant="ghost" size="icon-xs" onClick={() => saveFieldEdit(field)} disabled={savingField} className="shrink-0 text-emerald-500 hover:text-emerald-400">
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon-xs" onClick={cancelFieldEdit} disabled={savingField} className="shrink-0 text-muted-foreground hover:text-foreground">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-0.5 text-sm text-foreground">
+                    {values[field.id]?.trim() ? values[field.id] : <span className="text-muted-foreground">Not set</span>}
+                  </p>
+                )}
+              </div>
+              {isAdmin && editingFieldId !== field.id && (
+                <Button variant="ghost" size="icon-xs" onClick={() => openFieldEdit(field)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           ))}
-          {isAdmin && (
-            <Button onClick={handleSaveValues} disabled={saving} className="mt-2 w-fit">
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          )}
         </div>
       )}
 

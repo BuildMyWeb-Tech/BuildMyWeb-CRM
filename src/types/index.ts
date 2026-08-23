@@ -701,6 +701,32 @@ export interface DriveFile {
   created_at: string;
 }
 
+// ============================================================
+// User Management — local username accounts + granular per-page
+// CRUD permissions
+// ============================================================
+
+export interface UserPagePermission {
+  id: string;
+  account_id: string;
+  user_id: string;
+  page_key: string;
+  can_create: boolean;
+  can_read: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+  can_print: boolean;
+  updated_at: string;
+}
+
+export interface LocalUser {
+  user_id: string;
+  username: string;
+  is_active: boolean;
+  role: AccountRole;
+  created_at: string;
+}
+
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 

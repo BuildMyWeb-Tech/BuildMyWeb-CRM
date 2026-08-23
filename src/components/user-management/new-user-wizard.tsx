@@ -1,0 +1,276 @@
+"use client";
+
+import { useState } from "react";
+import { UserPlus, ShieldCheck, Eye, EyeOff, Check, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { PermissionsGrid } from "@/components/user-management/permissions-grid";
+import { emptyPermissionDrafts, type PagePermissionDraft } from "@/lib/permissions/page-registry";
+import { toast } from "sonner";
+
+// Two-step "New User" wizard, matching the reference screenshots:
+// Step 1 creates the account (username/password/status), Step 2
+// assigns the per-page CRUD+Print grid. Both steps hit the API
+// separately (user must exist before permissions can reference its
+// user_id) but read as one flow to the person using it.
+
+interface NewUserWizardProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
+}
+
+type Step = "details" | "permissions";
+
+export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardProps) {
+  const [step, setStep] = useState<Step>("details");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newUserId, setNewUserId] = useState<string | null>(null);
+
+  const [permissions, setPermissions] = useState<PagePermissionDraft[]>(emptyPermissionDrafts());
+  const [saving, setSaving] = useState(false);
+
+  function reset() {
+    setStep("details");
+    setUsername("");
+    setPassword("");
+    setConfirmPassword("");
+    setIsActive(true);
+    setNewUserId(null);
+    setPermissions(emptyPermissionDrafts());
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next) reset();
+    onOpenChange(next);
+  }
+
+  const detailsValid =
+    /^[a-z0-9._-]{3,32}$/i.test(username) && password.length >= 8 && password === confirmPassword;
+
+  async function handleCreateAccount() {
+    if (!detailsValid) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, is_active: isActive }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.error ?? "Could not create the account.");
+        return;
+      }
+      setNewUserId(data.user_id);
+      setStep("permissions");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function toggleAll(checked: boolean) {
+    setPermissions((prev) =>
+      prev.map((p) => ({
+        ...p,
+        can_create: checked,
+        can_read: checked,
+        can_update: checked,
+        can_delete: checked,
+        can_print: checked,
+      })),
+    );
+  }
+
+  function toggleCell(pageKey: string, field: keyof Omit<PagePermissionDraft, "page_key">, checked: boolean) {
+    setPermissions((prev) => prev.map((p) => (p.page_key === pageKey ? { ...p, [field]: checked } : p)));
+  }
+
+  const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete && p.can_print);
+
+  async function handleSavePermissions() {
+    if (!newUserId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/users/${newUserId}/permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions }),
+      });
+      if (!res.ok) {
+        toast.error("Account created, but permissions could not be saved — set them later from the user list.");
+      } else {
+        toast.success("User created with permissions.");
+      }
+      handleOpenChange(false);
+      onCreated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-5xl bg-popover border-border max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className={step === "details" ? "text-primary" : ""}>Step 1: User Details</span>
+            <span>›</span>
+            <span className={step === "permissions" ? "text-primary" : ""}>Step 2: Permissions</span>
+          </div>
+          <DialogTitle className="text-popover-foreground">
+            {step === "details" ? "New User" : `Assign Permissions for ${username}`}
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === "details" ? (
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted p-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <UserPlus className="h-4 w-4" />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Create the account, then assign what it can see and do on the next step.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">
+                Username <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. jsmith"
+                className="border-border bg-muted text-foreground"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">3-32 characters — letters, numbers, dot, underscore, or hyphen.</p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">
+                Password <span className="text-red-400">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="border-border bg-muted pr-9 text-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">
+                Confirm Password <span className="text-red-400">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showConfirm ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="border-border bg-muted pr-9 text-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-[11px] text-red-400">Passwords don&apos;t match.</p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Account Status</Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsActive(true)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsActive(false)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    !isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Inactive
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => handleOpenChange(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+                Cancel
+              </Button>
+              <Button onClick={handleCreateAccount} disabled={!detailsValid || creating}>
+                {creating ? "Creating…" : "Create & Set Permissions"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="py-2">
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Check the actions this user can perform on each page.
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Checkbox checked={allChecked} onCheckedChange={(c) => toggleAll(c === true)} />
+                Select All
+              </label>
+            </div>
+
+            <div className="mt-3">
+              <PermissionsGrid permissions={permissions} onToggle={toggleCell} />
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <Button variant="outline" onClick={() => setStep("details")} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                Back
+              </Button>
+              <Button onClick={handleSavePermissions} disabled={saving}>
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                {saving ? "Saving…" : "Finish"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+

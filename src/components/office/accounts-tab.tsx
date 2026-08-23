@@ -55,6 +55,7 @@ export function AccountsTab() {
   const [toDate, setToDate] = useState("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formClientId, setFormClientId] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
@@ -88,6 +89,7 @@ export function AccountsTab() {
   }, [loadPayments]);
 
   function openNewPayment() {
+    setEditingId(null);
     setFormClientId("");
     setServiceDescription("");
     setReceivedDate(new Date().toISOString().slice(0, 10));
@@ -96,6 +98,28 @@ export function AccountsTab() {
     setHostingFee("");
     setNotes("");
     setAllocations([emptyAllocation()]);
+    setDialogOpen(true);
+  }
+
+  function openEditPayment(p: ClientPayment) {
+    setEditingId(p.id);
+    setFormClientId(p.client_id);
+    setServiceDescription(p.service_description ?? "");
+    setReceivedDate(p.received_date);
+    setAmount(String(p.amount));
+    setDomainFee(p.domain_fee != null ? String(p.domain_fee) : "");
+    setHostingFee(p.hosting_fee != null ? String(p.hosting_fee) : "");
+    setNotes(p.notes ?? "");
+    setAllocations(
+      (p.allocations ?? []).length > 0
+        ? (p.allocations ?? []).map((a) => ({
+            recipient_type: a.recipient_type,
+            recipient_user_id: a.recipient_user_id ?? "",
+            role_label: a.role_label ?? "",
+            amount: String(a.amount),
+          }))
+        : [emptyAllocation()],
+    );
     setDialogOpen(true);
   }
 
@@ -117,27 +141,30 @@ export function AccountsTab() {
     if (!formClientId || !receivedDate || !amount) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/client-payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_id: formClientId,
-          service_description: serviceDescription.trim() || null,
-          received_date: receivedDate,
-          amount: Number(amount),
-          domain_fee: domainFee ? Number(domainFee) : null,
-          hosting_fee: hostingFee ? Number(hostingFee) : null,
-          notes: notes.trim() || null,
-          allocations: allocations
-            .filter((a) => a.amount)
-            .map((a) => ({
-              recipient_type: a.recipient_type,
-              recipient_user_id: a.recipient_type === "team_member" ? a.recipient_user_id : null,
-              role_label: a.role_label.trim() || null,
-              amount: Number(a.amount),
-            })),
-        }),
-      });
+      const res = await fetch(
+        editingId ? `/api/client-payments/${editingId}` : "/api/client-payments",
+        {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: formClientId,
+            service_description: serviceDescription.trim() || null,
+            received_date: receivedDate,
+            amount: Number(amount),
+            domain_fee: domainFee ? Number(domainFee) : null,
+            hosting_fee: hostingFee ? Number(hostingFee) : null,
+            notes: notes.trim() || null,
+            allocations: allocations
+              .filter((a) => a.amount)
+              .map((a) => ({
+                recipient_type: a.recipient_type,
+                recipient_user_id: a.recipient_type === "team_member" ? a.recipient_user_id : null,
+                role_label: a.role_label.trim() || null,
+                amount: Number(a.amount),
+              })),
+          }),
+        },
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data?.error ?? "Could not save payment.");
@@ -145,7 +172,7 @@ export function AccountsTab() {
       }
       setDialogOpen(false);
       loadPayments();
-      toast.success("Payment recorded.");
+      toast.success(editingId ? "Payment updated." : "Payment recorded.");
     } finally {
       setSaving(false);
     }
@@ -280,14 +307,26 @@ export function AccountsTab() {
               {payments.map((p) => {
                 const allocatedSum = (p.allocations ?? []).reduce((s, a) => s + Number(a.amount), 0);
                 return (
-                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/50">
+                  <tr
+                    key={p.id}
+                    onClick={() => openEditPayment(p)}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
+                  >
                     <td className="px-3 py-2 text-muted-foreground">{new Date(p.received_date).toLocaleDateString()}</td>
                     <td className="px-3 py-2 text-foreground">{p.client?.name ?? "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{p.service_description ?? "—"}</td>
                     <td className="px-3 py-2 text-right text-foreground">{formatCurrency(Number(p.amount))}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(allocatedSum)}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" size="icon-xs" onClick={() => handleDelete(p.id)} className="text-muted-foreground hover:text-red-400">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(p.id);
+                        }}
+                        className="text-muted-foreground hover:text-red-400"
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </td>
@@ -302,7 +341,7 @@ export function AccountsTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-popover-foreground">New payment</DialogTitle>
+            <DialogTitle className="text-popover-foreground">{editingId ? "Edit payment" : "New payment"}</DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
@@ -421,7 +460,7 @@ export function AccountsTab() {
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saving || !formClientId || !receivedDate || !amount}>
-              {saving ? "Saving…" : "Save payment"}
+              {saving ? "Saving…" : editingId ? "Update payment" : "Save payment"}
             </Button>
           </DialogFooter>
         </DialogContent>
