@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { HardDrive } from 'lucide-react';
 
 import { TopTabs } from '@/components/settings/top-tabs';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
@@ -11,14 +12,16 @@ import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel'
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
+import { GoogleDriveSettings } from '@/components/google-drive/google-drive-settings';
 import { SECTION_META } from '@/components/settings/settings-sections';
 
 // Workspace — everything account-wide that used to live under
 // Settings' "Workspace" rail group: WhatsApp, Templates, Quick
-// replies, Fields & tags, Deals & currency, Team members, API keys.
-// Settings itself now covers only personal sections (Overview, Your
-// profile, Login & security, Appearance) — see settings/page.tsx.
-// Its Overview cards for these sections route here via ?tab=.
+// replies, Fields & tags, Deals & currency, Team members, API keys,
+// and now Google Drive. Settings itself now covers only personal
+// sections (Overview, Your profile, Login & security, Appearance) —
+// see settings/page.tsx. Its Overview cards for these sections
+// route here via ?tab=.
 
 type WorkspaceSection =
   | 'whatsapp'
@@ -27,7 +30,8 @@ type WorkspaceSection =
   | 'fields'
   | 'deals'
   | 'members'
-  | 'api';
+  | 'api'
+  | 'google-drive';
 
 const WORKSPACE_SECTIONS: WorkspaceSection[] = [
   'whatsapp',
@@ -37,6 +41,7 @@ const WORKSPACE_SECTIONS: WorkspaceSection[] = [
   'deals',
   'members',
   'api',
+  'google-drive',
 ];
 
 function isWorkspaceSection(value: string | null): value is WorkspaceSection {
@@ -71,12 +76,14 @@ function WorkspacePageInner() {
   };
 
   const tabs = useMemo(
-    () =>
-      WORKSPACE_SECTIONS.map((id) => ({
+    () => [
+      ...WORKSPACE_SECTIONS.filter((id) => id !== 'google-drive').map((id) => ({
         id,
         label: SECTION_META[id].label,
         icon: SECTION_META[id].icon,
       })),
+      { id: 'google-drive' as const, label: 'Google Drive', icon: HardDrive },
+    ],
     [],
   );
 
@@ -88,6 +95,7 @@ function WorkspacePageInner() {
     deals: <DealsSettings />,
     members: <MembersTab />,
     api: <ApiKeysSettings />,
+    'google-drive': <GoogleDriveSettings />,
   };
 
   return (

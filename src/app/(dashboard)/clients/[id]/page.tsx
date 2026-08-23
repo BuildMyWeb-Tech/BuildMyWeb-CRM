@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, FileText, Folder, Briefcase } from "lucide-react";
+import { ArrowLeft, Loader2, FileText, Folder, Briefcase, Upload, ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,14 +16,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileManager } from "@/components/files/file-manager";
+import { GoogleDriveSection } from "@/components/google-drive/google-drive-section";
 import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
 import { ScopeOfWorkSection } from "@/components/clients/scope-of-work-section";
 import { useAuth } from "@/hooks/use-auth";
+import { createClient } from "@/lib/supabase/client";
 import type { Client, ClientStatus, ScopeOfWork } from "@/types";
 import { toast } from "sonner";
 
 type ClientTab = "info" | "scope" | "files";
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
+const ACCENT_COLORS = [
+  "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
+  "#f97316", "#eab308", "#22c55e", "#14b8a6", "#06b6d4",
+];
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
@@ -41,11 +47,14 @@ export default function ClientDetailPage() {
   const [clientSince, setClientSince] = useState("");
   const [status, setStatus] = useState<ClientStatus>("active");
   const [notes, setNotes] = useState("");
+  const [accentColor, setAccentColor] = useState<string>(ACCENT_COLORS[0]);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const load = useCallback(() => {
     fetch(`/api/clients/${params.id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then(async (data) => {
         if (!data) return;
         setClient(data.client);
         setScopeItems(data.scopeOfWork ?? []);
@@ -55,6 +64,17 @@ export default function ClientDetailPage() {
         setClientSince(data.client.client_since ?? "");
         setStatus(data.client.status);
         setNotes(data.client.notes ?? "");
+        setAccentColor(data.client.accent_color ?? ACCENT_COLORS[0]);
+
+        if (data.client.logo_storage_path) {
+          const supabase = createClient();
+          const { data: signed } = await supabase.storage
+            .from("files")
+            .createSignedUrl(data.client.logo_storage_path, 3600);
+          setLogoUrl(signed?.signedUrl ?? null);
+        } else {
+          setLogoUrl(null);
+        }
       })
       .catch((err) => console.error("[client-detail] load failed:", err))
       .finally(() => setLoading(false));
@@ -78,6 +98,7 @@ export default function ClientDetailPage() {
           client_since: clientSince || null,
           status,
           notes: notes.trim() || null,
+          accent_color: accentColor,
         }),
       });
       if (!res.ok) {
@@ -88,6 +109,41 @@ export default function ClientDetailPage() {
       load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !client || !accountId) return;
+
+    setUploadingLogo(true);
+    try {
+      const supabase = createClient();
+      const path = `${accountId}/client-logos/${client.id}-${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("files").upload(path, file, {
+        upsert: true,
+      });
+      if (uploadError) {
+        toast.error(`Upload failed: ${uploadError.message}`);
+        return;
+      }
+
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_storage_path: path }),
+      });
+      if (!res.ok) {
+        toast.error("Logo uploaded but could not be saved.");
+        return;
+      }
+
+      const { data: signed } = await supabase.storage.from("files").createSignedUrl(path, 3600);
+      setLogoUrl(signed?.signedUrl ?? null);
+      toast.success("Logo updated.");
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -127,6 +183,51 @@ export default function ClientDetailPage() {
 
       {tab === "info" && (
         <div className="mt-4 flex max-w-lg flex-col gap-4">
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Logo</Label>
+            <div className="flex items-center gap-3">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- signed URL, not a static asset next/image can optimize
+                  <img src={logoUrl} alt={`${client.name} logo`} className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                )}
+              </div>
+              {canUpdateRecords && (
+                <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+                  {uploadingLogo ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  {logoUrl ? "Replace logo" : "Upload logo"}
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={handleLogoUpload} />
+                </label>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Accent color</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {ACCENT_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  disabled={!canUpdateRecords}
+                  onClick={() => setAccentColor(color)}
+                  className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 disabled:pointer-events-none"
+                  style={{
+                    backgroundColor: color,
+                    borderColor: accentColor === color ? "var(--foreground)" : "transparent",
+                  }}
+                  aria-label={`Pick color ${color}`}
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canUpdateRecords} className="border-border bg-muted text-foreground disabled:opacity-100" />
@@ -200,7 +301,8 @@ export default function ClientDetailPage() {
       )}
 
       {tab === "files" && accountId && user && (
-        <div className="mt-4">
+        <div className="mt-4 flex flex-col gap-6">
+          <GoogleDriveSection clientId={client.id} />
           <FileManager accountId={accountId} userId={user.id} projectId={null} clientId={client.id} />
         </div>
       )}

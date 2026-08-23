@@ -672,6 +672,35 @@ export interface ClientPayment {
   allocations?: PaymentAllocation[];
 }
 
+// ============================================================
+// Google Drive integration
+// ============================================================
+
+export interface GoogleDriveConfig {
+  id: string;
+  account_id: string;
+  connected_email: string | null;
+  connected_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DriveFileType = "doc" | "sheet";
+
+export interface DriveFile {
+  id: string;
+  account_id: string;
+  project_id: string | null;
+  client_id: string | null;
+  drive_file_id: string;
+  name: string;
+  file_type: DriveFileType;
+  web_view_link: string;
+  icon_link: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
