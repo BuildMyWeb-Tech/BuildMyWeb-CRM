@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users, Plus, Loader2 } from "lucide-react";
+import { Users, Plus, Loader2, MoreVertical, Pencil, Trash2, List as ListIcon, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -14,6 +15,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -38,10 +45,32 @@ const STATUS_STYLE: Record<ClientStatus, string> = {
 // independently.
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[] | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem("clients-view") === "list" ? "list" : "grid";
+  });
+
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [status, setStatus] = useState<ClientStatus>("active");
   const [creating, setCreating] = useState(false);
+
+  // Quick-edit — the "edit it like Info simply from the 3-dot" ask.
+  // Covers the everyday-editable fields; logo/accent color stay on
+  // the full detail page since they need more room (image upload,
+  // color swatches) than a quick dialog should try to fit.
+  const [editTarget, setEditTarget] = useState<Client | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editStatus, setEditStatus] = useState<ClientStatus>("active");
+  const [editInterfaceName, setEditInterfaceName] = useState("");
+  const [editInterfaceNumber, setEditInterfaceNumber] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function changeViewMode(mode: "grid" | "list") {
+    setViewMode(mode);
+    window.localStorage.setItem("clients-view", mode);
+  }
 
   async function loadClients() {
     const res = await fetch("/api/clients");
@@ -70,7 +99,7 @@ export default function ClientsPage() {
         toast.error(data?.error ?? "Could not create client.");
         return;
       }
-      setDialogOpen(false);
+      setCreateOpen(false);
       setName("");
       setStatus("active");
       loadClients();
@@ -80,6 +109,57 @@ export default function ClientsPage() {
     }
   }
 
+  function openQuickEdit(c: Client, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditTarget(c);
+    setEditName(c.name);
+    setEditStatus(c.status);
+    setEditInterfaceName(c.interface_name ?? "");
+    setEditInterfaceNumber(c.interface_contact_number ?? "");
+    setEditNotes(c.notes ?? "");
+  }
+
+  async function handleQuickSave() {
+    if (!editTarget || !editName.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/clients/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          status: editStatus,
+          interface_name: editInterfaceName.trim() || null,
+          interface_contact_number: editInterfaceNumber.trim() || null,
+          notes: editNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        toast.error("Could not save.");
+        return;
+      }
+      setEditTarget(null);
+      loadClients();
+      toast.success("Client updated.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(c: Client, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${c.name}"? This can't be undone.`)) return;
+    const res = await fetch(`/api/clients/${c.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Could not delete client.");
+      return;
+    }
+    loadClients();
+    toast.success("Client deleted.");
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -87,10 +167,36 @@ export default function ClientsPage() {
           <Users className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Directory</h1>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Create client
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => changeViewMode("grid")}
+              aria-label="Grid view"
+              aria-pressed={viewMode === "grid"}
+              className={`flex h-7 w-8 items-center justify-center rounded-md ${
+                viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => changeViewMode("list")}
+              aria-label="List view"
+              aria-pressed={viewMode === "list"}
+              className={`flex h-7 w-8 items-center justify-center rounded-md ${
+                viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ListIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create client
+          </Button>
+        </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {clients ? `${clients.length} client${clients.length === 1 ? "" : "s"}` : "Loading…"} — the whole
@@ -104,12 +210,12 @@ export default function ClientsPage() {
       ) : clients.length === 0 ? (
         <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">No clients yet.</p>
-          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Create your first client
           </Button>
         </div>
-      ) : (
+      ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {clients.map((c) => (
             <Link key={c.id} href={`/clients/${c.id}`}>
@@ -120,9 +226,12 @@ export default function ClientsPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{c.name}</CardTitle>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
-                      {c.status}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
+                        {c.status}
+                      </span>
+                      <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -134,9 +243,32 @@ export default function ClientsPage() {
             </Link>
           ))}
         </div>
+      ) : (
+        <div className="mt-6 divide-y divide-border rounded-lg border border-border">
+          {clients.map((c) => (
+            <Link
+              key={c.id}
+              href={`/clients/${c.id}`}
+              className="flex items-center gap-3 border-l-4 px-4 py-3 hover:bg-muted/50"
+              style={{ borderLeftColor: c.accent_color || "transparent" }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {c.client_since ? `Client since ${new Date(c.client_since).toLocaleDateString()}` : "No start date set"}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
+                {c.status}
+              </span>
+              <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} />
+            </Link>
+          ))}
+        </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md bg-popover border-border">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">Create client</DialogTitle>
@@ -164,7 +296,7 @@ export default function ClientsPage() {
             </p>
           </div>
           <DialogFooter className="border-border bg-popover/50">
-            <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={creating || !name.trim()}>
@@ -173,6 +305,91 @@ export default function ClientsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Quick edit dialog — the 3-dot "Edit" action */}
+      <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-md bg-popover border-border max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-popover-foreground">Edit {editTarget?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="border-border bg-muted text-foreground" />
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Status</Label>
+              <Select value={editStatus} onValueChange={(v) => v && setEditStatus(v as ClientStatus)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue className="truncate capitalize">{(v: string) => v}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Client interface name</Label>
+                <Input value={editInterfaceName} onChange={(e) => setEditInterfaceName(e.target.value)} className="border-border bg-muted text-foreground" />
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Interface contact number</Label>
+                <Input value={editInterfaceNumber} onChange={(e) => setEditInterfaceNumber(e.target.value)} className="border-border bg-muted text-foreground" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Notes</Label>
+              <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={2} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Logo, accent color, and Scope of Work live on the full client page — this is the quick-edit set.
+            </p>
+          </div>
+          <DialogFooter className="border-border bg-popover/50">
+            <Button variant="outline" onClick={() => setEditTarget(null)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+              Cancel
+            </Button>
+            <Button onClick={handleQuickSave} disabled={saving || !editName.trim()}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function ClientCardMenu({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+      >
+        <MoreVertical className="h-3.5 w-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="h-3.5 w-3.5" />
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDelete} className="text-red-400 focus:text-red-400">
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

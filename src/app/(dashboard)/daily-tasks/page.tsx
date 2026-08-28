@@ -1,30 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ListTodo, Settings, Loader2, Filter } from "lucide-react";
+import { ListTodo, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TaskBoard } from "@/components/projects/task-board";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
-import { GenericBoardSettings } from "@/components/kanban/generic-board-settings";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { DATE_PRESETS, matchesDatePreset, type DatePreset } from "@/lib/tasks/date-presets";
 import type {
   DailyTask,
   PipelineStage,
-  ProjectTask,
   AccountMember,
   Client,
   Project,
   Pipeline,
   TaskPriority,
 } from "@/types";
-import { toast } from "sonner";
 
-// Daily Task — one shared board per account (auto-seeded by
-// 049_daily_tasks.sql: To Do / Ongoing / Review / Complete), unlike
-// Projects (many boards) or Kanban (many boards). Reuses TaskBoard
-// the same shape-adapting way the Kanban board page does.
+// Daily Task — plain filterable table now, not a Kanban board. BMW's
+// call: this page is for "show me everything, filter it down," not
+// drag-and-drop between columns — that's what the standalone Kanban
+// (/kanban) is for. Stage is still a real concept (still comes from
+// the auto-seeded "Daily Tasks" pipeline, and the create/edit form
+// still lets you set it), it's just a column here, not something
+// dragged between.
+const PRIORITY_STYLE: Record<TaskPriority, string> = {
+  low: "bg-muted text-muted-foreground",
+  normal: "bg-primary/10 text-primary",
+  high: "bg-amber-500/15 text-amber-500",
+  urgent: "bg-red-500/15 text-red-400",
+};
+
 export default function DailyTasksPage() {
   const { accountId, user, canManageMembers } = useAuth();
 
@@ -38,9 +44,6 @@ export default function DailyTasksPage() {
 
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
-  const [defaultStageId, setDefaultStageId] = useState<string | null>(null);
-  const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -74,6 +77,14 @@ export default function DailyTasksPage() {
       return new Set();
     }
   });
+  const [stageFilter, setStageFilter] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      return new Set(JSON.parse(window.localStorage.getItem("daily-tasks-stage-filter") ?? "[]"));
+    } catch {
+      return new Set();
+    }
+  });
   const [datePreset, setDatePreset] = useState<DatePreset>(() => {
     if (typeof window === "undefined") return "all";
     const saved = window.localStorage.getItem("daily-tasks-date-filter");
@@ -95,14 +106,29 @@ export default function DailyTasksPage() {
   const toggleClientFilter = makeToggler(setClientFilter, "daily-tasks-client-filter");
   const togglePriorityFilter = makeToggler(setPriorityFilter, "daily-tasks-priority-filter");
   const toggleAssigneeFilter = makeToggler(setAssigneeFilter, "daily-tasks-assignee-filter");
+  const toggleStageFilter = makeToggler(setStageFilter, "daily-tasks-stage-filter");
 
   function changeDatePreset(next: DatePreset) {
     setDatePreset(next);
     window.localStorage.setItem("daily-tasks-date-filter", next);
   }
 
+  function clearFilters() {
+    setProjectFilter(new Set());
+    setClientFilter(new Set());
+    setPriorityFilter(new Set());
+    setAssigneeFilter(new Set());
+    setStageFilter(new Set());
+    setDatePreset("all");
+    ["project", "client", "priority", "assignee", "stage"].forEach((k) =>
+      window.localStorage.setItem(`daily-tasks-${k}-filter`, "[]"),
+    );
+    window.localStorage.setItem("daily-tasks-date-filter", "all");
+  }
+
   const activeFilterCount =
-    projectFilter.size + clientFilter.size + priorityFilter.size + assigneeFilter.size + (datePreset !== "all" ? 1 : 0);
+    projectFilter.size + clientFilter.size + priorityFilter.size + assigneeFilter.size + stageFilter.size +
+    (datePreset !== "all" ? 1 : 0);
 
   const load = useCallback(() => {
     if (!accountId) return;
@@ -123,7 +149,11 @@ export default function DailyTasksPage() {
         if (pipelineRow) {
           const [stagesRes, tasksRes] = await Promise.all([
             supabase.from("pipeline_stages").select("*").eq("pipeline_id", pipelineRow.id).order("position", { ascending: true }),
-            supabase.from("daily_tasks").select("*").eq("account_id", accountId).order("created_at", { ascending: false }),
+            supabase
+              .from("daily_tasks")
+              .select("*, client:clients(id,name), project:projects(id,name)")
+              .eq("account_id", accountId)
+              .order("target_date", { ascending: true, nullsFirst: false }),
           ]);
           setStages(stagesRes.data ?? []);
           setTasks((tasksRes.data ?? []) as DailyTask[]);
@@ -137,29 +167,14 @@ export default function DailyTasksPage() {
     load();
   }, [load]);
 
-  async function handleTaskMoved(taskId: string, newStageId: string) {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, stage_id: newStageId } : t)));
-    const supabase = createClient();
-    const { error } = await supabase.from("daily_tasks").update({ stage_id: newStageId }).eq("id", taskId);
-    if (error) {
-      toast.error("Could not move task — reloading board.");
-      load();
-    }
-  }
-
-  function handleAddTask(stageId: string) {
+  function openNewTask() {
     setEditingTask(null);
-    setDefaultStageId(stageId);
     setTaskFormOpen(true);
   }
 
-  function handleEditFromTaskShape(task: ProjectTask) {
-    const original = tasks.find((t) => t.id === task.id);
-    if (original) {
-      setEditingTask(original);
-      setDefaultStageId(null);
-      setTaskFormOpen(true);
-    }
+  function openEditTask(task: DailyTask) {
+    setEditingTask(task);
+    setTaskFormOpen(true);
   }
 
   if (loading) {
@@ -185,26 +200,10 @@ export default function DailyTasksPage() {
     if (clientFilter.size > 0 && (!t.client_id || !clientFilter.has(t.client_id))) return false;
     if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
     if (assigneeFilter.size > 0 && (!t.assignee_user_id || !assigneeFilter.has(t.assignee_user_id))) return false;
+    if (stageFilter.size > 0 && !stageFilter.has(t.stage_id)) return false;
     if (!matchesDatePreset(t.target_date, datePreset)) return false;
     return true;
   });
-
-  const tasksAsProjectTasks: ProjectTask[] = filteredTasks.map((t) => ({
-    id: t.id,
-    account_id: t.account_id,
-    project_id: t.project_id ?? "",
-    stage_id: t.stage_id,
-    title: t.title,
-    description: t.brief,
-    assignee_user_id: t.assignee_user_id,
-    priority: t.priority,
-    due_date: t.target_date,
-    checklist: [],
-    position: 0,
-    created_at: t.created_at,
-    updated_at: t.updated_at,
-    assignee: t.assignee,
-  }));
 
   return (
     <div>
@@ -213,136 +212,146 @@ export default function DailyTasksPage() {
           <ListTodo className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Tasks</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setFiltersOpen((v) => !v)}>
-            <Filter className="mr-1.5 h-3.5 w-3.5" />
-            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setBoardSettingsOpen(true)}>
-            <Settings className="mr-1.5 h-3.5 w-3.5" />
-            Board settings
-          </Button>
-        </div>
+        <Button onClick={openNewTask}>
+          <Plus className="mr-1.5 h-4 w-4" />
+          New task
+        </Button>
       </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {filteredTasks.length} of {tasks.length} task{tasks.length === 1 ? "" : "s"}
+        {activeFilterCount > 0 ? " — filtered" : ""}
+      </p>
 
-      {filtersOpen && (
-        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Date</p>
-            <div className="flex flex-wrap gap-1.5">
-              {DATE_PRESETS.map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => changeDatePreset(d.id)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    datePreset === d.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
+      <div className="mt-4 flex flex-col gap-6 lg:flex-row">
+        {/* Filters — left column, always visible, not a dropdown */}
+        <aside className="w-full shrink-0 lg:w-56">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</p>
+            {activeFilterCount > 0 && (
+              <button type="button" onClick={clearFilters} className="text-xs text-primary hover:underline">
+                Clear
+              </button>
+            )}
           </div>
 
+          <FilterGroup label="Date">
+            {DATE_PRESETS.map((d) => (
+              <FilterChip key={d.id} active={datePreset === d.id} onClick={() => changeDatePreset(d.id)}>
+                {d.label}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+
+          {stages.length > 0 && (
+            <FilterGroup label="Stage">
+              {stages.map((s) => (
+                <FilterChip key={s.id} active={stageFilter.has(s.id)} onClick={() => toggleStageFilter(s.id)}>
+                  {s.name}
+                </FilterChip>
+              ))}
+            </FilterGroup>
+          )}
+
+          <FilterGroup label="Priority">
+            {(["low", "normal", "high", "urgent"] as TaskPriority[]).map((p) => (
+              <FilterChip key={p} active={priorityFilter.has(p)} onClick={() => togglePriorityFilter(p)} capitalize>
+                {p}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+
           {projects.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Project</p>
-              <div className="flex flex-wrap gap-1.5">
-                {projects.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => toggleProjectFilter(p.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      projectFilter.has(p.id)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <FilterGroup label="Project">
+              {projects.map((p) => (
+                <FilterChip key={p.id} active={projectFilter.has(p.id)} onClick={() => toggleProjectFilter(p.id)}>
+                  {p.name}
+                </FilterChip>
+              ))}
+            </FilterGroup>
           )}
 
           {clients.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Client</p>
-              <div className="flex flex-wrap gap-1.5">
-                {clients.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => toggleClientFilter(c.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      clientFilter.has(c.id)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <FilterGroup label="Client">
+              {clients.map((c) => (
+                <FilterChip key={c.id} active={clientFilter.has(c.id)} onClick={() => toggleClientFilter(c.id)}>
+                  {c.name}
+                </FilterChip>
+              ))}
+            </FilterGroup>
           )}
 
-          <div>
-            <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Priority</p>
-            <div className="flex flex-wrap gap-1.5">
-              {(["low", "normal", "high", "urgent"] as TaskPriority[]).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => togglePriorityFilter(p)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                    priorityFilter.has(p)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {members.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">Assigned to</p>
-              <div className="flex flex-wrap gap-1.5">
-                {members.map((m) => (
-                  <button
-                    key={m.user_id}
-                    type="button"
-                    onClick={() => toggleAssigneeFilter(m.user_id)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      assigneeFilter.has(m.user_id)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {m.full_name}
-                  </button>
-                ))}
-              </div>
+            <FilterGroup label="Assigned to">
+              {members.map((m) => (
+                <FilterChip key={m.user_id} active={assigneeFilter.has(m.user_id)} onClick={() => toggleAssigneeFilter(m.user_id)}>
+                  {m.full_name}
+                </FilterChip>
+              ))}
+            </FilterGroup>
+          )}
+        </aside>
+
+        {/* Table — main column */}
+        <div className="min-w-0 flex-1">
+          {filteredTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">
+              <p className="text-sm text-muted-foreground">No tasks match this filter.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">Task</th>
+                    <th className="px-3 py-2 font-medium">Stage</th>
+                    <th className="px-3 py-2 font-medium">Client / Project</th>
+                    <th className="px-3 py-2 font-medium">Priority</th>
+                    <th className="px-3 py-2 font-medium">Assignee</th>
+                    <th className="px-3 py-2 font-medium">Target date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTasks.map((task) => {
+                    const stage = stages.find((s) => s.id === task.stage_id);
+                    return (
+                      <tr
+                        key={task.id}
+                        onClick={() => openEditTask(task)}
+                        className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-3 py-2 text-foreground">{task.title}</td>
+                        <td className="px-3 py-2">
+                          {stage && (
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                              style={{ backgroundColor: `${stage.color}22`, color: stage.color }}
+                            >
+                              {stage.name}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {task.client?.name || task.project?.name || "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[task.priority]}`}>
+                            {task.priority}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {members.find((m) => m.user_id === task.assignee_user_id)?.full_name ?? "Unassigned"}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {task.target_date ? new Date(task.target_date).toLocaleDateString() : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
-      )}
-
-      <div className="mt-6">
-        <TaskBoard
-          stages={stages}
-          tasks={tasksAsProjectTasks}
-          onTaskMoved={handleTaskMoved}
-          onAddTask={handleAddTask}
-          onEditTask={handleEditFromTaskShape}
-        />
       </div>
 
       {accountId && user && (
@@ -357,21 +366,44 @@ export default function DailyTasksPage() {
           clients={clients}
           projects={projects}
           task={editingTask}
-          defaultStageId={defaultStageId}
+          defaultStageId={null}
           onSaved={load}
           onDeleted={load}
         />
       )}
-
-      <GenericBoardSettings
-        open={boardSettingsOpen}
-        onOpenChange={setBoardSettingsOpen}
-        pipeline={pipeline}
-        stages={stages}
-        cardsTable="daily_tasks"
-        allowRename={false}
-        onChanged={load}
-      />
     </div>
+  );
+}
+
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-3">
+      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+  capitalize = false,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  capitalize?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${capitalize ? "capitalize" : ""} ${
+        active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

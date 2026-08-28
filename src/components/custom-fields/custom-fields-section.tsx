@@ -82,6 +82,8 @@ export function CustomFieldsSection({
   const [newFieldOptions, setNewFieldOptions] = useState("");
   const [newFieldRequired, setNewFieldRequired] = useState(false);
   const [addingField, setAddingField] = useState(false);
+  const [editingDefId, setEditingDefId] = useState<string | null>(null);
+  const [editingDefName, setEditingDefName] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -245,6 +247,34 @@ export function CustomFieldsSection({
     setFields(fields.filter((f) => f.id !== fieldId));
   }
 
+  function startRenameField(field: CustomFieldDef) {
+    setEditingDefId(field.id);
+    setEditingDefName(field.field_name);
+  }
+
+  function cancelRenameField() {
+    setEditingDefId(null);
+    setEditingDefName("");
+  }
+
+  async function saveRenameField(field: CustomFieldDef) {
+    const trimmed = editingDefName.trim();
+    if (!trimmed || trimmed === field.field_name) {
+      cancelRenameField();
+      return;
+    }
+    const { error } = await supabase
+      .from("custom_field_defs")
+      .update({ field_name: trimmed })
+      .eq("id", field.id);
+    if (error) {
+      toast.error("Could not rename field.");
+      return;
+    }
+    setFields(fields.map((f) => (f.id === field.id ? { ...f, field_name: trimmed } : f)));
+    cancelRenameField();
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-4">
@@ -399,7 +429,28 @@ export function CustomFieldsSection({
                     className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2"
                   >
                     <div className="flex-1">
-                      <p className="truncate text-sm text-foreground">{field.field_name}</p>
+                      {editingDefId === field.id ? (
+                        <Input
+                          value={editingDefName}
+                          onChange={(e) => setEditingDefName(e.target.value)}
+                          autoFocus
+                          onBlur={() => saveRenameField(field)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveRenameField(field);
+                            if (e.key === "Escape") cancelRenameField();
+                          }}
+                          className="h-7 border-border bg-card text-sm text-foreground"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startRenameField(field)}
+                          className="block truncate text-left text-sm text-foreground hover:underline"
+                          title="Click to rename"
+                        >
+                          {field.field_name}
+                        </button>
+                      )}
                       <p className="text-[10px] uppercase text-muted-foreground">
                         {FIELD_TYPE_LABELS[field.field_type]}
                         {field.is_required ? " · required" : ""}

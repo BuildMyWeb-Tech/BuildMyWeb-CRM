@@ -23,9 +23,22 @@ import { toast } from "sonner";
 interface GoogleDriveSectionProps {
   projectId?: string | null;
   clientId?: string | null;
+  /** Shared with a wrapping "combined files" view so Drive items and
+   * regular files render in matching list/grid styles under one
+   * toggle instead of each defaulting to their own. */
+  viewMode?: "list" | "grid";
+  /** Hides the "Google Docs & Sheets" title bar — for when a
+   * combined wrapper renders its own single header instead. The
+   * New Doc/New Sheet buttons still render either way. */
+  hideHeader?: boolean;
 }
 
-export function GoogleDriveSection({ projectId = null, clientId = null }: GoogleDriveSectionProps) {
+export function GoogleDriveSection({
+  projectId = null,
+  clientId = null,
+  viewMode = "list",
+  hideHeader = false,
+}: GoogleDriveSectionProps) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [files, setFiles] = useState<DriveFile[] | null>(null);
   const [creating, setCreating] = useState<DriveFileType | null>(null);
@@ -102,7 +115,7 @@ export function GoogleDriveSection({ projectId = null, clientId = null }: Google
   return (
     <div>
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Google Docs &amp; Sheets</p>
+        {!hideHeader && <p className="text-sm font-semibold text-foreground">Google Docs &amp; Sheets</p>}
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => openNamePrompt("doc")}>
             <FileText className="mr-1.5 h-3.5 w-3.5" />
@@ -121,7 +134,7 @@ export function GoogleDriveSection({ projectId = null, clientId = null }: Google
         </div>
       ) : files.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">No Docs or Sheets yet.</p>
-      ) : (
+      ) : viewMode === "list" ? (
         <div className="mt-3 divide-y divide-border rounded-lg border border-border">
           {files.map((f) => (
             <button
@@ -136,6 +149,24 @@ export function GoogleDriveSection({ projectId = null, clientId = null }: Google
                 <Table2 className="h-4 w-4 shrink-0 text-emerald-400" />
               )}
               <span className="truncate text-sm text-foreground hover:underline">{f.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {files.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setOpenFile(f)}
+              className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 text-center hover:bg-muted/50"
+            >
+              {f.file_type === "doc" ? (
+                <FileText className="h-9 w-9 text-blue-400" />
+              ) : (
+                <Table2 className="h-9 w-9 text-emerald-400" />
+              )}
+              <span className="line-clamp-2 text-xs text-foreground">{f.name}</span>
             </button>
           ))}
         </div>

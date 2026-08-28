@@ -9,8 +9,7 @@ import { TaskBoard } from "@/components/projects/task-board";
 import { TaskForm } from "@/components/projects/task-form";
 import { BoardSettings } from "@/components/projects/board-settings";
 import { ProjectSettings } from "@/components/projects/project-settings";
-import { FileManager } from "@/components/files/file-manager";
-import { GoogleDriveSection } from "@/components/google-drive/google-drive-section";
+import { CombinedFilesView } from "@/components/files/combined-files-view";
 import { useAuth } from "@/hooks/use-auth";
 import type {
   Project,
@@ -185,9 +184,8 @@ export default function ProjectDetailPage() {
       ) : (
         accountId &&
         user && (
-          <div className="mt-6 flex flex-col gap-6">
-            <GoogleDriveSection projectId={project.id} />
-            <FileManager accountId={accountId} userId={user.id} projectId={project.id} />
+          <div className="mt-6">
+            <CombinedFilesView accountId={accountId} userId={user.id} projectId={project.id} />
           </div>
         )
       )}

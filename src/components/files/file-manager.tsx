@@ -56,6 +56,17 @@ interface FileManagerProps {
   projectId: string | null;
   /** Set = a client's own tree (independent of projectId — pass only one). */
   clientId?: string | null;
+  /**
+   * Lets a wrapping component (e.g. a combined Drive+Files view) share
+   * ONE view toggle across both sections instead of each managing its
+   * own. Omit both for standalone use — FileManager falls back to its
+   * own internal, localStorage-persisted state exactly as before.
+   */
+  viewMode?: "list" | "grid";
+  onViewModeChange?: (mode: "list" | "grid") => void;
+  /** Hide FileManager's own toggle buttons — for when a wrapper
+   * renders one shared toggle instead. */
+  hideViewToggle?: boolean;
 }
 
 interface Breadcrumb {
@@ -89,7 +100,15 @@ function previewKind(mimeType: string | null): PreviewKind {
   return "none";
 }
 
-export function FileManager({ accountId, userId, projectId, clientId = null }: FileManagerProps) {
+export function FileManager({
+  accountId,
+  userId,
+  projectId,
+  clientId = null,
+  viewMode: controlledViewMode,
+  onViewModeChange,
+  hideViewToggle = false,
+}: FileManagerProps) {
   const supabase = createClient();
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -113,15 +132,21 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
   const [shareTarget, setShareTarget] = useState<ManagedFile | null>(null);
   const [previewTarget, setPreviewTarget] = useState<{ file: ManagedFile; url: string } | null>(null);
   // Persists per-browser, not per-account — a quick display preference,
-  // not data worth round-tripping to the server.
-  const [viewMode, setViewMode] = useState<"list" | "grid">(() => {
+  // not data worth round-tripping to the server. Only used when this
+  // component isn't controlled from outside (see FileManagerProps).
+  const [internalViewMode, setInternalViewMode] = useState<"list" | "grid">(() => {
     if (typeof window === "undefined") return "list";
     return window.localStorage.getItem("file-manager-view") === "grid" ? "grid" : "list";
   });
+  const viewMode = controlledViewMode ?? internalViewMode;
 
   function changeViewMode(mode: "list" | "grid") {
-    setViewMode(mode);
-    window.localStorage.setItem("file-manager-view", mode);
+    if (onViewModeChange) {
+      onViewModeChange(mode);
+    } else {
+      setInternalViewMode(mode);
+      window.localStorage.setItem("file-manager-view", mode);
+    }
   }
 
   const load = useCallback(async () => {
@@ -287,7 +312,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
     load();
   }
 
-    async function handleDownload(file: ManagedFile) {
+  async function handleDownload(file: ManagedFile) {
     const { data, error } = await supabase.storage
       .from("files")
       .createSignedUrl(file.storage_path, 60, { download: file.name });
@@ -357,30 +382,32 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center rounded-lg border border-border p-0.5">
-            <button
-              type="button"
-              onClick={() => changeViewMode("list")}
-              aria-label="List view"
-              aria-pressed={viewMode === "list"}
-              className={`flex h-6 w-7 items-center justify-center rounded-md ${
-                viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <ListIcon className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => changeViewMode("grid")}
-              aria-label="Grid view"
-              aria-pressed={viewMode === "grid"}
-              className={`flex h-6 w-7 items-center justify-center rounded-md ${
-                viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          {!hideViewToggle && (
+            <div className="flex items-center rounded-lg border border-border p-0.5">
+              <button
+                type="button"
+                onClick={() => changeViewMode("list")}
+                aria-label="List view"
+                aria-pressed={viewMode === "list"}
+                className={`flex h-6 w-7 items-center justify-center rounded-md ${
+                  viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <ListIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => changeViewMode("grid")}
+                aria-label="Grid view"
+                aria-pressed={viewMode === "grid"}
+                className={`flex h-6 w-7 items-center justify-center rounded-md ${
+                  viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(true)}>
             <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
             New folder
@@ -431,7 +458,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             </div>
           ))}
 
-                   {files.map((file) => (
+          {files.map((file) => (
             <div key={file.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50">
               <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <button
@@ -480,7 +507,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             </div>
           ))}
 
-                    {files.map((file) => (
+          {files.map((file) => (
             <div
               key={file.id}
               className="group relative flex flex-col items-center gap-2 rounded-xl border border-border p-4 hover:bg-muted/50"
@@ -633,7 +660,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
             <Button
               variant="outline"
               onClick={() => setShareTarget(null)}
-                          className="border-border bg-transparent text-muted-foreground hover:bg-muted"
+              className="border-border bg-transparent text-muted-foreground hover:bg-muted"
             >
               Close
             </Button>
@@ -680,6 +707,7 @@ export function FileManager({ accountId, userId, projectId, clientId = null }: F
     </div>
   );
 }
+
 // Shared between the list and grid layouts so the two views can't
 // drift out of sync with each other on what actions a folder/file
 // offers.
