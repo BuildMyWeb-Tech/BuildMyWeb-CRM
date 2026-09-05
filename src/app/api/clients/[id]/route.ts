@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentAccount, requireRole, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, requirePagePermission, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 
 // GET /api/clients/[id] — client + its scope-of-work entries.
@@ -44,7 +44,7 @@ export async function PATCH(
   const { id } = await params
   let ctx
   try {
-    ctx = await requireRole('employee')
+    ctx = await requirePagePermission('client_directory', 'update', 'employee')
   } catch (err) {
     return toErrorResponse(err)
   }
@@ -89,7 +89,7 @@ export async function DELETE(
   const { id } = await params
   let ctx
   try {
-    ctx = await requireRole('agent')
+    ctx = await requirePagePermission('client_directory', 'delete', 'agent')
   } catch (err) {
     return toErrorResponse(err)
   }

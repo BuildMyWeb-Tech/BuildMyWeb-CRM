@@ -17,6 +17,7 @@ import { CombinedFilesView } from "@/components/files/combined-files-view";
 import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
 import { ScopeOfWorkSection } from "@/components/clients/scope-of-work-section";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, ClientStatus, ScopeOfWork } from "@/types";
 import { toast } from "sonner";
@@ -38,6 +39,12 @@ type InfoField = "name" | "interface_name" | "interface_contact_number" | "clien
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
   const { accountId, user, canManageMembers, canUpdateRecords, canSendMessages } = useAuth();
+  const { canUpdate: gridCanUpdate, canCreate: gridCanCreate } = usePagePermissions("client_directory");
+  // The grid only ever narrows the existing role-based capability,
+  // never widens it — both must allow an action for it to actually
+  // show, matching requirePagePermission()'s server-side semantics.
+  const canEditInfo = canUpdateRecords && gridCanUpdate;
+  const canCreateScope = canSendMessages && gridCanCreate;
   const [tab, setTab] = useState<ClientTab>("info");
 
   const [client, setClient] = useState<Client | null>(null);
@@ -253,7 +260,7 @@ export default function ClientDetailPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-muted-foreground">Logo</p>
-              {canUpdateRecords && (
+              {canEditInfo && (
                 <label className="mt-1 flex w-fit cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
                   {uploadingLogo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                   {logoUrl ? "Replace logo" : "Upload logo"}
@@ -270,7 +277,7 @@ export default function ClientDetailPage() {
                 <button
                   key={color}
                   type="button"
-                  disabled={!canUpdateRecords}
+                  disabled={!canEditInfo}
                   onClick={() => saveAccentColor(color)}
                   className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 disabled:pointer-events-none"
                   style={{ backgroundColor: color, borderColor: accentColor === color ? "var(--foreground)" : "transparent" }}
@@ -314,7 +321,7 @@ export default function ClientDetailPage() {
                   </p>
                 )}
               </div>
-              {canUpdateRecords && editingField !== field && (
+              {canEditInfo && editingField !== field && (
                 <button
                   type="button"
                   onClick={() => startFieldEdit(field)}
@@ -347,7 +354,7 @@ export default function ClientDetailPage() {
             ) : (
               <div className="mt-0.5 flex items-center justify-between">
                 <p className="text-sm capitalize text-foreground">{client.status}</p>
-                {canUpdateRecords && (
+                {canEditInfo && (
                   <button type="button" onClick={() => setEditingStatus(true)} className="text-xs text-primary hover:underline">
                     Edit
                   </button>
@@ -363,7 +370,7 @@ export default function ClientDetailPage() {
               entityType="client"
               entityId={client.id}
               isAdmin={canManageMembers}
-              canEdit={canUpdateRecords}
+              canEdit={canEditInfo}
             />
           )}
         </div>
@@ -377,8 +384,8 @@ export default function ClientDetailPage() {
             clientId={client.id}
             items={scopeItems}
             isAdmin={canManageMembers}
-            canEdit={canUpdateRecords}
-            canCreate={canSendMessages}
+            canEdit={canEditInfo}
+            canCreate={canCreateScope}
             onChanged={load}
           />
         </div>

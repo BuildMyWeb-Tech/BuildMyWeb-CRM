@@ -429,6 +429,7 @@ export interface ProjectTask {
   account_id: string;
   project_id: string;
   stage_id: string;
+  common_status_id: string | null;
   title: string;
   description: string | null;
   assignee_user_id: string | null;
@@ -440,6 +441,24 @@ export interface ProjectTask {
   updated_at: string;
   assignee?: AccountMember;
   attachments?: TaskAttachment[];
+  /** Only populated by the unified cross-project Kanban's own query
+   * (src/app/(dashboard)/kanban/page.tsx) — not fetched by a
+   * project's own board, which already knows which project it's on. */
+  project?: { id: string; name: string };
+}
+
+// ============================================================
+// Unified cross-project Kanban — shared status taxonomy
+// ============================================================
+
+export interface KanbanCommonStatus {
+  id: string;
+  account_id: string;
+  name: string;
+  color: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TaskAttachment {

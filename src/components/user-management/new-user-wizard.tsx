@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { UserPlus, ShieldCheck, Eye, EyeOff, Check, ArrowLeft } from "lucide-react";
+import { UserPlus, ShieldCheck, Eye, EyeOff, Check, ArrowLeft, Copy, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -14,13 +21,16 @@ import {
 } from "@/components/ui/dialog";
 import { PermissionsGrid } from "@/components/user-management/permissions-grid";
 import { emptyPermissionDrafts, type PagePermissionDraft } from "@/lib/permissions/page-registry";
+import type { AccountRole } from "@/lib/auth/roles";
 import { toast } from "sonner";
 
 // Two-step "New User" wizard, matching the reference screenshots:
-// Step 1 creates the account (username/password/status), Step 2
-// assigns the per-page CRUD+Print grid. Both steps hit the API
+// Step 1 creates the account (username/password/status/role), Step
+// 2 assigns the per-page CRUD+Print grid. Both steps hit the API
 // separately (user must exist before permissions can reference its
-// user_id) but read as one flow to the person using it.
+// user_id) but read as one flow to the person using it. Finishes
+// with a copy-to-clipboard invite message, ready to paste into
+// WhatsApp.
 
 interface NewUserWizardProps {
   open: boolean;
@@ -28,7 +38,12 @@ interface NewUserWizardProps {
   onCreated: () => void;
 }
 
-type Step = "details" | "permissions";
+type Step = "details" | "permissions" | "invite";
+
+// Owner is deliberately excluded — that's a one-per-account,
+// transfer-only role (see canTransferOwnership in roles.ts), not
+// something to hand out via bulk user creation.
+const ASSIGNABLE_ROLES: AccountRole[] = ["admin", "agent", "employee", "viewer"];
 
 export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardProps) {
   const [step, setStep] = useState<Step>("details");
@@ -38,8 +53,10 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [role, setRole] = useState<AccountRole>("employee");
   const [creating, setCreating] = useState(false);
   const [newUserId, setNewUserId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [permissions, setPermissions] = useState<PagePermissionDraft[]>(emptyPermissionDrafts());
   const [saving, setSaving] = useState(false);
@@ -50,7 +67,9 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
     setPassword("");
     setConfirmPassword("");
     setIsActive(true);
+    setRole("employee");
     setNewUserId(null);
+    setCopied(false);
     setPermissions(emptyPermissionDrafts());
   }
 
@@ -69,7 +88,7 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, is_active: isActive }),
+        body: JSON.stringify({ username, password, is_active: isActive, role }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -116,10 +135,23 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
       } else {
         toast.success("User created with permissions.");
       }
-      handleOpenChange(false);
       onCreated();
+      setStep("invite");
     } finally {
       setSaving(false);
+    }
+  }
+
+  const inviteMessage = `You're welcome to BuildMyWeb as ${role.charAt(0).toUpperCase() + role.slice(1)}!\n\nLogin: https://crm.buildmyweb.info/login\nUsername: ${username}\nPassword: ${password}`;
+
+  async function handleCopyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteMessage);
+      setCopied(true);
+      toast.success("Copied — paste it into WhatsApp.");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy — select and copy the text manually.");
     }
   }
 
@@ -131,9 +163,11 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
             <span className={step === "details" ? "text-primary" : ""}>Step 1: User Details</span>
             <span>›</span>
             <span className={step === "permissions" ? "text-primary" : ""}>Step 2: Permissions</span>
+            <span>›</span>
+            <span className={step === "invite" ? "text-primary" : ""}>Step 3: Invite</span>
           </div>
           <DialogTitle className="text-popover-foreground">
-            {step === "details" ? "New User" : `Assign Permissions for ${username}`}
+            {step === "details" ? "New User" : step === "permissions" ? `Assign Permissions for ${username}` : "Ready to invite"}
           </DialogTitle>
         </DialogHeader>
 
@@ -208,6 +242,24 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
             </div>
 
             <div className="grid gap-2">
+              <Label className="text-muted-foreground">Role</Label>
+              <Select value={role} onValueChange={(v) => v && setRole(v as AccountRole)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue className="truncate capitalize">{(v: string) => v}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                This is still the real permission floor — the checkbox grid on the next step can only
+                restrict further, never grant beyond what this role already allows.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
               <Label className="text-muted-foreground">Account Status</Label>
               <div className="flex gap-2">
                 <button
@@ -240,7 +292,7 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
               </Button>
             </div>
           </div>
-        ) : (
+        ) : step === "permissions" ? (
           <div className="py-2">
             <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
               <div className="flex items-center gap-2 text-sm text-foreground">
@@ -265,6 +317,34 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
               <Button onClick={handleSavePermissions} disabled={saving}>
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 {saving ? "Saving…" : "Finish"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="py-2">
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted p-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+                <PartyPopper className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Account created</p>
+                <p className="text-xs text-muted-foreground">
+                  Send these details to {username} however you normally reach them — WhatsApp, email, whatever&apos;s easiest.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-muted p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-foreground">{inviteMessage}</pre>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => handleOpenChange(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+                Close
+              </Button>
+              <Button onClick={handleCopyInvite}>
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy message"}
               </Button>
             </div>
           </div>

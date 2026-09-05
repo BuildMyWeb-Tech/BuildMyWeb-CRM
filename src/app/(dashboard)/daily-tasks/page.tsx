@@ -5,6 +5,7 @@ import { ListTodo, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
 import { useAuth } from "@/hooks/use-auth";
+import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { createClient } from "@/lib/supabase/client";
 import { DATE_PRESETS, matchesDatePreset, type DatePreset } from "@/lib/tasks/date-presets";
 import type {
@@ -32,7 +33,9 @@ const PRIORITY_STYLE: Record<TaskPriority, string> = {
 };
 
 export default function DailyTasksPage() {
-  const { accountId, user, canManageMembers } = useAuth();
+  const { accountId, user, canManageMembers, canSendMessages } = useAuth();
+  const { canCreate: gridCanCreate } = usePagePermissions("daily_tasks");
+  const canCreateTask = canSendMessages && gridCanCreate;
 
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -212,10 +215,12 @@ export default function DailyTasksPage() {
           <ListTodo className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Tasks</h1>
         </div>
-        <Button onClick={openNewTask}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          New task
-        </Button>
+        {canCreateTask && (
+          <Button onClick={openNewTask}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            New task
+          </Button>
+        )}
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {filteredTasks.length} of {tasks.length} task{tasks.length === 1 ? "" : "s"}

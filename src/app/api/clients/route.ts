@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentAccount, requireRole, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, requirePagePermission, toErrorResponse } from '@/lib/auth/account'
 
 // GET /api/clients — list clients for this account.
 // POST /api/clients — create a client. Only `name` is required —
@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(request: Request) {
   let ctx
   try {
-    ctx = await requireRole('agent')
+    ctx = await requirePagePermission('client_directory', 'create', 'agent')
   } catch (err) {
     return toErrorResponse(err)
   }

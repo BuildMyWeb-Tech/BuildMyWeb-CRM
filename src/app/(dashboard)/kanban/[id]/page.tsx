@@ -113,6 +113,7 @@ export default function KanbanBoardPage() {
     id: c.id,
     account_id: c.account_id,
     project_id: c.board_id,
+    common_status_id: null,
     stage_id: c.stage_id,
     title: c.title,
     description: c.description,

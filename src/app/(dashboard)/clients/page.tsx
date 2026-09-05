@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Client, ClientStatus } from "@/types";
+import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { toast } from "sonner";
 
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
@@ -44,6 +45,7 @@ const STATUS_STYLE: Record<ClientStatus, string> = {
 // a Project may optionally link back to a Client, but Clients exist
 // independently.
 export default function ClientsPage() {
+  const { canCreate, canUpdate, canDelete } = usePagePermissions("client_directory");
   const [clients, setClients] = useState<Client[] | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
@@ -192,10 +194,12 @@ export default function ClientsPage() {
               <ListIcon className="h-3.5 w-3.5" />
             </button>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Create client
-          </Button>
+          {canCreate && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Create client
+            </Button>
+          )}
         </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -210,10 +214,12 @@ export default function ClientsPage() {
       ) : clients.length === 0 ? (
         <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">No clients yet.</p>
-          <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Create your first client
-          </Button>
+          {canCreate && (
+            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Create your first client
+            </Button>
+          )}
         </div>
       ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -230,7 +236,7 @@ export default function ClientsPage() {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
                         {c.status}
                       </span>
-                      <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} />
+                      <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} canUpdate={canUpdate} canDelete={canDelete} />
                     </div>
                   </div>
                 </CardHeader>
@@ -261,7 +267,7 @@ export default function ClientsPage() {
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
                 {c.status}
               </span>
-              <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} />
+              <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} canUpdate={canUpdate} canDelete={canDelete} />
             </Link>
           ))}
         </div>
@@ -365,10 +371,16 @@ export default function ClientsPage() {
 function ClientCardMenu({
   onEdit,
   onDelete,
+  canUpdate,
+  canDelete,
 }: {
   onEdit: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
+  canUpdate: boolean;
+  canDelete: boolean;
 }) {
+  if (!canUpdate && !canDelete) return null;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -381,14 +393,18 @@ function ClientCardMenu({
         <MoreVertical className="h-3.5 w-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuItem onClick={onEdit}>
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDelete} className="text-red-400 focus:text-red-400">
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </DropdownMenuItem>
+        {canUpdate && (
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem onClick={onDelete} className="text-red-400 focus:text-red-400">
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -188,3 +188,65 @@ export async function requireRole(min: AccountRole): Promise<AccountContext> {
   }
   return ctx;
 }
+
+export type PagePermissionAction = "create" | "read" | "update" | "delete" | "print";
+
+/**
+ * requireRole(fallbackMinRole), further narrowed by the per-page
+ * CRUD grid (Office → User Management) when the caller has an
+ * explicit row for `pageKey` — see has_page_permission() in
+ * 055_page_permission_enforcement.sql, which this mirrors exactly
+ * so API-route rejections and RLS rejections agree.
+ *
+ * Same semantics as the SQL function: owners/admins always pass
+ * (the grid can't lock out the people managing it); a caller with
+ * no explicit row for this page falls through to the coarse role
+ * check alone (fully backward compatible); a caller WITH an
+ * explicit row is gated by that row's specific action flag, on top
+ * of — never instead of — the coarse role floor.
+ *
+ * Prefer this over a bare requireRole() for any route backing a
+ * page_key in src/lib/permissions/page-registry.ts, so a 403 here
+ * comes with a clear message instead of the caller only ever
+ * hitting a raw RLS rejection deeper in the request.
+ */
+export async function requirePagePermission(
+  pageKey: string,
+  action: PagePermissionAction,
+  fallbackMinRole: AccountRole,
+): Promise<AccountContext> {
+  const ctx = await requireRole(fallbackMinRole);
+
+  if (ctx.role === "owner" || ctx.role === "admin") {
+    return ctx;
+  }
+
+  const { data: perm } = await ctx.supabase
+    .from("user_page_permissions")
+    .select("can_create, can_read, can_update, can_delete, can_print")
+    .eq("user_id", ctx.userId)
+    .eq("page_key", pageKey)
+    .maybeSingle();
+
+  if (!perm) {
+    // No explicit grant for this page — not additionally restricted,
+    // the coarse role check above already covered it.
+    return ctx;
+  }
+
+  const fieldByAction: Record<PagePermissionAction, boolean> = {
+    create: perm.can_create,
+    read: perm.can_read,
+    update: perm.can_update,
+    delete: perm.can_delete,
+    print: perm.can_print,
+  };
+
+  if (!fieldByAction[action]) {
+    throw new ForbiddenError(
+      `You don't have permission to ${action} on this page. Ask an admin to update your permissions in User Management.`,
+    );
+  }
+
+  return ctx;
+}

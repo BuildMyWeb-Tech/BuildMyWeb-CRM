@@ -91,6 +91,10 @@ export async function POST(request: Request) {
   const username = typeof body.username === 'string' ? body.username.trim().toLowerCase() : ''
   const password = typeof body.password === 'string' ? body.password : ''
   const isActive = body.is_active !== false
+  // Owner excluded on purpose — that's a one-per-account, transfer-only
+  // role, not something bulk user creation should be able to hand out.
+  const ASSIGNABLE_ROLES = ['admin', 'agent', 'employee', 'viewer'] as const
+  const role = ASSIGNABLE_ROLES.includes(body.role) ? body.role : 'employee'
 
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
     return NextResponse.json(
@@ -152,7 +156,7 @@ export async function POST(request: Request) {
       // (set in step 2 of the wizard) documents intended access, but
       // existing API routes still enforce THIS role, not that grid
       // — see 054_user_management.sql's header comment.
-      account_role: 'employee',
+      account_role: role,
     })
     .eq('user_id', created.user.id)
 

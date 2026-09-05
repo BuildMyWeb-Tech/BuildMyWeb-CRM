@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { requirePagePermission, toErrorResponse } from '@/lib/auth/account'
 
 // POST /api/clients/[id]/scope-of-work — add a scope-of-work entry
 // to a client. Service category / deliverable type are custom
@@ -13,7 +13,7 @@ export async function POST(
   const { id: clientId } = await params
   let ctx
   try {
-    ctx = await requireRole('agent')
+    ctx = await requirePagePermission('client_directory', 'create', 'agent')
   } catch (err) {
     return toErrorResponse(err)
   }
