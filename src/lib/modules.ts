@@ -31,6 +31,7 @@ import {
   ListTodo,
   MessageSquare,
   Radio,
+  UserPlus,
   Users,
   Users2,
   Workflow,
@@ -94,6 +95,7 @@ export const CRM_MODULES: CrmModule[] = [
     minRole: "viewer",
     items: [
       { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer", pageKey: "client_directory" },
+      { href: "/client-leads", labelKey: "clientLeads", icon: UserPlus, minRole: "viewer", pageKey: "client_leads" },
     ],
   },
   {

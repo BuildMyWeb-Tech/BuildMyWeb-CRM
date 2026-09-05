@@ -559,6 +559,41 @@ export interface Client {
   updated_at: string;
 }
 
+// ============================================================
+// Client Leads / Enquiry — pre-Client-Directory stage. See
+// 058_client_leads.sql.
+// ============================================================
+
+export type LeadPriority = "low" | "medium" | "high";
+export type LeadStatus = "in_discussion" | "hold" | "confirmed" | "rejected";
+
+export interface ClientLead {
+  id: string;
+  account_id: string;
+  title: string;
+  phone: string | null;
+  notes: string | null;
+  priority: LeadPriority;
+  next_follow_up_at: string | null;
+  allocated_user_id: string | null;
+  status: LeadStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  allocated?: AccountMember;
+  tasks?: ClientLeadTask[];
+}
+
+export interface ClientLeadTask {
+  id: string;
+  account_id: string;
+  lead_id: string;
+  title: string;
+  is_done: boolean;
+  position: number;
+  created_at: string;
+}
+
 export interface ScopeOfWork {
   id: string;
   account_id: string;

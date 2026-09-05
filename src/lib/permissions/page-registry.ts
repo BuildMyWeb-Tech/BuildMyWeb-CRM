@@ -30,6 +30,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   { key: "workspace", label: "Workspace", category: "Sales" },
   // Clients
   { key: "client_directory", label: "Client Directory", category: "Clients" },
+  { key: "client_leads", label: "Client Leads/Enquiry", category: "Clients" },
   // Projects
   { key: "projects", label: "Projects", category: "Projects" },
   { key: "kanban", label: "Kanban", category: "Projects" },
