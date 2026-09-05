@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
+import { fetchPagePermissionRows } from "@/hooks/use-page-permissions";
 import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/modules";
 import {
   Crown,
@@ -203,10 +204,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
       setDeniedPageKeys(new Set());
       return;
     }
-    fetch(`/api/users/${user.id}/permissions`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const rows: Array<{ page_key: string; can_read: boolean }> = d?.permissions ?? [];
+    fetchPagePermissionRows(user.id)
+      .then((rows) => {
         setDeniedPageKeys(new Set(rows.filter((r) => !r.can_read).map((r) => r.page_key)));
       })
       .catch(() => setDeniedPageKeys(new Set()));

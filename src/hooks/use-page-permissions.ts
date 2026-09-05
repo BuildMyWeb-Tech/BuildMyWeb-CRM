@@ -22,6 +22,15 @@ import { useAuth } from "@/hooks/use-auth";
 // separate, large rollout (one page at a time) — this is the
 // foundation for it, not the rollout itself.
 
+export interface PagePermissionRow {
+  page_key: string;
+  can_create: boolean;
+  can_read: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+  can_print: boolean;
+}
+
 export interface PagePermissions {
   canCreate: boolean;
   canRead: boolean;
@@ -39,6 +48,34 @@ const ALLOW_ALL: Omit<PagePermissions, "loading"> = {
   canPrint: true,
 };
 
+// Every page that calls usePagePermissions() for the SAME user, plus
+// the sidebar's own denied-page-key filtering, used to each fire
+// their own `GET /api/users/{id}/permissions` — the exact same
+// request, duplicated per mounted consumer on every navigation. This
+// module-level cache (keyed by user id) means the first caller on a
+// page starts the fetch and every other caller for that same user —
+// this render, or the sidebar rendering alongside it — awaits the
+// same in-flight promise instead of firing its own round trip.
+// Cleared on fetch failure so a transient error doesn't wedge every
+// future caller behind a rejected promise forever.
+const rowsCache = new Map<string, Promise<PagePermissionRow[]>>();
+
+export function fetchPagePermissionRows(userId: string): Promise<PagePermissionRow[]> {
+  const cached = rowsCache.get(userId);
+  if (cached) return cached;
+
+  const promise = fetch(`/api/users/${userId}/permissions`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => (d?.permissions ?? []) as PagePermissionRow[])
+    .catch((err) => {
+      rowsCache.delete(userId);
+      throw err;
+    });
+
+  rowsCache.set(userId, promise);
+  return promise;
+}
+
 export function usePagePermissions(pageKey: string): PagePermissions {
   const { user } = useAuth();
   const [state, setState] = useState<PagePermissions>({ ...ALLOW_ALL, loading: !!user?.id });
@@ -46,18 +83,9 @@ export function usePagePermissions(pageKey: string): PagePermissions {
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-    fetch(`/api/users/${user.id}/permissions`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
+    fetchPagePermissionRows(user.id)
+      .then((rows) => {
         if (cancelled) return;
-        const rows: Array<{
-          page_key: string;
-          can_create: boolean;
-          can_read: boolean;
-          can_update: boolean;
-          can_delete: boolean;
-          can_print: boolean;
-        }> = d?.permissions ?? [];
         const row = rows.find((r) => r.page_key === pageKey);
         setState({
           canCreate: row ? row.can_create : true,

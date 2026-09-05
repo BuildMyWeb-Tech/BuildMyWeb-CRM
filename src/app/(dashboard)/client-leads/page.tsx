@@ -639,7 +639,7 @@ function LeadFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-popover border-border max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[88vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-popover-foreground">{initial ? `Edit ${initial.title}` : "New lead"}</DialogTitle>
         </DialogHeader>
@@ -681,9 +681,11 @@ function LeadFormDialog({
               <Label className="text-muted-foreground">Source</Label>
               <Select value={source || "__none"} onValueChange={(v) => setSource(v === "__none" ? "" : (v ?? ""))}>
                 <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">{(v: string) => v}</SelectValue>
+                  <SelectValue className="truncate">
+                    {(v: string) => (v === "__none" ? "Not set" : SOURCE_LABEL[v as LeadSource] ?? "Not set")}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent alignItemWithTrigger={false}>
                   <SelectItem value="__none">Not set</SelectItem>
                   {SOURCES.map((s) => (
                     <SelectItem key={s} value={s}>{SOURCE_LABEL[s]}</SelectItem>
@@ -695,9 +697,11 @@ function LeadFormDialog({
               <Label className="text-muted-foreground">Allocated to</Label>
               <Select value={allocatedUserId || "__none"} onValueChange={(v) => setAllocatedUserId(v === "__none" ? "" : (v ?? ""))}>
                 <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">{(v: string) => v}</SelectValue>
+                  <SelectValue className="truncate">
+                    {(v: string) => (v === "__none" ? "Unassigned" : members.find((m) => m.user_id === v)?.full_name ?? "Unassigned")}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent alignItemWithTrigger={false}>
                   <SelectItem value="__none">Unassigned</SelectItem>
                   {members.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
