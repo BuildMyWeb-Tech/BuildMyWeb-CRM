@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { FileText, Table2, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,14 +31,24 @@ interface GoogleDriveSectionProps {
    * combined wrapper renders its own single header instead. The
    * New Doc/New Sheet buttons still render either way. */
   hideHeader?: boolean;
+  /** Hides this section's own New Doc/New Sheet buttons — for when a
+   * wrapper renders one unified "New" button instead and drives
+   * these actions through the ref. */
+  hideActions?: boolean;
 }
 
-export function GoogleDriveSection({
+export interface GoogleDriveSectionHandle {
+  openNewDoc: () => void;
+  openNewSheet: () => void;
+}
+
+export const GoogleDriveSection = forwardRef<GoogleDriveSectionHandle, GoogleDriveSectionProps>(function GoogleDriveSection({
   projectId = null,
   clientId = null,
   viewMode = "list",
   hideHeader = false,
-}: GoogleDriveSectionProps) {
+  hideActions = false,
+}, ref) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [files, setFiles] = useState<DriveFile[] | null>(null);
   const [creating, setCreating] = useState<DriveFileType | null>(null);
@@ -68,6 +78,11 @@ export function GoogleDriveSection({
     setNewName(type === "doc" ? "Untitled document" : "Untitled spreadsheet");
     setNamePromptType(type);
   }
+
+  useImperativeHandle(ref, () => ({
+    openNewDoc: () => openNamePrompt("doc"),
+    openNewSheet: () => openNamePrompt("sheet"),
+  }));
 
   async function handleCreate() {
     if (!namePromptType || !newName.trim()) return;
@@ -116,16 +131,18 @@ export function GoogleDriveSection({
     <div>
       <div className="flex items-center justify-between">
         {!hideHeader && <p className="text-sm font-semibold text-foreground">Google Docs &amp; Sheets</p>}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => openNamePrompt("doc")}>
-            <FileText className="mr-1.5 h-3.5 w-3.5" />
-            New Doc
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => openNamePrompt("sheet")}>
-            <Table2 className="mr-1.5 h-3.5 w-3.5" />
-            New Sheet
-          </Button>
-        </div>
+        {!hideActions && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => openNamePrompt("doc")}>
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              New Doc
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => openNamePrompt("sheet")}>
+              <Table2 className="mr-1.5 h-3.5 w-3.5" />
+              New Sheet
+            </Button>
+          </div>
+        )}
       </div>
 
       {files === null ? (
@@ -229,4 +246,4 @@ export function GoogleDriveSection({
       </Dialog>
     </div>
   );
-}
+});

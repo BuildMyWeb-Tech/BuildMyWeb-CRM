@@ -142,7 +142,11 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
     }
   }
 
-  const inviteMessage = `You're welcome to BuildMyWeb as ${role.charAt(0).toUpperCase() + role.slice(1)}!\n\nLogin: https://crm.buildmyweb.info/login\nUsername: ${username}\nPassword: ${password}`;
+  // Supabase Auth needs a real email under the hood, so every
+  // account gets a synthetic one — see usernameToEmail() in
+  // src/app/api/users/route.ts, which this mirrors for display only.
+  const loginEmail = `${username.toLowerCase()}@buildmyweb.info`;
+  const inviteMessage = `You're welcome to Buildmyweb company as ${role.charAt(0).toUpperCase() + role.slice(1)}!\n\nLogin: https://crm.buildmyweb.info/login\nEmail: ${loginEmail}\nUsername: ${username}\nPassword: ${password}`;
 
   async function handleCopyInvite() {
     try {

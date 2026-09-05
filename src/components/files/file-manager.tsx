@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { FileFolder, ManagedFile } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,15 @@ interface FileManagerProps {
   /** Hide FileManager's own toggle buttons — for when a wrapper
    * renders one shared toggle instead. */
   hideViewToggle?: boolean;
+  /** Hide FileManager's own New folder/Upload buttons — for when a
+   * wrapper renders one unified "New" button and drives these
+   * actions through the ref instead. */
+  hideActionButtons?: boolean;
+}
+
+export interface FileManagerHandle {
+  openNewFolder: () => void;
+  triggerUpload: () => void;
 }
 
 interface Breadcrumb {
@@ -100,7 +109,7 @@ function previewKind(mimeType: string | null): PreviewKind {
   return "none";
 }
 
-export function FileManager({
+export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(function FileManager({
   accountId,
   userId,
   projectId,
@@ -108,8 +117,10 @@ export function FileManager({
   viewMode: controlledViewMode,
   onViewModeChange,
   hideViewToggle = false,
-}: FileManagerProps) {
+  hideActionButtons = false,
+}, ref) {
   const supabase = createClient();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([
@@ -263,6 +274,11 @@ export function FileManager({
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    openNewFolder: () => setNewFolderOpen(true),
+    triggerUpload: () => uploadInputRef.current?.click(),
+  }));
+
   function openRename(type: "folder" | "file", id: string, name: string) {
     setRenameTarget({ type, id, name });
     setRenameValue(name);
@@ -408,23 +424,35 @@ export function FileManager({
               </button>
             </div>
           )}
-          <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(true)}>
-            <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
-            New folder
-          </Button>
-          <label
-            className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground transition-all hover:bg-muted ${
-              uploading ? "pointer-events-none opacity-50" : ""
-            }`}
-          >
-            {uploading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Upload className="h-3.5 w-3.5" />
-            )}
-            {uploading ? "Uploading…" : "Upload"}
-            <input type="file" multiple className="hidden" disabled={uploading} onChange={handleUpload} />
-          </label>
+          {!hideActionButtons && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setNewFolderOpen(true)}>
+                <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
+                New folder
+              </Button>
+              <label
+                className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground transition-all hover:bg-muted ${
+                  uploading ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {uploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {uploading ? "Uploading…" : "Upload"}
+                <input type="file" multiple className="hidden" disabled={uploading} onChange={handleUpload} />
+              </label>
+            </>
+          )}
+          <input
+            ref={uploadInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            disabled={uploading}
+            onChange={handleUpload}
+          />
         </div>
       </div>
 
@@ -706,7 +734,7 @@ export function FileManager({
       </Dialog>
     </div>
   );
-}
+});
 
 // Shared between the list and grid layouts so the two views can't
 // drift out of sync with each other on what actions a folder/file

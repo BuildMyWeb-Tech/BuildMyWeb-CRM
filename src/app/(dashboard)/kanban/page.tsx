@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LayoutGrid, Loader2 } from "lucide-react";
+import { Check, ChevronsDownUp, ChevronsUpDown, LayoutGrid, Loader2, MoreVertical, Pencil, X } from "lucide-react";
 import { CommonKanbanBoard } from "@/components/kanban/common-kanban-board";
 import { UnifiedTaskQuickEdit } from "@/components/kanban/unified-task-quick-edit";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { createClient } from "@/lib/supabase/client";
@@ -28,6 +36,26 @@ export default function KanbanPage() {
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
+
+  // Board name — this is a single global board (see comment above),
+  // so there's no `kanban_boards` row to rename; persisted per-browser
+  // rather than per-account since it's purely cosmetic.
+  const [boardName, setBoardName] = useState(() => {
+    if (typeof window === "undefined") return "Kanban";
+    return window.localStorage.getItem("kanban-board-name") ?? "Kanban";
+  });
+  const [renamingBoard, setRenamingBoard] = useState(false);
+  const [boardNameDraft, setBoardNameDraft] = useState(boardName);
+  function submitBoardRename() {
+    const trimmed = boardNameDraft.trim();
+    if (trimmed) {
+      setBoardName(trimmed);
+      window.localStorage.setItem("kanban-board-name", trimmed);
+    }
+    setRenamingBoard(false);
+  }
+
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -153,7 +181,53 @@ export default function KanbanPage() {
     <div>
       <div className="flex items-center gap-2">
         <LayoutGrid className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Kanban</h1>
+        {renamingBoard ? (
+          <div className="flex items-center gap-1">
+            <Input
+              value={boardNameDraft}
+              onChange={(e) => setBoardNameDraft(e.target.value)}
+              autoFocus
+              className="h-8 w-48 border-border bg-muted text-lg font-bold text-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitBoardRename();
+                if (e.key === "Escape") setRenamingBoard(false);
+              }}
+            />
+            <Button variant="ghost" size="icon-xs" onClick={submitBoardRename} className="text-emerald-500">
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon-xs" onClick={() => setRenamingBoard(false)} className="text-muted-foreground">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{boardName}</h1>
+        )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+            <MoreVertical className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem
+              onClick={() => {
+                setBoardNameDraft(boardName);
+                setRenamingBoard(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Rename board
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setCollapsedColumns(new Set(statuses.map((s) => s.id)))}>
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+              Collapse all columns
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setCollapsedColumns(new Set())}>
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+              Expand all columns
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Every task, every project, one board — drag between columns, or filter down to what matters right now.
@@ -221,6 +295,8 @@ export default function KanbanPage() {
             onRenameStatus={handleRenameStatus}
             onDeleteStatus={handleDeleteStatus}
             onAddStatus={handleAddStatus}
+            collapsed={collapsedColumns}
+            onCollapsedChange={setCollapsedColumns}
           />
         </div>
       )}

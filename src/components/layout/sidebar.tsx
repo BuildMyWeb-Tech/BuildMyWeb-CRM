@@ -11,7 +11,6 @@ import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/mo
 import {
   Crown,
   ChevronDown,
-  Layers,
   LogOut,
   Settings,
   Shield,
@@ -82,7 +81,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const bottomNavItems = [
-  { href: "/workspace", labelKey: "workspace", icon: Layers },
   { href: "/settings", labelKey: "settings", icon: Settings },
 ];
 

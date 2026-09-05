@@ -27,6 +27,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   { key: "automations", label: "Automations", category: "Sales" },
   { key: "flows", label: "Flows", category: "Sales" },
   { key: "ai_agents", label: "AI Agents", category: "Sales" },
+  { key: "workspace", label: "Workspace", category: "Sales" },
   // Clients
   { key: "client_directory", label: "Client Directory", category: "Clients" },
   // Projects

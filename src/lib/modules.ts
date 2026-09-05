@@ -19,13 +19,13 @@
 import type { AccountRole } from "@/lib/auth/roles";
 import { hasMinRole } from "@/lib/auth/roles";
 import {
-  Bell,
   Bot,
   Building2,
   Folder,
   GitBranch,
   IndianRupee,
   KanbanSquare,
+  Layers,
   LayoutDashboard,
   LayoutGrid,
   ListTodo,
@@ -69,7 +69,6 @@ export interface CrmModule {
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, minRole: "viewer" },
-  { href: "/notifications", labelKey: "notifications", icon: Bell, minRole: "viewer" },
 ];
 
 export const CRM_MODULES: CrmModule[] = [
@@ -86,6 +85,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent", pageKey: "automations" },
       { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true, pageKey: "flows" },
       { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent", pageKey: "ai_agents" },
+      { href: "/workspace", labelKey: "workspace", icon: Layers, minRole: "viewer", pageKey: "workspace" },
     ],
   },
   {

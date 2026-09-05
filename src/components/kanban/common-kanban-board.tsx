@@ -49,6 +49,11 @@ interface CommonKanbanBoardProps {
   onRenameStatus: (statusId: string, newName: string) => void;
   onDeleteStatus: (statusId: string) => void;
   onAddStatus: (name: string) => void;
+  /** Controlled collapse state — lets the page's board-level 3-dot
+   *  menu drive a "collapse all / expand all" action. Falls back to
+   *  internal state when omitted. */
+  collapsed?: Set<string>;
+  onCollapsedChange?: (next: Set<string>) => void;
 }
 
 export function CommonKanbanBoard({
@@ -60,9 +65,13 @@ export function CommonKanbanBoard({
   onRenameStatus,
   onDeleteStatus,
   onAddStatus,
+  collapsed: collapsedProp,
+  onCollapsedChange,
 }: CommonKanbanBoardProps) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsedState, setCollapsedState] = useState<Set<string>>(new Set());
+  const collapsed = collapsedProp ?? collapsedState;
+  const setCollapsed = onCollapsedChange ?? setCollapsedState;
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
 
@@ -90,12 +99,10 @@ export function CommonKanbanBoard({
   const activeTask = activeTaskId ? tasks.find((t) => t.id === activeTaskId) ?? null : null;
 
   function toggleCollapse(statusId: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(statusId)) next.delete(statusId);
-      else next.add(statusId);
-      return next;
-    });
+    const next = new Set(collapsed);
+    if (next.has(statusId)) next.delete(statusId);
+    else next.add(statusId);
+    setCollapsed(next);
   }
 
   function handleDragStart(event: DragStartEvent) {
