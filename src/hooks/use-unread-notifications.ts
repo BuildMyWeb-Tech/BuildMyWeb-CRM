@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types";
 
 /**
- * Count of unread notifications for the current user. Used by the
- * sidebar to surface a badge on the Notifications nav entry.
+ * Count of unread notifications for the current user. Used by both
+ * the top-bar notification bell and (indirectly, via badges) other
+ * consumers — so more than one component mounts this hook at once.
+ * Supabase's realtime client keys channels by name, and calling
+ * `.on()` on a channel that's already past `.subscribe()` throws;
+ * two instances sharing one static channel name would race into
+ * exactly that. `useId()` keeps each mounted instance's channel name
+ * unique so they don't collide.
  *
  * RLS on `notifications` already scopes every read to `auth.uid() =
  * user_id`, so no explicit filter is needed here — same pattern as
@@ -14,6 +20,7 @@ import type { Notification } from "@/types";
  */
 export function useUnreadNotifications(): number {
   const [count, setCount] = useState(0);
+  const instanceId = useId();
 
   useEffect(() => {
     const supabase = createClient();
@@ -31,7 +38,7 @@ export function useUnreadNotifications(): number {
     })();
 
     const channel = supabase
-      .channel("notifications-unread-count")
+      .channel(`notifications-unread-count-${instanceId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
@@ -57,7 +64,7 @@ export function useUnreadNotifications(): number {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [instanceId]);
 
   return count;
 }
