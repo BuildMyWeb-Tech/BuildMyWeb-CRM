@@ -187,7 +187,7 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+export type NotificationType = 'conversation_assigned' | 'lead_follow_up_due';
 
 export interface Notification {
   id: string;
@@ -197,6 +197,8 @@ export interface Notification {
   type: NotificationType;
   conversation_id?: string;
   contact_id?: string;
+  /** Set only for type === 'lead_follow_up_due' — see 059_client_leads_extras.sql. */
+  lead_id?: string;
   /** Who triggered it. Null when an automation/system assigned it. */
   actor_user_id?: string;
   title: string;
@@ -566,6 +568,7 @@ export interface Client {
 
 export type LeadPriority = "low" | "medium" | "high";
 export type LeadStatus = "in_discussion" | "hold" | "confirmed" | "rejected";
+export type LeadSource = "referral" | "website" | "cold_call" | "social_media" | "advertisement" | "other";
 
 export interface ClientLead {
   id: string;
@@ -574,7 +577,9 @@ export interface ClientLead {
   phone: string | null;
   notes: string | null;
   priority: LeadPriority;
+  source: LeadSource | null;
   next_follow_up_at: string | null;
+  follow_up_notified_at: string | null;
   allocated_user_id: string | null;
   status: LeadStatus;
   created_by: string | null;

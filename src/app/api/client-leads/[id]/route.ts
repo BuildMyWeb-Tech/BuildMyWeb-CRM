@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 // DELETE /api/client-leads/[id] — reject (or just remove) a lead.
 
 const PRIORITIES = ['low', 'medium', 'high']
+const SOURCES = ['referral', 'website', 'cold_call', 'social_media', 'advertisement', 'other']
 const STATUSES = ['in_discussion', 'hold', 'confirmed', 'rejected']
 
 export async function PATCH(
@@ -35,11 +36,23 @@ export async function PATCH(
   }
   if ('phone' in body) update.phone = typeof body.phone === 'string' ? body.phone.trim() || null : null
   if ('notes' in body) update.notes = typeof body.notes === 'string' ? body.notes.trim() || null : null
-  if ('next_follow_up_at' in body) update.next_follow_up_at = body.next_follow_up_at ?? null
+  if ('next_follow_up_at' in body) {
+    update.next_follow_up_at = body.next_follow_up_at ?? null
+    // Re-arm the reminder whenever the due time itself changes — see
+    // 059_client_leads_extras.sql's note on how the cron route reads
+    // this column.
+    update.follow_up_notified_at = null
+  }
   if ('allocated_user_id' in body) update.allocated_user_id = body.allocated_user_id ?? null
   if (typeof body.priority === 'string') {
     if (!PRIORITIES.includes(body.priority)) return NextResponse.json({ error: 'invalid priority' }, { status: 400 })
     update.priority = body.priority
+  }
+  if ('source' in body) {
+    if (body.source !== null && !SOURCES.includes(body.source)) {
+      return NextResponse.json({ error: 'invalid source' }, { status: 400 })
+    }
+    update.source = body.source
   }
   if (typeof body.status === 'string') {
     if (!STATUSES.includes(body.status) || body.status === 'confirmed') {

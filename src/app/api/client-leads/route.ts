@@ -29,6 +29,7 @@ export async function GET() {
 }
 
 const PRIORITIES = ['low', 'medium', 'high']
+const SOURCES = ['referral', 'website', 'cold_call', 'social_media', 'advertisement', 'other']
 
 export async function POST(request: Request) {
   let ctx
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 })
 
   const priority = typeof body.priority === 'string' && PRIORITIES.includes(body.priority) ? body.priority : 'medium'
+  const source = typeof body.source === 'string' && SOURCES.includes(body.source) ? body.source : null
 
   const { data: lead, error } = await ctx.supabase
     .from('client_leads')
@@ -54,6 +56,7 @@ export async function POST(request: Request) {
       phone: typeof body.phone === 'string' ? body.phone.trim() || null : null,
       notes: typeof body.notes === 'string' ? body.notes.trim() || null : null,
       priority,
+      source,
       next_follow_up_at: typeof body.next_follow_up_at === 'string' ? body.next_follow_up_at : null,
       allocated_user_id: typeof body.allocated_user_id === 'string' ? body.allocated_user_id : null,
       created_by: ctx.userId,

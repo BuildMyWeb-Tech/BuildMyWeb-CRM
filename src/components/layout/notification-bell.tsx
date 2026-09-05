@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import type { Notification } from "@/types";
-import { Bell, CheckCheck, Loader2, UserPlus } from "lucide-react";
+import { Bell, CheckCheck, Clock, Loader2, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import {
 
 const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
+  lead_follow_up_due: Clock,
 };
 
 /**
@@ -107,6 +108,7 @@ export function NotificationBell() {
       if (!n.read_at) markRead(n.id);
       setOpen(false);
       if (n.conversation_id) router.push(`/inbox?c=${n.conversation_id}`);
+      else if (n.lead_id) router.push(`/client-leads`);
     },
     [markRead, router],
   );

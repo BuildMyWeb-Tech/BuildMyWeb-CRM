@@ -44,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadStatus } from "@/types";
+import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { toast } from "sonner";
 
@@ -65,6 +65,15 @@ const STATUS_LABEL: Record<LeadStatus, string> = {
   hold: "Hold",
   confirmed: "Confirmed",
   rejected: "Rejected",
+};
+const SOURCES: LeadSource[] = ["referral", "website", "cold_call", "social_media", "advertisement", "other"];
+const SOURCE_LABEL: Record<LeadSource, string> = {
+  referral: "Referral",
+  website: "Website",
+  cold_call: "Cold Call",
+  social_media: "Social Media",
+  advertisement: "Advertisement",
+  other: "Other",
 };
 
 function whatsappLink(phone: string): string {
@@ -117,6 +126,18 @@ export default function ClientLeadsPage() {
   }, []);
 
   const membersById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
+
+  // Lead source breakdown — which channel actually produces leads,
+  // counted across every non-rejected lead (confirmed ones included,
+  // since "which source converts" is the whole point of tracking it).
+  const sourceBreakdown = useMemo(() => {
+    const counts = new Map<LeadSource, number>();
+    for (const lead of leads ?? []) {
+      if (lead.status === "rejected" || !lead.source) continue;
+      counts.set(lead.source, (counts.get(lead.source) ?? 0) + 1);
+    }
+    return SOURCES.map((s) => ({ source: s, count: counts.get(s) ?? 0 })).filter((s) => s.count > 0);
+  }, [leads]);
 
   const visibleLeads = (leads ?? []).filter((lead) => {
     if (statusFilter === "in_discussion" && lead.status !== "in_discussion") return false;
@@ -252,6 +273,17 @@ export default function ClientLeadsPage() {
           ))}
         </div>
       </div>
+
+      {sourceBreakdown.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">By source:</span>
+          {sourceBreakdown.map(({ source, count }) => (
+            <span key={source} className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {SOURCE_LABEL[source]} · {count}
+            </span>
+          ))}
+        </div>
+      )}
 
       {leads === null ? (
         <div className="mt-10 flex justify-center">
@@ -397,6 +429,11 @@ function LeadCard({
           </div>
         )}
         {lead.notes && <p className="line-clamp-2 text-xs text-muted-foreground">{lead.notes}</p>}
+        {lead.source && (
+          <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {SOURCE_LABEL[lead.source]}
+          </span>
+        )}
         <p className="text-xs text-muted-foreground">Next follow-up: {formatFollowUp(lead.next_follow_up_at)}</p>
         <p className="text-xs text-muted-foreground">
           Allocated to: {allocated?.full_name || <span className="italic">Unassigned</span>}
@@ -552,6 +589,7 @@ function LeadFormDialog({
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState<LeadPriority>("medium");
+  const [source, setSource] = useState<string>("");
   const [nextFollowUp, setNextFollowUp] = useState("");
   const [allocatedUserId, setAllocatedUserId] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -562,6 +600,7 @@ function LeadFormDialog({
     setPhone(initial?.phone ?? "");
     setNotes(initial?.notes ?? "");
     setPriority(initial?.priority ?? "medium");
+    setSource(initial?.source ?? "");
     setNextFollowUp(toDatetimeLocal(initial?.next_follow_up_at ?? null));
     setAllocatedUserId(initial?.allocated_user_id ?? "");
   }, [open, initial]);
@@ -576,6 +615,7 @@ function LeadFormDialog({
         phone: phone.trim() || null,
         notes: notes.trim() || null,
         priority,
+        source: source || null,
         next_follow_up_at: nextFollowUp ? new Date(nextFollowUp).toISOString() : null,
         allocated_user_id: allocatedUserId || null,
       };
@@ -633,6 +673,20 @@ function LeadFormDialog({
                 <SelectContent>
                   {PRIORITIES.map((p) => (
                     <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Source</Label>
+              <Select value={source || "__none"} onValueChange={(v) => setSource(v === "__none" ? "" : (v ?? ""))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue className="truncate">{(v: string) => v}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">Not set</SelectItem>
+                  {SOURCES.map((s) => (
+                    <SelectItem key={s} value={s}>{SOURCE_LABEL[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
