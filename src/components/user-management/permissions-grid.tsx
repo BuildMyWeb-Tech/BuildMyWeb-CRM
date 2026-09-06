@@ -3,10 +3,12 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { PAGE_REGISTRY, PAGE_CATEGORIES, type PagePermissionDraft } from "@/lib/permissions/page-registry";
 
-// Shared CRUD+Print permission grid — used by both the New User
-// wizard (step 2) and the Edit Permissions dialog, so they can't
-// drift out of sync with each other the way Kanban/Daily Tasks'
-// board settings almost did earlier in this build.
+// Shared CRUD permission grid — used by both the New User wizard
+// (step 2) and the Edit Permissions dialog, so they can't drift out
+// of sync with each other the way Kanban/Daily Tasks' board settings
+// almost did earlier in this build. Print was dropped entirely
+// (no route ever checked it, and BMW asked for CRUD-only) — see
+// 063_remove_print_permission.sql.
 //
 // Built as CSS grid (divs), not an HTML <table> — Base UI's Checkbox
 // renders a hidden native <input> positioned absolutely relative to
@@ -20,14 +22,13 @@ const COLUMNS = [
   { field: "can_read", label: "Read", color: "text-blue-400" },
   { field: "can_update", label: "Update", color: "text-amber-400" },
   { field: "can_delete", label: "Delete", color: "text-red-400" },
-  { field: "can_print", label: "Print", color: "text-violet-400" },
 ] as const;
 
-// Wide first column for the page name, five equal comfortable
+// Wide first column for the page name, four equal comfortable
 // columns for the checkboxes — matches BMW's "increase the width as
 // much as possible" ask directly via the column template itself,
 // not just a wider dialog around a cramped grid.
-const GRID_TEMPLATE = "minmax(180px,1.5fr) repeat(5, minmax(110px,1fr))";
+const GRID_TEMPLATE = "minmax(180px,1.5fr) repeat(4, minmax(110px,1fr))";
 
 interface PermissionsGridProps {
   permissions: PagePermissionDraft[];
@@ -71,7 +72,7 @@ function CategorySection({
   const pages = PAGE_REGISTRY.filter((p) => p.category === category);
   return (
     <>
-      <div className="col-span-6 bg-muted/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+      <div className="col-span-5 bg-muted/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
         {category}
       </div>
       {pages.map((page) => {

@@ -189,7 +189,7 @@ export async function requireRole(min: AccountRole): Promise<AccountContext> {
   return ctx;
 }
 
-export type PagePermissionAction = "create" | "read" | "update" | "delete" | "print";
+export type PagePermissionAction = "create" | "read" | "update" | "delete";
 
 /**
  * requireRole(fallbackMinRole), further narrowed by the per-page
@@ -223,7 +223,7 @@ export async function requirePagePermission(
 
   const { data: perm } = await ctx.supabase
     .from("user_page_permissions")
-    .select("can_create, can_read, can_update, can_delete, can_print")
+    .select("can_create, can_read, can_update, can_delete")
     .eq("user_id", ctx.userId)
     .eq("page_key", pageKey)
     .maybeSingle();
@@ -239,7 +239,6 @@ export async function requirePagePermission(
     read: perm.can_read,
     update: perm.can_update,
     delete: perm.can_delete,
-    print: perm.can_print,
   };
 
   if (!fieldByAction[action]) {

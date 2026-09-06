@@ -28,7 +28,6 @@ export interface PagePermissionRow {
   can_read: boolean;
   can_update: boolean;
   can_delete: boolean;
-  can_print: boolean;
 }
 
 export interface PagePermissions {
@@ -36,7 +35,6 @@ export interface PagePermissions {
   canRead: boolean;
   canUpdate: boolean;
   canDelete: boolean;
-  canPrint: boolean;
   loading: boolean;
 }
 
@@ -45,7 +43,6 @@ const ALLOW_ALL: Omit<PagePermissions, "loading"> = {
   canRead: true,
   canUpdate: true,
   canDelete: true,
-  canPrint: true,
 };
 
 // Every page that calls usePagePermissions() for the SAME user, plus
@@ -92,7 +89,6 @@ export function usePagePermissions(pageKey: string): PagePermissions {
           canRead: row ? row.can_read : true,
           canUpdate: row ? row.can_update : true,
           canDelete: row ? row.can_delete : true,
-          canPrint: row ? row.can_print : true,
           loading: false,
         });
       })

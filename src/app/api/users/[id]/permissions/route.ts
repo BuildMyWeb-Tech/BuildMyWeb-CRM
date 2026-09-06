@@ -54,7 +54,6 @@ export async function PUT(
       can_read: !!d.can_read,
       can_update: !!d.can_update,
       can_delete: !!d.can_delete,
-      can_print: !!d.can_print,
     }))
 
   const admin = supabaseAdmin()

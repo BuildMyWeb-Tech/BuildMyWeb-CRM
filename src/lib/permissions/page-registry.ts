@@ -56,7 +56,6 @@ export interface PagePermissionDraft {
   can_read: boolean;
   can_update: boolean;
   can_delete: boolean;
-  can_print: boolean;
 }
 
 export function emptyPermissionDrafts(): PagePermissionDraft[] {
@@ -66,6 +65,5 @@ export function emptyPermissionDrafts(): PagePermissionDraft[] {
     can_read: false,
     can_update: false,
     can_delete: false,
-    can_print: false,
   }));
 }

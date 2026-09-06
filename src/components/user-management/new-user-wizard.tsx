@@ -26,7 +26,7 @@ import { toast } from "sonner";
 
 // Two-step "New User" wizard, matching the reference screenshots:
 // Step 1 creates the account (username/password/status/role), Step
-// 2 assigns the per-page CRUD+Print grid. Both steps hit the API
+// 2 assigns the per-page CRUD grid. Both steps hit the API
 // separately (user must exist before permissions can reference its
 // user_id) but read as one flow to the person using it. Finishes
 // with a copy-to-clipboard invite message, ready to paste into
@@ -110,7 +110,6 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
         can_read: checked,
         can_update: checked,
         can_delete: checked,
-        can_print: checked,
       })),
     );
   }
@@ -119,7 +118,7 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
     setPermissions((prev) => prev.map((p) => (p.page_key === pageKey ? { ...p, [field]: checked } : p)));
   }
 
-  const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete && p.can_print);
+  const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete);
 
   async function handleSavePermissions() {
     if (!newUserId) return;

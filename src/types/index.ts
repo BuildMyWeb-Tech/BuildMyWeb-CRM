@@ -819,7 +819,6 @@ export interface UserPagePermission {
   can_read: boolean;
   can_update: boolean;
   can_delete: boolean;
-  can_print: boolean;
   updated_at: string;
 }
 

@@ -47,7 +47,6 @@ export function EditPermissionsDialog({ userId, username, onClose }: EditPermiss
                   can_read: found.can_read,
                   can_update: found.can_update,
                   can_delete: found.can_delete,
-                  can_print: found.can_print,
                 }
               : draft;
           }),
@@ -58,7 +57,7 @@ export function EditPermissionsDialog({ userId, username, onClose }: EditPermiss
 
   function toggleAll(checked: boolean) {
     setPermissions((prev) =>
-      prev.map((p) => ({ ...p, can_create: checked, can_read: checked, can_update: checked, can_delete: checked, can_print: checked })),
+      prev.map((p) => ({ ...p, can_create: checked, can_read: checked, can_update: checked, can_delete: checked })),
     );
   }
 
@@ -66,7 +65,7 @@ export function EditPermissionsDialog({ userId, username, onClose }: EditPermiss
     setPermissions((prev) => prev.map((p) => (p.page_key === pageKey ? { ...p, [field]: checked } : p)));
   }
 
-  const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete && p.can_print);
+  const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete);
 
   async function handleSave() {
     if (!userId) return;

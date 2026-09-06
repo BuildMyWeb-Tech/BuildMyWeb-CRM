@@ -542,12 +542,10 @@ function LeadCard({
   onToggleHold: () => void;
   onTasksChanged: () => void;
 }) {
-  // Tasks default open — this is the working checklist for an active
-  // enquiry, expected to be visible at a glance; documents default
-  // closed, both to keep the card compact and because mounting a
-  // full FileManager per visible card only when asked for keeps a
-  // grid of many enquiries cheap to render.
-  const [tasksOpen, setTasksOpen] = useState(true);
+  // Both default collapsed — keeps a grid of many enquiries compact,
+  // and avoids mounting a full FileManager per visible card until
+  // someone actually asks to see its documents.
+  const [tasksOpen, setTasksOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const tasks = lead.tasks ?? [];
   const doneCount = tasks.filter((t) => t.is_done).length;
