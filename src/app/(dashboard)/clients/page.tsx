@@ -222,7 +222,7 @@ export default function ClientsPage() {
           )}
         </div>
       ) : viewMode === "grid" ? (
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
           {clients.map((c) => (
             <Link key={c.id} href={`/clients/${c.id}`}>
               <Card

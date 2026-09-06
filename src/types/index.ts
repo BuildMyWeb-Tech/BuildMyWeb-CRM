@@ -485,6 +485,7 @@ export interface FileFolder {
   account_id: string;
   project_id: string | null;
   client_id: string | null;
+  lead_id: string | null;
   parent_id: string | null;
   name: string;
   created_by: string | null;
@@ -497,6 +498,7 @@ export interface ManagedFile {
   account_id: string;
   project_id: string | null;
   client_id: string | null;
+  lead_id: string | null;
   folder_id: string | null;
   name: string;
   storage_path: string;
