@@ -65,6 +65,14 @@ export function EditPermissionsDialog({ userId, username, onClose }: EditPermiss
     setPermissions((prev) => prev.map((p) => (p.page_key === pageKey ? { ...p, [field]: checked } : p)));
   }
 
+  function toggleRow(pageKey: string, checked: boolean) {
+    setPermissions((prev) =>
+      prev.map((p) =>
+        p.page_key === pageKey ? { ...p, can_create: checked, can_read: checked, can_update: checked, can_delete: checked } : p,
+      ),
+    );
+  }
+
   const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete);
 
   async function handleSave() {
@@ -89,31 +97,37 @@ export function EditPermissionsDialog({ userId, username, onClose }: EditPermiss
 
   return (
     <Dialog open={!!userId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-5xl bg-popover border-border max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-5xl bg-popover border-border max-h-[90vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="p-6 pb-0">
           <DialogTitle className="text-popover-foreground">Permissions for {username}</DialogTitle>
         </DialogHeader>
 
         {loading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <div className="py-2">
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Check the actions this user can perform on each page.
+          <div className="flex min-h-0 flex-1 flex-col">
+            {/* Scrollable middle — only the grid scrolls, so Save
+                stays reachable no matter how many page rows there
+                are (previously the whole dialog scrolled as one
+                block and the button could end up below the fold). */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-2">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Check the actions this user can perform on each page.
+                </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={allChecked} onCheckedChange={(c) => toggleAll(c === true)} />
+                  Select All
+                </label>
               </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Checkbox checked={allChecked} onCheckedChange={(c) => toggleAll(c === true)} />
-                Select All
-              </label>
+
+              <div className="mt-3">
+                <PermissionsGrid permissions={permissions} onToggle={toggleCell} onToggleRow={toggleRow} />
+              </div>
             </div>
 
-            <div className="mt-3">
-              <PermissionsGrid permissions={permissions} onToggle={toggleCell} />
-            </div>
-
-            <div className="mt-4 flex justify-end">
+            <div className="flex shrink-0 justify-end border-t border-border bg-popover p-4">
               <Button onClick={handleSave} disabled={saving}>
                 <Check className="mr-1.5 h-3.5 w-3.5" />
                 {saving ? "Saving…" : "Save permissions"}

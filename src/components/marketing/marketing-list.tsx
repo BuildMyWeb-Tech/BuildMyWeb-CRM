@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import type { AccountMember, MarketingCategory, MarketingItem, MarketingStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { useAccountMembers } from "@/hooks/use-account-members";
 import { toast } from "sonner";
 
 const STATUSES: MarketingStatus[] = ["planned", "in_progress", "done"];
@@ -66,19 +67,15 @@ export function MarketingList({
   icon: LucideIcon;
 }) {
   const { canCreate, canUpdate, canDelete } = usePagePermissions(pageKey);
+  const { members } = useAccountMembers();
   const [items, setItems] = useState<MarketingItem[] | null>(null);
-  const [members, setMembers] = useState<AccountMember[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | MarketingStatus>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<MarketingItem | null>(null);
 
   async function load() {
-    const [itemsRes, membersRes] = await Promise.all([
-      fetch(`/api/marketing-items?category=${category}`),
-      fetch("/api/account/members"),
-    ]);
+    const itemsRes = await fetch(`/api/marketing-items?category=${category}`);
     if (itemsRes.ok) setItems((await itemsRes.json()).items ?? []);
-    if (membersRes.ok) setMembers((await membersRes.json()).members ?? []);
   }
 
   useEffect(() => {

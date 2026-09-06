@@ -57,6 +57,7 @@ import {
 } from "@/components/client-leads/lead-shared";
 import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { useAccountMembers } from "@/hooks/use-account-members";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 
@@ -70,7 +71,7 @@ export default function ClientLeadsPage() {
   const { accountId, user } = useAuth();
   const { canCreate, canUpdate, canDelete } = usePagePermissions("client_leads");
   const [leads, setLeads] = useState<ClientLead[] | null>(null);
-  const [members, setMembers] = useState<AccountMember[]>([]);
+  const { members } = useAccountMembers();
   const [tab, setTab] = useState<"enquiries" | "tasks">("enquiries");
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
@@ -89,12 +90,8 @@ export default function ClientLeadsPage() {
   }
 
   async function load() {
-    const [leadsRes, membersRes] = await Promise.all([
-      fetch("/api/client-leads"),
-      fetch("/api/account/members"),
-    ]);
+    const leadsRes = await fetch("/api/client-leads");
     if (leadsRes.ok) setLeads((await leadsRes.json()).leads ?? []);
-    if (membersRes.ok) setMembers((await membersRes.json()).members ?? []);
   }
 
   useEffect(() => {

@@ -51,6 +51,7 @@ export default function ClientsPage() {
     if (typeof window === "undefined") return "grid";
     return window.localStorage.getItem("clients-view") === "list" ? "list" : "grid";
   });
+  const [statusFilter, setStatusFilter] = useState<"all" | ClientStatus>("all");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -162,6 +163,8 @@ export default function ClientsPage() {
     toast.success("Client deleted.");
   }
 
+  const visibleClients = (clients ?? []).filter((c) => statusFilter === "all" || c.status === statusFilter);
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -194,6 +197,19 @@ export default function ClientsPage() {
               <ListIcon className="h-3.5 w-3.5" />
             </button>
           </div>
+          <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v as "all" | ClientStatus)}>
+            <SelectTrigger size="sm">
+              <SelectValue className="truncate capitalize">
+                {(v: string) => (v === "all" ? "Status: All" : `Status: ${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value="all">Status: All</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {canCreate && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
@@ -203,7 +219,7 @@ export default function ClientsPage() {
         </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        {clients ? `${clients.length} client${clients.length === 1 ? "" : "s"}` : "Loading…"} — the whole
+        {clients ? `${visibleClients.length} of ${clients.length} client${clients.length === 1 ? "" : "s"}` : "Loading…"} — the whole
         relationship, from when they started to now.
       </p>
 
@@ -221,9 +237,13 @@ export default function ClientsPage() {
             </Button>
           )}
         </div>
+      ) : visibleClients.length === 0 ? (
+        <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
+          <p className="text-sm text-muted-foreground">No clients match this filter.</p>
+        </div>
       ) : viewMode === "grid" ? (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-          {clients.map((c) => (
+          {visibleClients.map((c) => (
             <Link key={c.id} href={`/clients/${c.id}`}>
               <Card
                 className="h-full border-l-4 transition-colors hover:border-primary/40"
@@ -251,7 +271,7 @@ export default function ClientsPage() {
         </div>
       ) : (
         <div className="mt-6 divide-y divide-border rounded-lg border border-border">
-          {clients.map((c) => (
+          {visibleClients.map((c) => (
             <Link
               key={c.id}
               href={`/clients/${c.id}`}

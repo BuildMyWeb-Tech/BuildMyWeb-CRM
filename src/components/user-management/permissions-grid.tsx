@@ -24,22 +24,26 @@ const COLUMNS = [
   { field: "can_delete", label: "Delete", color: "text-red-400" },
 ] as const;
 
-// Wide first column for the page name, four equal comfortable
-// columns for the checkboxes — matches BMW's "increase the width as
-// much as possible" ask directly via the column template itself,
-// not just a wider dialog around a cramped grid.
-const GRID_TEMPLATE = "minmax(180px,1.5fr) repeat(4, minmax(110px,1fr))";
+// A leading narrow checkbox column ("All") plus the wide page-name
+// column plus four equal CRUD columns — the row checkbox lets an
+// admin grant/revoke full CRUD for one page without clicking all 4
+// boxes individually.
+const GRID_TEMPLATE = "48px minmax(160px,1.5fr) repeat(4, minmax(110px,1fr))";
 
 interface PermissionsGridProps {
   permissions: PagePermissionDraft[];
   onToggle: (pageKey: string, field: keyof Omit<PagePermissionDraft, "page_key">, checked: boolean) => void;
+  /** Sets all 4 CRUD flags for one page row at once — the "tick the
+   * row" shortcut so an admin doesn't need 4 separate clicks per page. */
+  onToggleRow: (pageKey: string, checked: boolean) => void;
 }
 
-export function PermissionsGrid({ permissions, onToggle }: PermissionsGridProps) {
+export function PermissionsGrid({ permissions, onToggle, onToggleRow }: PermissionsGridProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <div className="min-w-[720px]" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
+      <div className="min-w-[760px]" style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}>
         {/* Header row */}
+        <div className="border-b border-border px-2 py-2.5" />
         <div className="border-b border-border px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Page
         </div>
@@ -53,7 +57,7 @@ export function PermissionsGrid({ permissions, onToggle }: PermissionsGridProps)
         ))}
 
         {PAGE_CATEGORIES.map((category) => (
-          <CategorySection key={category} category={category} permissions={permissions} onToggle={onToggle} />
+          <CategorySection key={category} category={category} permissions={permissions} onToggle={onToggle} onToggleRow={onToggleRow} />
         ))}
       </div>
     </div>
@@ -64,22 +68,33 @@ function CategorySection({
   category,
   permissions,
   onToggle,
+  onToggleRow,
 }: {
   category: string;
   permissions: PagePermissionDraft[];
   onToggle: PermissionsGridProps["onToggle"];
+  onToggleRow: PermissionsGridProps["onToggleRow"];
 }) {
   const pages = PAGE_REGISTRY.filter((p) => p.category === category);
   return (
     <>
-      <div className="col-span-5 bg-muted/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+      <div className="col-span-6 bg-muted/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
         {category}
       </div>
       {pages.map((page) => {
         const draft = permissions.find((p) => p.page_key === page.key);
         if (!draft) return null;
+        const rowAllChecked = draft.can_create && draft.can_read && draft.can_update && draft.can_delete;
         return (
           <div key={page.key} className="contents">
+            <div className="relative flex items-center justify-center border-b border-border py-3">
+              <Checkbox
+                checked={rowAllChecked}
+                onCheckedChange={(c) => onToggleRow(page.key, c === true)}
+                className="size-5"
+                aria-label={`Toggle all permissions for ${page.label}`}
+              />
+            </div>
             <div className="flex items-center border-b border-border px-4 py-3 text-sm text-foreground">
               {page.label}
             </div>

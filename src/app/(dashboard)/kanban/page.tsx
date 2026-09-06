@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { fetchAccountMembers } from "@/hooks/use-account-members";
 import { createClient } from "@/lib/supabase/client";
 import type { KanbanCommonStatus, ProjectTask, Project, AccountMember } from "@/types";
 import { toast } from "sonner";
@@ -55,7 +56,22 @@ export default function KanbanPage() {
     setRenamingBoard(false);
   }
 
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
+  // Persisted per-browser so a column collapsed today is still
+  // collapsed on the next visit — same reasoning as boardName above.
+  // Keyed by status id, so it naturally survives columns being
+  // renamed and just stops applying if a column is ever deleted.
+  const [collapsedColumns, setCollapsedColumnsState] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      return new Set(JSON.parse(window.localStorage.getItem("kanban-collapsed-columns") ?? "[]"));
+    } catch {
+      return new Set();
+    }
+  });
+  function setCollapsedColumns(next: Set<string>) {
+    setCollapsedColumnsState(next);
+    window.localStorage.setItem("kanban-collapsed-columns", JSON.stringify([...next]));
+  }
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -101,13 +117,13 @@ export default function KanbanPage() {
       supabase.from("kanban_common_statuses").select("*").eq("account_id", accountId).order("position", { ascending: true }),
       supabase.from("project_tasks").select("*, project:projects(id,name)").eq("account_id", accountId),
       fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/account/members").then((r) => (r.ok ? r.json() : null)),
+      fetchAccountMembers(accountId),
     ])
-      .then(([statusesRes, tasksRes, projectsData, membersData]) => {
+      .then(([statusesRes, tasksRes, projectsData, membersRows]) => {
         setStatuses(statusesRes.data ?? []);
         setTasks((tasksRes.data ?? []) as ProjectTask[]);
         if (projectsData) setProjects(projectsData.projects ?? []);
-        if (membersData) setMembers(membersData.members ?? []);
+        setMembers(membersRows);
       })
       .catch((err) => console.error("[kanban] load failed:", err))
       .finally(() => setLoading(false));

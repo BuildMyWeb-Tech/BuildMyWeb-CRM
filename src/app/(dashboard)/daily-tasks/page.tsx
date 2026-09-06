@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListTodo, Loader2, Plus } from "lucide-react";
+import { ListTodo, Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { fetchAccountMembers } from "@/hooks/use-account-members";
 import { createClient } from "@/lib/supabase/client";
 import { DATE_PRESETS, matchesDatePreset, type DatePreset } from "@/lib/tasks/date-presets";
 import type {
@@ -72,6 +73,7 @@ export default function DailyTasksPage() {
   const [loading, setLoading] = useState(true);
 
   const [taskFormOpen, setTaskFormOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
@@ -164,7 +166,7 @@ export default function DailyTasksPage() {
     const supabase = createClient();
     Promise.all([
       supabase.from("pipelines").select("*").eq("account_id", accountId).eq("name", "Daily Tasks").maybeSingle(),
-      fetch("/api/account/members").then((r) => (r.ok ? r.json() : null)),
+      fetchAccountMembers(accountId),
       fetch("/api/clients").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
       // Every project's own board tasks too — "show everything" means
@@ -177,10 +179,10 @@ export default function DailyTasksPage() {
         .select("*, project:projects(id,name), stage:pipeline_stages(name,color)")
         .eq("account_id", accountId),
     ])
-      .then(async ([pipelineRes, membersData, clientsData, projectsData, projectTasksRes]) => {
+      .then(async ([pipelineRes, membersRows, clientsData, projectsData, projectTasksRes]) => {
         const pipelineRow = pipelineRes.data as Pipeline | null;
         setPipeline(pipelineRow);
-        if (membersData) setMembers(membersData.members ?? []);
+        setMembers(membersRows);
         if (clientsData) setClients(clientsData.clients ?? []);
         if (projectsData) setProjects(projectsData.projects ?? []);
         setProjectTasks((projectTasksRes.data ?? []) as ProjectTask[]);
@@ -295,88 +297,119 @@ export default function DailyTasksPage() {
           <ListTodo className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Tasks</h1>
         </div>
-        {canCreateTask && (
-          <Button onClick={openNewTask}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New task
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
+            <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
           </Button>
-        )}
+          {canCreateTask && (
+            <Button onClick={openNewTask}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New task
+            </Button>
+          )}
+        </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {filteredTasks.length} of {unifiedRows.length} task{unifiedRows.length === 1 ? "" : "s"}
         {activeFilterCount > 0 ? " — filtered" : ""}
       </p>
 
-      <div className="mt-4 flex flex-col gap-6 lg:flex-row">
-        {/* Filters — left column, always visible, not a dropdown */}
-        <aside className="w-full shrink-0 lg:w-56">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Filters</p>
+      {/* Filters — a slide-in panel from the left (icon-triggered,
+          not a permanent side column) so the table gets the full
+          page width; content and behavior are unchanged from the
+          old static sidebar. */}
+      <button
+        type="button"
+        aria-label="Close filters"
+        onClick={() => setFiltersOpen(false)}
+        className={`fixed inset-0 z-40 bg-background/70 backdrop-blur-sm transition-opacity ${
+          filtersOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-full max-w-xs flex-col overflow-y-auto border-r border-border bg-card p-4 shadow-xl transition-transform duration-200 sm:max-w-sm ${
+          filtersOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">Filters</p>
+          <div className="flex items-center gap-3">
             {activeFilterCount > 0 && (
               <button type="button" onClick={clearFilters} className="text-xs text-primary hover:underline">
                 Clear
               </button>
             )}
+            <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Close filters" className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
           </div>
+        </div>
 
-          <FilterGroup label="Date">
-            {DATE_PRESETS.map((d) => (
-              <FilterChip key={d.id} active={datePreset === d.id} onClick={() => changeDatePreset(d.id)}>
-                {d.label}
+        <FilterGroup label="Date">
+          {DATE_PRESETS.map((d) => (
+            <FilterChip key={d.id} active={datePreset === d.id} onClick={() => changeDatePreset(d.id)}>
+              {d.label}
+            </FilterChip>
+          ))}
+        </FilterGroup>
+
+        {stages.length > 0 && (
+          <FilterGroup label="Stage">
+            {stages.map((s) => (
+              <FilterChip key={s.id} active={stageFilter.has(s.id)} onClick={() => toggleStageFilter(s.id)}>
+                {s.name}
               </FilterChip>
             ))}
           </FilterGroup>
+        )}
 
-          {stages.length > 0 && (
-            <FilterGroup label="Stage">
-              {stages.map((s) => (
-                <FilterChip key={s.id} active={stageFilter.has(s.id)} onClick={() => toggleStageFilter(s.id)}>
-                  {s.name}
-                </FilterChip>
-              ))}
-            </FilterGroup>
-          )}
+        <FilterGroup label="Priority">
+          {(["low", "normal", "high", "urgent"] as TaskPriority[]).map((p) => (
+            <FilterChip key={p} active={priorityFilter.has(p)} onClick={() => togglePriorityFilter(p)} capitalize>
+              {p}
+            </FilterChip>
+          ))}
+        </FilterGroup>
 
-          <FilterGroup label="Priority">
-            {(["low", "normal", "high", "urgent"] as TaskPriority[]).map((p) => (
-              <FilterChip key={p} active={priorityFilter.has(p)} onClick={() => togglePriorityFilter(p)} capitalize>
-                {p}
+        {projects.length > 0 && (
+          <FilterGroup label="Project">
+            {projects.map((p) => (
+              <FilterChip key={p.id} active={projectFilter.has(p.id)} onClick={() => toggleProjectFilter(p.id)}>
+                {p.name}
               </FilterChip>
             ))}
           </FilterGroup>
+        )}
 
-          {projects.length > 0 && (
-            <FilterGroup label="Project">
-              {projects.map((p) => (
-                <FilterChip key={p.id} active={projectFilter.has(p.id)} onClick={() => toggleProjectFilter(p.id)}>
-                  {p.name}
-                </FilterChip>
-              ))}
-            </FilterGroup>
-          )}
+        {clients.length > 0 && (
+          <FilterGroup label="Client">
+            {clients.map((c) => (
+              <FilterChip key={c.id} active={clientFilter.has(c.id)} onClick={() => toggleClientFilter(c.id)}>
+                {c.name}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+        )}
 
-          {clients.length > 0 && (
-            <FilterGroup label="Client">
-              {clients.map((c) => (
-                <FilterChip key={c.id} active={clientFilter.has(c.id)} onClick={() => toggleClientFilter(c.id)}>
-                  {c.name}
-                </FilterChip>
-              ))}
-            </FilterGroup>
-          )}
+        {members.length > 0 && (
+          <FilterGroup label="Assigned to">
+            {members.map((m) => (
+              <FilterChip key={m.user_id} active={assigneeFilter.has(m.user_id)} onClick={() => toggleAssigneeFilter(m.user_id)}>
+                {m.full_name}
+              </FilterChip>
+            ))}
+          </FilterGroup>
+        )}
+      </aside>
 
-          {members.length > 0 && (
-            <FilterGroup label="Assigned to">
-              {members.map((m) => (
-                <FilterChip key={m.user_id} active={assigneeFilter.has(m.user_id)} onClick={() => toggleAssigneeFilter(m.user_id)}>
-                  {m.full_name}
-                </FilterChip>
-              ))}
-            </FilterGroup>
-          )}
-        </aside>
-
-        {/* Table — main column */}
+      <div className="mt-4">
+        {/* Table */}
         <div className="min-w-0 flex-1">
           {filteredTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border py-16 text-center">

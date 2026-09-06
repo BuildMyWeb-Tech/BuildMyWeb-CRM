@@ -118,6 +118,14 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
     setPermissions((prev) => prev.map((p) => (p.page_key === pageKey ? { ...p, [field]: checked } : p)));
   }
 
+  function toggleRow(pageKey: string, checked: boolean) {
+    setPermissions((prev) =>
+      prev.map((p) =>
+        p.page_key === pageKey ? { ...p, can_create: checked, can_read: checked, can_update: checked, can_delete: checked } : p,
+      ),
+    );
+  }
+
   const allChecked = permissions.every((p) => p.can_create && p.can_read && p.can_update && p.can_delete);
 
   async function handleSavePermissions() {
@@ -160,8 +168,8 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-5xl bg-popover border-border max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-5xl bg-popover border-border max-h-[90vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="p-6 pb-0">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <span className={step === "details" ? "text-primary" : ""}>Step 1: User Details</span>
             <span>›</span>
@@ -175,7 +183,7 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
         </DialogHeader>
 
         {step === "details" ? (
-          <div className="flex flex-col gap-4 py-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6 pt-2">
             <div className="flex items-center gap-3 rounded-lg border border-border bg-muted p-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <UserPlus className="h-4 w-4" />
@@ -296,23 +304,30 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
             </div>
           </div>
         ) : step === "permissions" ? (
-          <div className="py-2">
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
-              <div className="flex items-center gap-2 text-sm text-foreground">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Check the actions this user can perform on each page.
+          <div className="flex min-h-0 flex-1 flex-col">
+            {/* Scrollable middle — only the grid scrolls, so the
+                Back/Finish bar below stays reachable no matter how
+                many page rows there are (previously the whole dialog
+                scrolled as one block and the footer could end up
+                below the fold, past a tall grid). */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-2">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted p-3">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Check the actions this user can perform on each page.
+                </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={allChecked} onCheckedChange={(c) => toggleAll(c === true)} />
+                  Select All
+                </label>
               </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Checkbox checked={allChecked} onCheckedChange={(c) => toggleAll(c === true)} />
-                Select All
-              </label>
+
+              <div className="mt-3">
+                <PermissionsGrid permissions={permissions} onToggle={toggleCell} onToggleRow={toggleRow} />
+              </div>
             </div>
 
-            <div className="mt-3">
-              <PermissionsGrid permissions={permissions} onToggle={toggleCell} />
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
+            <div className="flex shrink-0 items-center justify-between border-t border-border bg-popover p-4">
               <Button variant="outline" onClick={() => setStep("details")} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
                 <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
                 Back
@@ -324,7 +339,7 @@ export function NewUserWizard({ open, onOpenChange, onCreated }: NewUserWizardPr
             </div>
           </div>
         ) : (
-          <div className="py-2">
+          <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-2">
             <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted p-6 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
                 <PartyPopper className="h-6 w-6" />
