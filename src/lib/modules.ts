@@ -29,7 +29,11 @@ import {
   LayoutDashboard,
   LayoutGrid,
   ListTodo,
+  Megaphone,
   MessageSquare,
+  Package,
+  PenSquare,
+  Phone,
   Radio,
   UserPlus,
   Users,
@@ -72,23 +76,9 @@ export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, minRole: "viewer" },
 ];
 
+// Order here is the sidebar's render order — Client, Project,
+// Product, Sales, Marketing, Office, per BMW's requested layout.
 export const CRM_MODULES: CrmModule[] = [
-  {
-    id: "sales",
-    labelKey: "moduleSales",
-    minRole: "viewer",
-    items: [
-      { href: "/leads/generate", labelKey: "leadSourcing", icon: Sparkles, minRole: "agent", pageKey: "lead_sourcing" },
-      { href: "/inbox", labelKey: "inbox", icon: MessageSquare, minRole: "viewer", pageKey: "inbox" },
-      { href: "/contacts", labelKey: "contacts", icon: Users, minRole: "viewer", pageKey: "contacts" },
-      { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer", pageKey: "pipelines" },
-      { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent", pageKey: "broadcasts" },
-      { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent", pageKey: "automations" },
-      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true, pageKey: "flows" },
-      { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent", pageKey: "ai_agents" },
-      { href: "/workspace", labelKey: "workspace", icon: Layers, minRole: "viewer", pageKey: "workspace" },
-    ],
-  },
   {
     id: "clients",
     labelKey: "moduleClients",
@@ -106,6 +96,40 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/projects", labelKey: "projects", icon: KanbanSquare, minRole: "viewer", pageKey: "projects" },
       { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer", pageKey: "kanban" },
       { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer", pageKey: "daily_tasks" },
+    ],
+  },
+  {
+    id: "product",
+    labelKey: "moduleProduct",
+    minRole: "viewer",
+    items: [
+      { href: "/products", labelKey: "products", icon: Package, minRole: "viewer", pageKey: "products" },
+    ],
+  },
+  {
+    id: "sales",
+    labelKey: "moduleSales",
+    minRole: "viewer",
+    items: [
+      { href: "/leads/generate", labelKey: "leadSourcing", icon: Sparkles, minRole: "agent", pageKey: "lead_sourcing" },
+      { href: "/inbox", labelKey: "inbox", icon: MessageSquare, minRole: "viewer", pageKey: "inbox" },
+      { href: "/contacts", labelKey: "contacts", icon: Users, minRole: "viewer", pageKey: "contacts" },
+      { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer", pageKey: "pipelines" },
+      { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent", pageKey: "broadcasts" },
+      { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent", pageKey: "automations" },
+      { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true, pageKey: "flows" },
+      { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent", pageKey: "ai_agents" },
+      { href: "/workspace", labelKey: "workspace", icon: Layers, minRole: "viewer", pageKey: "workspace" },
+    ],
+  },
+  {
+    id: "marketing",
+    labelKey: "moduleMarketing",
+    minRole: "viewer",
+    items: [
+      { href: "/marketing/tele-calling", labelKey: "teleCalling", icon: Phone, minRole: "viewer", pageKey: "marketing_tele_calling" },
+      { href: "/marketing/content-creation", labelKey: "contentCreation", icon: PenSquare, minRole: "viewer", pageKey: "marketing_content_creation" },
+      { href: "/marketing/paid-marketing", labelKey: "paidMarketing", icon: Megaphone, minRole: "viewer", pageKey: "marketing_paid_marketing" },
     ],
   },
   {

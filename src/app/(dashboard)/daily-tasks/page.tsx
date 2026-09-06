@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ListTodo, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
@@ -14,9 +15,32 @@ import type {
   AccountMember,
   Client,
   Project,
+  ProjectTask,
   Pipeline,
   TaskPriority,
 } from "@/types";
+
+// Unified row shape so the table can show `daily_tasks` (this page's
+// own ad-hoc pipeline) and `project_tasks` (every project's own
+// board) side by side — see the load() comment for why both belong
+// here now. `kind` drives what a row click does: a daily-task row
+// opens DailyTaskForm in place, same as always; a project-task row
+// opens its own project's board instead of trying to reconstruct
+// TaskForm's per-project stage list here.
+interface UnifiedRow {
+  kind: "daily" | "project";
+  id: string;
+  title: string;
+  stageId: string;
+  stageName: string | null;
+  stageColor: string | null;
+  clientId: string | null;
+  projectId: string | null;
+  priority: TaskPriority;
+  assigneeUserId: string | null;
+  dateValue: string | null;
+  daily?: DailyTask;
+}
 
 // Daily Task — plain filterable table now, not a Kanban board. BMW's
 // call: this page is for "show me everything, filter it down," not
@@ -36,10 +60,12 @@ export default function DailyTasksPage() {
   const { accountId, user, canManageMembers, canSendMessages } = useAuth();
   const { canCreate: gridCanCreate } = usePagePermissions("daily_tasks");
   const canCreateTask = canSendMessages && gridCanCreate;
+  const router = useRouter();
 
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [tasks, setTasks] = useState<DailyTask[]>([]);
+  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([]);
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -141,13 +167,23 @@ export default function DailyTasksPage() {
       fetch("/api/account/members").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/clients").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
+      // Every project's own board tasks too — "show everything" means
+      // everything, not just this page's separate ad-hoc pipeline.
+      // Embeds the task's own stage (a DIFFERENT pipeline per project,
+      // not the Daily Tasks one in `stages` below) so its column badge
+      // still renders correctly.
+      supabase
+        .from("project_tasks")
+        .select("*, project:projects(id,name), stage:pipeline_stages(name,color)")
+        .eq("account_id", accountId),
     ])
-      .then(async ([pipelineRes, membersData, clientsData, projectsData]) => {
+      .then(async ([pipelineRes, membersData, clientsData, projectsData, projectTasksRes]) => {
         const pipelineRow = pipelineRes.data as Pipeline | null;
         setPipeline(pipelineRow);
         if (membersData) setMembers(membersData.members ?? []);
         if (clientsData) setClients(clientsData.clients ?? []);
         if (projectsData) setProjects(projectsData.projects ?? []);
+        setProjectTasks((projectTasksRes.data ?? []) as ProjectTask[]);
 
         if (pipelineRow) {
           const [stagesRes, tasksRes] = await Promise.all([
@@ -180,6 +216,44 @@ export default function DailyTasksPage() {
     setTaskFormOpen(true);
   }
 
+  const projectClientById = useMemo(() => new Map(projects.map((p) => [p.id, p.client_id])), [projects]);
+
+  const unifiedRows: UnifiedRow[] = useMemo(() => {
+    const dailyRows: UnifiedRow[] = tasks.map((t) => ({
+      kind: "daily",
+      id: t.id,
+      title: t.title,
+      stageId: t.stage_id,
+      stageName: null,
+      stageColor: null,
+      clientId: t.client_id,
+      projectId: t.project_id,
+      priority: t.priority,
+      assigneeUserId: t.assignee_user_id,
+      dateValue: t.target_date,
+      daily: t,
+    }));
+    const projectRows: UnifiedRow[] = projectTasks.map((t) => ({
+      kind: "project",
+      id: t.id,
+      title: t.title,
+      stageId: t.stage_id,
+      stageName: t.stage?.name ?? null,
+      stageColor: t.stage?.color ?? null,
+      clientId: projectClientById.get(t.project_id) ?? null,
+      projectId: t.project_id,
+      priority: t.priority,
+      assigneeUserId: t.assignee_user_id,
+      dateValue: t.due_date,
+    }));
+    return [...dailyRows, ...projectRows].sort((a, b) => {
+      if (!a.dateValue && !b.dateValue) return 0;
+      if (!a.dateValue) return 1;
+      if (!b.dateValue) return -1;
+      return a.dateValue.localeCompare(b.dateValue);
+    });
+  }, [tasks, projectTasks, projectClientById]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -198,13 +272,19 @@ export default function DailyTasksPage() {
     );
   }
 
-  const filteredTasks = tasks.filter((t) => {
-    if (projectFilter.size > 0 && (!t.project_id || !projectFilter.has(t.project_id))) return false;
-    if (clientFilter.size > 0 && (!t.client_id || !clientFilter.has(t.client_id))) return false;
+  const filteredTasks = unifiedRows.filter((t) => {
+    if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
+    if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
     if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
-    if (assigneeFilter.size > 0 && (!t.assignee_user_id || !assigneeFilter.has(t.assignee_user_id))) return false;
-    if (stageFilter.size > 0 && !stageFilter.has(t.stage_id)) return false;
-    if (!matchesDatePreset(t.target_date, datePreset)) return false;
+    if (assigneeFilter.size > 0 && (!t.assigneeUserId || !assigneeFilter.has(t.assigneeUserId))) return false;
+    // Stage chips are built from the Daily Tasks pipeline's own
+    // stages only (see the sidebar below) — a project task's stage
+    // lives on a different pipeline entirely, so it can never match
+    // one of these chips. Filtering by stage therefore narrows to
+    // daily-task rows only, which is the correct behavior given the
+    // chips shown, not a bug.
+    if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
+    if (!matchesDatePreset(t.dateValue, datePreset)) return false;
     return true;
   });
 
@@ -223,7 +303,7 @@ export default function DailyTasksPage() {
         )}
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        {filteredTasks.length} of {tasks.length} task{tasks.length === 1 ? "" : "s"}
+        {filteredTasks.length} of {unifiedRows.length} task{unifiedRows.length === 1 ? "" : "s"}
         {activeFilterCount > 0 ? " — filtered" : ""}
       </p>
 
@@ -317,14 +397,28 @@ export default function DailyTasksPage() {
                 </thead>
                 <tbody>
                   {filteredTasks.map((task) => {
-                    const stage = stages.find((s) => s.id === task.stage_id);
+                    const stage =
+                      task.kind === "daily"
+                        ? stages.find((s) => s.id === task.stageId)
+                        : task.stageName
+                          ? { name: task.stageName, color: task.stageColor ?? "#94a3b8" }
+                          : undefined;
+                    const client = clients.find((c) => c.id === task.clientId);
+                    const project = projects.find((p) => p.id === task.projectId);
                     return (
                       <tr
-                        key={task.id}
-                        onClick={() => openEditTask(task)}
+                        key={`${task.kind}-${task.id}`}
+                        onClick={() => (task.kind === "daily" ? openEditTask(task.daily!) : router.push(`/projects/${task.projectId}`))}
                         className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                       >
-                        <td className="px-3 py-2 text-foreground">{task.title}</td>
+                        <td className="px-3 py-2 text-foreground">
+                          {task.title}
+                          {task.kind === "project" && (
+                            <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                              Project
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           {stage && (
                             <span
@@ -336,7 +430,7 @@ export default function DailyTasksPage() {
                           )}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
-                          {task.client?.name || task.project?.name || "—"}
+                          {client?.name || project?.name || "—"}
                         </td>
                         <td className="px-3 py-2">
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[task.priority]}`}>
@@ -344,10 +438,10 @@ export default function DailyTasksPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
-                          {members.find((m) => m.user_id === task.assignee_user_id)?.full_name ?? "Unassigned"}
+                          {members.find((m) => m.user_id === task.assigneeUserId)?.full_name ?? "Unassigned"}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
-                          {task.target_date ? new Date(task.target_date).toLocaleDateString() : "—"}
+                          {task.dateValue ? new Date(task.dateValue).toLocaleDateString() : "—"}
                         </td>
                       </tr>
                     );

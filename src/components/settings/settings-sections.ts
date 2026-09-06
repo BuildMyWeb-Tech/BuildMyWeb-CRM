@@ -1,6 +1,7 @@
 import {
   Coins,
   FileText,
+  HardDrive,
   KeyRound,
   LayoutGrid,
   Palette,
@@ -33,6 +34,7 @@ export const SETTINGS_SECTIONS = [
   'deals',
   'members',
   'api',
+  'google-drive',
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -44,7 +46,7 @@ export interface SectionMeta {
   id: SettingsSection;
   label: string;
   icon: LucideIcon;
-  group: 'top' | 'account' | 'workspace';
+  group: 'top' | 'account' | 'workspace' | 'org';
 }
 
 export const SECTION_META: Record<SettingsSection, SectionMeta> = {
@@ -56,14 +58,19 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   templates: { id: 'templates', label: 'Templates', icon: FileText, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
-  deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
-  members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
-  api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
+  // Moved from Workspace to Settings — account-wide but not part of
+  // the Workspace page's remaining WhatsApp-flavored sections
+  // (whatsapp/templates/quick-replies/fields).
+  deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'org' },
+  members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'org' },
+  api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'org' },
+  'google-drive': { id: 'google-drive', label: 'Google Drive', icon: HardDrive, group: 'org' },
 };
 
 export const RAIL_GROUPS: { label: string | null; group: SectionMeta['group'] }[] = [
   { label: null, group: 'top' },
   { label: 'Account', group: 'account' },
+  { label: 'Organization', group: 'org' },
   { label: 'Workspace', group: 'workspace' },
 ];
 

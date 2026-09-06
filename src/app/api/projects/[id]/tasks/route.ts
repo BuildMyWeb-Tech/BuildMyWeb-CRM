@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { resolveCommonStatusId } from '@/lib/kanban/resolve-common-status'
 
 // POST /api/projects/[id]/tasks — create a task on this project's
 // board. Defaults to the board's first stage (lowest position)
@@ -60,12 +61,15 @@ export async function POST(
     position = count ?? 0
   }
 
+  const commonStatusId = await resolveCommonStatusId(db, ctx.accountId, stageId)
+
   const { data: task, error: taskError } = await db
     .from('project_tasks')
     .insert({
       account_id: ctx.accountId,
       project_id: projectId,
       stage_id: stageId,
+      common_status_id: commonStatusId,
       title,
       description: typeof body.description === 'string' ? body.description : null,
       assignee_user_id: typeof body.assignee_user_id === 'string' ? body.assignee_user_id : null,

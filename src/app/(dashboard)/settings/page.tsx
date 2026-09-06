@@ -9,26 +9,39 @@ import { SettingsOverview } from '@/components/settings/settings-overview';
 import { ProfileForm } from '@/components/settings/profile-form';
 import { SecurityPanel } from '@/components/settings/security-panel';
 import { AppearancePanel } from '@/components/settings/appearance-panel';
+import { DealsSettings } from '@/components/settings/deals-settings';
+import { MembersTab } from '@/components/settings/members-tab';
+import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
+import { GoogleDriveSettings } from '@/components/google-drive/google-drive-settings';
 import {
   SECTION_META,
   type SettingsSection,
 } from '@/components/settings/settings-sections';
 
-// Settings now covers PERSONAL sections only (Overview, Your
-// profile, Login & security, Appearance) — everything account-wide
-// (WhatsApp, Templates, Quick replies, Fields & tags, Deals &
-// currency, Team members, API keys) moved to /workspace. Overview
-// stays here as the shared dashboard-style landing and still
-// surfaces workspace items as cards — clicking one routes over to
-// /workspace?tab=X via sectionHref() below; clicking an account
-// item stays on this page.
+// Settings covers personal sections (Overview, Your profile, Login &
+// security, Appearance) PLUS the account-wide "Organization" sections
+// that moved back here from Workspace (Deals & currency, Team
+// members, API keys, Google Drive) — Workspace keeps only its
+// WhatsApp-flavored sections (WhatsApp, Templates, Quick replies,
+// Fields & tags). Overview still surfaces Workspace items as cards;
+// clicking one routes over to /workspace?tab=X via sectionHref()
+// below, while an Organization or Account item stays on this page.
 //
 // Top tab bar replaces the old left-rail sub-nav (SettingsRail) —
 // that component is left in place, just unused by this page, in
 // case anything else still references it.
 
-type LocalSection = 'overview' | 'profile' | 'security' | 'appearance';
-const LOCAL_SECTIONS: LocalSection[] = ['overview', 'profile', 'security', 'appearance'];
+type LocalSection = 'overview' | 'profile' | 'security' | 'appearance' | 'deals' | 'members' | 'api' | 'google-drive';
+const LOCAL_SECTIONS: LocalSection[] = [
+  'overview',
+  'profile',
+  'security',
+  'appearance',
+  'deals',
+  'members',
+  'api',
+  'google-drive',
+];
 
 function isLocalSection(value: string | null): value is LocalSection {
   return !!value && (LOCAL_SECTIONS as string[]).includes(value);
@@ -91,6 +104,10 @@ function SettingsPageInner() {
     profile: <ProfileForm />,
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
+    deals: <DealsSettings />,
+    members: <MembersTab />,
+    api: <ApiKeysSettings />,
+    'google-drive': <GoogleDriveSettings />,
   };
 
   return (

@@ -447,6 +447,10 @@ export interface ProjectTask {
    * (src/app/(dashboard)/kanban/page.tsx) — not fetched by a
    * project's own board, which already knows which project it's on. */
   project?: { id: string; name: string };
+  /** Only populated by Daily Tasks' merged cross-project query
+   * (src/app/(dashboard)/daily-tasks/page.tsx) — the task's OWN
+   * project's pipeline stage, not the Daily Tasks pipeline's. */
+  stage?: { name: string; color: string };
 }
 
 // ============================================================
@@ -599,6 +603,45 @@ export interface ClientLeadTask {
   is_done: boolean;
   position: number;
   created_at: string;
+}
+
+// ============================================================
+// Product module — see 062_product_marketing_modules.sql
+// ============================================================
+
+export interface Product {
+  id: string;
+  account_id: string;
+  project_name: string;
+  purpose: string | null;
+  project_url_1: string | null;
+  project_url_2: string | null;
+  tech_stack: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Marketing module — see 062_product_marketing_modules.sql
+// ============================================================
+
+export type MarketingCategory = "tele_calling" | "content_creation" | "paid_marketing";
+export type MarketingStatus = "planned" | "in_progress" | "done";
+
+export interface MarketingItem {
+  id: string;
+  account_id: string;
+  category: MarketingCategory;
+  title: string;
+  description: string | null;
+  status: MarketingStatus;
+  assigned_user_id: string | null;
+  item_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  assigned?: AccountMember;
 }
 
 export interface ScopeOfWork {

@@ -35,6 +35,12 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   { key: "projects", label: "Projects", category: "Projects" },
   { key: "kanban", label: "Kanban", category: "Projects" },
   { key: "daily_tasks", label: "Daily Tasks", category: "Projects" },
+  // Product
+  { key: "products", label: "Products", category: "Product" },
+  // Marketing
+  { key: "marketing_tele_calling", label: "Tele Calling", category: "Marketing" },
+  { key: "marketing_content_creation", label: "Content Creation", category: "Marketing" },
+  { key: "marketing_paid_marketing", label: "Paid Marketing", category: "Marketing" },
   // Office
   { key: "company_details", label: "Company Details", category: "Office" },
   { key: "files", label: "Files", category: "Office" },

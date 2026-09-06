@@ -2,47 +2,26 @@
 
 import { Suspense, useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { HardDrive } from 'lucide-react';
 
 import { TopTabs } from '@/components/settings/top-tabs';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { TemplateManager } from '@/components/settings/template-manager';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
-import { DealsSettings } from '@/components/settings/deals-settings';
-import { MembersTab } from '@/components/settings/members-tab';
-import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
-import { GoogleDriveSettings } from '@/components/google-drive/google-drive-settings';
 import { SECTION_META } from '@/components/settings/settings-sections';
 
-// Workspace — everything account-wide that used to live under
-// Settings' "Workspace" rail group: WhatsApp, Templates, Quick
-// replies, Fields & tags, Deals & currency, Team members, API keys,
-// and now Google Drive. Settings itself now covers only personal
-// sections (Overview, Your profile, Login & security, Appearance) —
-// see settings/page.tsx. Its Overview cards for these sections
-// route here via ?tab=.
+// Workspace — WhatsApp-flavored account config: WhatsApp, Templates,
+// Quick replies, Fields & tags. Deals & currency, Team members, API
+// keys, and Google Drive moved to Settings (see settings/page.tsx) —
+// they're account-wide too, but not part of this page's WhatsApp
+// setup flow. Settings itself covers personal sections (Overview,
+// Your profile, Login & security, Appearance) plus those four moved
+// ones. Its Overview cards for the sections still living here route
+// over via ?tab=.
 
-type WorkspaceSection =
-  | 'whatsapp'
-  | 'templates'
-  | 'quick-replies'
-  | 'fields'
-  | 'deals'
-  | 'members'
-  | 'api'
-  | 'google-drive';
+type WorkspaceSection = 'whatsapp' | 'templates' | 'quick-replies' | 'fields';
 
-const WORKSPACE_SECTIONS: WorkspaceSection[] = [
-  'whatsapp',
-  'templates',
-  'quick-replies',
-  'fields',
-  'deals',
-  'members',
-  'api',
-  'google-drive',
-];
+const WORKSPACE_SECTIONS: WorkspaceSection[] = ['whatsapp', 'templates', 'quick-replies', 'fields'];
 
 function isWorkspaceSection(value: string | null): value is WorkspaceSection {
   return !!value && (WORKSPACE_SECTIONS as string[]).includes(value);
@@ -76,14 +55,12 @@ function WorkspacePageInner() {
   };
 
   const tabs = useMemo(
-    () => [
-      ...WORKSPACE_SECTIONS.filter((id) => id !== 'google-drive').map((id) => ({
+    () =>
+      WORKSPACE_SECTIONS.map((id) => ({
         id,
         label: SECTION_META[id].label,
         icon: SECTION_META[id].icon,
       })),
-      { id: 'google-drive' as const, label: 'Google Drive', icon: HardDrive },
-    ],
     [],
   );
 
@@ -92,10 +69,6 @@ function WorkspacePageInner() {
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
-    deals: <DealsSettings />,
-    members: <MembersTab />,
-    api: <ApiKeysSettings />,
-    'google-drive': <GoogleDriveSettings />,
   };
 
   return (
@@ -103,7 +76,7 @@ function WorkspacePageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Workspace</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Account-wide configuration — WhatsApp, templates, team, and more.
+          WhatsApp setup — connection, templates, quick replies, and custom fields.
         </p>
       </div>
 

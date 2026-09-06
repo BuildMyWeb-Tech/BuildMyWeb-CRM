@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { resolveCommonStatusId } from '@/lib/kanban/resolve-common-status'
 
 // PATCH /api/tasks/[id] — edit a task, or move it to a different
 //   stage/position (drag-and-drop on the board calls this with just
@@ -43,7 +44,15 @@ export async function PATCH(
     }
     update.priority = body.priority
   }
-  if (typeof body.stage_id === 'string') update.stage_id = body.stage_id
+  if (typeof body.stage_id === 'string') {
+    update.stage_id = body.stage_id
+    // Moving a task to a different column on its OWN project board
+    // should also move it on the unified cross-project board — see
+    // resolveCommonStatusId's own comment. The unified board's own
+    // drag-and-drop writes common_status_id directly and never goes
+    // through this route, so there's no conflict with that path.
+    update.common_status_id = await resolveCommonStatusId(supabaseAdmin(), ctx.accountId, body.stage_id)
+  }
   if (typeof body.position === 'number') update.position = body.position
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })

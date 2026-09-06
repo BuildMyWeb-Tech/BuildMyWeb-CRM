@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const error = url.searchParams.get('error')
 
   const redirectTo = (status: 'connected' | 'error') =>
-    NextResponse.redirect(new URL(`/workspace?tab=google-drive&drive=${status}`, request.url))
+    NextResponse.redirect(new URL(`/settings?tab=google-drive&drive=${status}`, request.url))
 
   if (error || !code || !accountId) {
     console.error('[google-drive] callback error or missing params:', error)
