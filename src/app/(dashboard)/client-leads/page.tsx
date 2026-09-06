@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   UserPlus,
   Plus,
@@ -21,19 +22,12 @@ import {
   AlertTriangle,
   FolderOpen,
   ListTodo,
+  Info,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,58 +42,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileManager } from "@/components/files/file-manager";
+import {
+  LeadFormDialog,
+  TaskChecklist,
+  PRIORITIES,
+  PRIORITY_STYLE,
+  STATUS_STYLE,
+  STATUS_LABEL,
+  SOURCES,
+  SOURCE_LABEL,
+  whatsappLink,
+  formatFollowUp,
+  isOverdue,
+} from "@/components/client-leads/lead-shared";
 import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
-
-const PRIORITIES: LeadPriority[] = ["high", "medium", "low"];
-const PRIORITY_STYLE: Record<LeadPriority, string> = {
-  high: "bg-red-500/15 text-red-400",
-  medium: "bg-amber-500/15 text-amber-500",
-  low: "bg-muted text-muted-foreground",
-};
-const STATUS_STYLE: Record<LeadStatus, string> = {
-  in_discussion: "bg-primary/10 text-primary",
-  hold: "bg-amber-500/15 text-amber-500",
-  confirmed: "bg-emerald-500/15 text-emerald-500",
-  rejected: "bg-red-500/15 text-red-400",
-};
-const STATUS_LABEL: Record<LeadStatus, string> = {
-  in_discussion: "In Discussion",
-  hold: "Hold",
-  confirmed: "Confirmed",
-  rejected: "Rejected",
-};
-const SOURCES: LeadSource[] = ["referral", "website", "cold_call", "social_media", "advertisement", "other"];
-const SOURCE_LABEL: Record<LeadSource, string> = {
-  referral: "Referral",
-  website: "Website",
-  cold_call: "Cold Call",
-  social_media: "Social Media",
-  advertisement: "Advertisement",
-  other: "Other",
-};
-
-function whatsappLink(phone: string): string {
-  const digits = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
-  return `https://wa.me/${digits}`;
-}
-
-function formatFollowUp(iso: string | null): string {
-  if (!iso) return "No follow-up set";
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-// Only "active" leads (still being worked) can be overdue — a held
-// or already-decided lead's follow-up date isn't a live deadline
-// anymore.
-function isOverdue(lead: ClientLead): boolean {
-  if (!lead.next_follow_up_at) return false;
-  if (lead.status !== "in_discussion" && lead.status !== "hold") return false;
-  return new Date(lead.next_follow_up_at).getTime() < Date.now();
-}
 
 // Client Leads/Enquiry — everything that's still "in discussion",
 // one stage before Client Directory. A lead here either gets
@@ -171,12 +130,13 @@ export default function ClientLeadsPage() {
     return true;
   });
 
-  // Flat, title-only view across every non-rejected lead's checklist
-  // — the "All Tasks" tab. No lead metadata by design; just what
-  // needs doing.
-  const allTasks = (leads ?? [])
-    .filter((l) => l.status !== "rejected")
-    .flatMap((lead) => (lead.tasks ?? []).map((task) => ({ task, leadId: lead.id })));
+  // Grouped by lead — the "All Tasks" tab. Grouping (instead of one
+  // flat list with no context) is what makes a shared title like
+  // "Follow up" understandable at a glance; still no other enquiry
+  // metadata per the original ask, just the group header.
+  const taskGroups = (leads ?? [])
+    .filter((l) => l.status !== "rejected" && (l.tasks ?? []).length > 0)
+    .map((lead) => ({ leadId: lead.id, leadTitle: lead.title, tasks: lead.tasks ?? [] }));
 
   async function handleConfirm(lead: ClientLead) {
     if (!window.confirm(`Confirm "${lead.title}" as a client? This moves it into Client Directory.`)) return;
@@ -294,7 +254,7 @@ export default function ClientLeadsPage() {
       </div>
 
       {tab === "tasks" ? (
-        <AllTasksTab tasks={allTasks} canEdit={canUpdate} onChanged={load} />
+        <AllTasksTab groups={taskGroups} canEdit={canUpdate} onChanged={load} />
       ) : (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -383,7 +343,7 @@ export default function ClientLeadsPage() {
               )}
             </div>
           ) : (
-            <div className={viewMode === "grid" ? "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "mt-6 flex flex-col gap-3"}>
+            <div className={viewMode === "grid" ? "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" : "mt-6 flex flex-col gap-3"}>
               {visibleLeads.map((lead) => (
                 <LeadCard
                   key={lead.id}
@@ -417,19 +377,22 @@ export default function ClientLeadsPage() {
 }
 
 function AllTasksTab({
-  tasks,
+  groups,
   canEdit,
   onChanged,
 }: {
-  tasks: { task: ClientLeadTask; leadId: string }[];
+  groups: { leadId: string; leadTitle: string; tasks: ClientLeadTask[] }[];
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  async function toggle(entry: { task: ClientLeadTask; leadId: string }) {
-    const res = await fetch(`/api/client-leads/${entry.leadId}/tasks/${entry.task.id}`, {
+  const [renaming, setRenaming] = useState<{ leadId: string; taskId: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  async function toggle(leadId: string, task: ClientLeadTask) {
+    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_done: !entry.task.is_done }),
+      body: JSON.stringify({ is_done: !task.is_done }),
     });
     if (!res.ok) {
       toast.error("Could not update task.");
@@ -438,8 +401,8 @@ function AllTasksTab({
     onChanged();
   }
 
-  async function remove(entry: { task: ClientLeadTask; leadId: string }) {
-    const res = await fetch(`/api/client-leads/${entry.leadId}/tasks/${entry.task.id}`, { method: "DELETE" });
+  async function remove(leadId: string, task: ClientLeadTask) {
+    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, { method: "DELETE" });
     if (!res.ok) {
       toast.error("Could not delete task.");
       return;
@@ -447,7 +410,32 @@ function AllTasksTab({
     onChanged();
   }
 
-  if (tasks.length === 0) {
+  function startRename(leadId: string, task: ClientLeadTask) {
+    setRenaming({ leadId, taskId: task.id });
+    setRenameValue(task.title);
+  }
+
+  async function submitRename() {
+    if (!renaming) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      setRenaming(null);
+      return;
+    }
+    const res = await fetch(`/api/client-leads/${renaming.leadId}/tasks/${renaming.taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: trimmed }),
+    });
+    setRenaming(null);
+    if (!res.ok) {
+      toast.error("Could not rename task.");
+      return;
+    }
+    onChanged();
+  }
+
+  if (groups.length === 0) {
     return (
       <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
         <p className="text-sm text-muted-foreground">No tasks across any enquiry yet.</p>
@@ -456,33 +444,73 @@ function AllTasksTab({
   }
 
   return (
-    <div className="mt-6 divide-y divide-border rounded-lg border border-border">
-      {tasks.map((entry) => (
-        <div key={entry.task.id} className="flex items-center gap-3 px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => canEdit && toggle(entry)}
-            disabled={!canEdit}
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-              entry.task.is_done ? "border-primary bg-primary text-primary-foreground" : "border-border"
-            }`}
-            aria-label={entry.task.is_done ? "Mark as not done" : "Mark as done"}
-          >
-            {entry.task.is_done && <CheckCircle2 className="h-3 w-3" />}
-          </button>
-          <span className={`flex-1 truncate text-sm ${entry.task.is_done ? "text-muted-foreground line-through" : "text-foreground"}`}>
-            {entry.task.title}
-          </span>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => remove(entry)}
-              className="shrink-0 text-muted-foreground hover:text-red-400"
-              aria-label="Delete task"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+    <div className="mt-6 flex flex-col gap-4">
+      {groups.map((group) => (
+        <div key={group.leadId} className="rounded-lg border border-border">
+          <div className="border-b border-border bg-muted/40 px-4 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.leadTitle}</p>
+          </div>
+          <div className="divide-y divide-border">
+            {group.tasks.map((task) => {
+              const isRenaming = renaming?.leadId === group.leadId && renaming?.taskId === task.id;
+              return (
+                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => canEdit && toggle(group.leadId, task)}
+                    disabled={!canEdit}
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      task.is_done ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                    }`}
+                    aria-label={task.is_done ? "Mark as not done" : "Mark as done"}
+                  >
+                    {task.is_done && <CheckCircle2 className="h-3 w-3" />}
+                  </button>
+                  {isRenaming ? (
+                    <>
+                      <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                        className="h-7 flex-1 border-border bg-muted text-sm text-foreground"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitRename();
+                          if (e.key === "Escape") setRenaming(null);
+                        }}
+                      />
+                      <button type="button" onClick={submitRename} className="shrink-0 text-emerald-500 hover:text-emerald-400" aria-label="Save">
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <span className={`flex-1 truncate text-sm ${task.is_done ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                      {task.title}
+                    </span>
+                  )}
+                  {canEdit && !isRenaming && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startRename(group.leadId, task)}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="Edit task title"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(group.leadId, task)}
+                        className="shrink-0 text-muted-foreground hover:text-red-400"
+                        aria-label="Delete task"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       ))}
     </div>
@@ -537,48 +565,52 @@ function LeadCard({
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[lead.status]}`}>
               {STATUS_LABEL[lead.status]}
             </span>
-            {(canUpdate || canDelete) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                  <MoreVertical className="h-3.5 w-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {canUpdate && (
-                    <DropdownMenuItem onClick={onEdit}>
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </DropdownMenuItem>
-                  )}
-                  {canUpdate && (
-                    <DropdownMenuItem onClick={onToggleHold}>
-                      {lead.status === "hold" ? (
-                        <>
-                          <PlayCircle className="h-3.5 w-3.5" />
-                          Resume (back to In Discussion)
-                        </>
-                      ) : (
-                        <>
-                          <PauseCircle className="h-3.5 w-3.5" />
-                          Put on hold
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                  )}
-                  {canUpdate && (
-                    <DropdownMenuItem onClick={onConfirm} className="text-emerald-500 focus:text-emerald-500">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Confirm → Client Directory
-                    </DropdownMenuItem>
-                  )}
-                  {canDelete && (
-                    <DropdownMenuItem onClick={onReject} className="text-red-400 focus:text-red-400">
-                      <XCircle className="h-3.5 w-3.5" />
-                      Reject (delete)
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                <MoreVertical className="h-3.5 w-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  render={<Link href={`/client-leads/${lead.id}`} className="text-popover-foreground focus:bg-accent focus:text-accent-foreground" />}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                  View full details
+                </DropdownMenuItem>
+                {canUpdate && (
+                  <DropdownMenuItem onClick={onEdit}>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {canUpdate && (
+                  <DropdownMenuItem onClick={onToggleHold}>
+                    {lead.status === "hold" ? (
+                      <>
+                        <PlayCircle className="h-3.5 w-3.5" />
+                        Resume (back to In Discussion)
+                      </>
+                    ) : (
+                      <>
+                        <PauseCircle className="h-3.5 w-3.5" />
+                        Put on hold
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {canUpdate && (
+                  <DropdownMenuItem onClick={onConfirm} className="text-emerald-500 focus:text-emerald-500">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Confirm → Client Directory
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem onClick={onReject} className="text-red-400 focus:text-red-400">
+                    <XCircle className="h-3.5 w-3.5" />
+                    Reject (delete)
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardHeader>
@@ -643,352 +675,5 @@ function LeadCard({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function TaskChecklist({
-  leadId,
-  tasks,
-  canEdit,
-  onChanged,
-}: {
-  leadId: string;
-  tasks: ClientLeadTask[];
-  canEdit: boolean;
-  onChanged: () => void;
-}) {
-  const [newTask, setNewTask] = useState("");
-  const [adding, setAdding] = useState(false);
-
-  async function addTask() {
-    const title = newTask.trim();
-    if (!title) return;
-    setAdding(true);
-    try {
-      const res = await fetch(`/api/client-leads/${leadId}/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      if (!res.ok) {
-        toast.error("Could not add task.");
-        return;
-      }
-      setNewTask("");
-      onChanged();
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  async function toggleTask(task: ClientLeadTask) {
-    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_done: !task.is_done }),
-    });
-    if (!res.ok) {
-      toast.error("Could not update task.");
-      return;
-    }
-    onChanged();
-  }
-
-  async function deleteTask(task: ClientLeadTask) {
-    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      toast.error("Could not delete task.");
-      return;
-    }
-    onChanged();
-  }
-
-  return (
-    <div className="mt-2 space-y-1.5">
-      {tasks.length === 0 && <p className="text-xs text-muted-foreground">No tasks yet.</p>}
-      {tasks.map((task) => (
-        <div key={task.id} className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => canEdit && toggleTask(task)}
-            disabled={!canEdit}
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-              task.is_done ? "border-primary bg-primary text-primary-foreground" : "border-border"
-            }`}
-            aria-label={task.is_done ? "Mark as not done" : "Mark as done"}
-          >
-            {task.is_done && <CheckCircle2 className="h-3 w-3" />}
-          </button>
-          <span className={`flex-1 text-xs ${task.is_done ? "text-muted-foreground line-through" : "text-foreground"}`}>
-            {task.title}
-          </span>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => deleteTask(task)}
-              className="text-muted-foreground hover:text-red-400"
-              aria-label="Delete task"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-      ))}
-      {canEdit && (
-        <div className="flex items-center gap-1.5 pt-1">
-          <Input
-            value={newTask}
-            onChange={(e) => setNewTask(e.target.value)}
-            placeholder="Add a task…"
-            className="h-7 border-border bg-muted text-xs text-foreground"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addTask();
-            }}
-          />
-          <Button variant="outline" size="sm" onClick={addTask} disabled={adding || !newTask.trim()} className="h-7 shrink-0 px-2">
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function LeadFormDialog({
-  open,
-  onOpenChange,
-  initial,
-  members,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initial: ClientLead | null;
-  members: AccountMember[];
-  onSaved: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
-  const [priority, setPriority] = useState<LeadPriority>("medium");
-  const [source, setSource] = useState<string>("");
-  const [nextFollowUp, setNextFollowUp] = useState("");
-  const [allocatedUserId, setAllocatedUserId] = useState<string>("");
-  // Only meaningful when creating (initial === null) — once a lead
-  // exists, adding more tasks goes through the card's own "+" (see
-  // TaskChecklist), same UI either way, just after the lead exists
-  // instead of before.
-  const [newTasks, setNewTasks] = useState<string[]>([""]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(initial?.title ?? "");
-    setPhone(initial?.phone ?? "");
-    setNotes(initial?.notes ?? "");
-    setPriority(initial?.priority ?? "medium");
-    setSource(initial?.source ?? "");
-    setNextFollowUp(toDatetimeLocal(initial?.next_follow_up_at ?? null));
-    setAllocatedUserId(initial?.allocated_user_id ?? "");
-    setNewTasks([""]);
-  }, [open, initial]);
-
-  function updateTaskDraft(index: number, value: string) {
-    setNewTasks((prev) => prev.map((t, i) => (i === index ? value : t)));
-  }
-
-  function addTaskDraft() {
-    setNewTasks((prev) => [...prev, ""]);
-  }
-
-  function removeTaskDraft(index: number) {
-    setNewTasks((prev) => (prev.length === 1 ? [""] : prev.filter((_, i) => i !== index)));
-  }
-
-  async function handleSave() {
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setSaving(true);
-    try {
-      const payload = {
-        title: trimmed,
-        phone: phone.trim() || null,
-        notes: notes.trim() || null,
-        priority,
-        source: source || null,
-        next_follow_up_at: nextFollowUp ? new Date(nextFollowUp).toISOString() : null,
-        allocated_user_id: allocatedUserId || null,
-      };
-      const res = await fetch(initial ? `/api/client-leads/${initial.id}` : "/api/client-leads", {
-        method: initial ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data?.error ?? "Could not save this lead.");
-        return;
-      }
-
-      if (!initial) {
-        const { lead } = await res.json();
-        const taskTitles = newTasks.map((t) => t.trim()).filter(Boolean);
-        for (const taskTitle of taskTitles) {
-          await fetch(`/api/client-leads/${lead.id}/tasks`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: taskTitle }),
-          });
-        }
-      }
-
-      onOpenChange(false);
-      onSaved();
-      toast.success(initial ? "Lead updated." : "Lead added.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[88vh] overflow-y-auto overflow-x-hidden">
-        <DialogHeader>
-          <DialogTitle className="text-popover-foreground">{initial ? `Edit ${initial.title}` : "New lead"}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label className="text-muted-foreground">Title</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Real Estate CRM"
-              className="border-border bg-muted text-foreground"
-              autoFocus
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label className="text-muted-foreground">Phone No</Label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91 90000 00000"
-              className="border-border bg-muted text-foreground"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Priority</Label>
-              <Select value={priority} onValueChange={(v) => v && setPriority(v as LeadPriority)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate capitalize">{(v: string) => v}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => (
-                    <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Source</Label>
-              <Select value={source || "__none"} onValueChange={(v) => setSource(v === "__none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__none" ? "Not set" : SOURCE_LABEL[v as LeadSource] ?? "Not set")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectItem value="__none">Not set</SelectItem>
-                  {SOURCES.map((s) => (
-                    <SelectItem key={s} value={s}>{SOURCE_LABEL[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Allocated to</Label>
-              <Select value={allocatedUserId || "__none"} onValueChange={(v) => setAllocatedUserId(v === "__none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__none" ? "Unassigned" : members.find((m) => m.user_id === v)?.full_name ?? "Unassigned")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectItem value="__none">Unassigned</SelectItem>
-                  {members.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label className="text-muted-foreground">Next follow-up</Label>
-            <Input
-              type="datetime-local"
-              value={nextFollowUp}
-              onChange={(e) => setNextFollowUp(e.target.value)}
-              className="border-border bg-muted text-foreground"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label className="text-muted-foreground">Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={3} />
-          </div>
-          {!initial && (
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Tasks</Label>
-              {newTasks.map((value, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <Input
-                    value={value}
-                    onChange={(e) => updateTaskDraft(i, e.target.value)}
-                    placeholder={`Task ${i + 1}`}
-                    className="h-8 border-border bg-muted text-sm text-foreground"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTaskDraft();
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => removeTaskDraft(i)}
-                    className="shrink-0 text-muted-foreground hover:text-red-400"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={addTaskDraft} className="w-fit">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add another task
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                More can be added later too — expand &quot;Tasks&quot; on the card and use its own + icon.
-              </p>
-            </div>
-          )}
-        </div>
-        <DialogFooter className="border-border bg-popover/50">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving || !title.trim()}>
-            {saving ? "Saving…" : initial ? "Save" : "Add lead"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requirePagePermission, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, requirePagePermission, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 
+// GET /api/client-leads/[id] — one lead + its task checklist, for the
+//   detail page (/client-leads/[id]).
 // PATCH /api/client-leads/[id] — update fields, including moving to
 //   'hold' or back to 'in_discussion'. Use the dedicated
 //   /confirm route to move a lead into Client Directory — that path
@@ -12,6 +14,30 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 const PRIORITIES = ['low', 'medium', 'high']
 const SOURCES = ['referral', 'website', 'cold_call', 'social_media', 'advertisement', 'other']
 const STATUSES = ['in_discussion', 'hold', 'confirmed', 'rejected']
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  try {
+    const ctx = await getCurrentAccount()
+    const { data: lead, error } = await ctx.supabase
+      .from('client_leads')
+      .select('*, tasks:client_lead_tasks(*)')
+      .eq('id', id)
+      .eq('account_id', ctx.accountId)
+      .maybeSingle()
+    if (error) throw error
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+
+    lead.tasks = (lead.tasks ?? []).sort((a: { position: number }, b: { position: number }) => a.position - b.position)
+
+    return NextResponse.json({ lead })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+}
 
 export async function PATCH(
   request: Request,
