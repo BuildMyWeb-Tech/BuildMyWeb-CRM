@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Users, Plus, Loader2, MoreVertical, Pencil, Trash2, List as ListIcon, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,15 @@ import {
 } from "@/components/ui/select";
 import type { Client, ClientStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { useCachedResource } from "@/hooks/use-cached-resource";
+import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+
+async function fetchClients(): Promise<Client[]> {
+  const res = await fetch("/api/clients");
+  if (!res.ok) throw new Error("Could not load clients");
+  return (await res.json()).clients ?? [];
+}
 
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
 const STATUS_STYLE: Record<ClientStatus, string> = {
@@ -46,7 +54,11 @@ const STATUS_STYLE: Record<ClientStatus, string> = {
 // independently.
 export default function ClientsPage() {
   const { canCreate, canUpdate, canDelete } = usePagePermissions("client_directory");
-  const [clients, setClients] = useState<Client[] | null>(null);
+  const { accountId } = useAuth();
+  const { data: clients, refresh: loadClients } = useCachedResource(
+    accountId ? `clients-list:${accountId}` : null,
+    fetchClients,
+  );
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
     return window.localStorage.getItem("clients-view") === "list" ? "list" : "grid";
@@ -74,18 +86,6 @@ export default function ClientsPage() {
     setViewMode(mode);
     window.localStorage.setItem("clients-view", mode);
   }
-
-  async function loadClients() {
-    const res = await fetch("/api/clients");
-    if (res.ok) {
-      const data = await res.json();
-      setClients(data.clients);
-    }
-  }
-
-  useEffect(() => {
-    loadClients();
-  }, []);
 
   async function handleCreate() {
     const trimmed = name.trim();

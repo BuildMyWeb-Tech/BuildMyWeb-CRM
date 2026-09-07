@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
+import { resolveCommonStatusId } from "@/lib/kanban/resolve-common-status";
 import { toast } from "sonner";
 
 // Create/edit dialog for a Daily Task. Direct RLS-scoped writes to
@@ -89,23 +90,104 @@ export function DailyTaskForm({
     setTargetDate(task?.target_date ?? "");
   }, [open, task, defaultStageId, stages]);
 
+  // Keeps the mirrored `project_tasks` row (see
+  // 064_daily_task_project_link.sql) in lockstep with this form's
+  // fields whenever a Project is selected — that row is what makes
+  // the task actually show up on that project's own board and the
+  // unified cross-project Kanban, which only ever read project_tasks.
+  // Returns the linked_project_task_id to persist on the daily_tasks
+  // row (null if no project is selected, in which case any previous
+  // mirror is deleted rather than left behind as a stale card).
+  async function syncLinkedProjectTask(existingLinkId: string | null): Promise<string | null> {
+    const trimmedTitle = title.trim();
+    const resolvedAssignee = assigneeId === "__unassigned__" ? null : assigneeId;
+    const resolvedDueDate = targetDate || null;
+
+    if (projectId === "__none__") {
+      if (existingLinkId) {
+        await supabase.from("project_tasks").delete().eq("id", existingLinkId);
+      }
+      return null;
+    }
+
+    if (existingLinkId) {
+      const { error } = await supabase
+        .from("project_tasks")
+        .update({ title: trimmedTitle, assignee_user_id: resolvedAssignee, priority, due_date: resolvedDueDate })
+        .eq("id", existingLinkId);
+      if (error) {
+        console.error("[daily-tasks] linked project task update failed:", error);
+        toast.error("Task saved, but couldn't update its project board card.");
+      }
+      return existingLinkId;
+    }
+
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return null;
+
+    const { data: firstStage } = await supabase
+      .from("pipeline_stages")
+      .select("id")
+      .eq("pipeline_id", project.pipeline_id)
+      .order("position", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!firstStage) {
+      toast.error("Task saved, but that project has no board columns yet — couldn't add it to the board.");
+      return null;
+    }
+
+    const commonStatusId = await resolveCommonStatusId(supabase, accountId, firstStage.id);
+    const { count } = await supabase
+      .from("project_tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("stage_id", firstStage.id);
+
+    const { data: newProjectTask, error } = await supabase
+      .from("project_tasks")
+      .insert({
+        account_id: accountId,
+        project_id: projectId,
+        stage_id: firstStage.id,
+        common_status_id: commonStatusId,
+        title: trimmedTitle,
+        assignee_user_id: resolvedAssignee,
+        priority,
+        due_date: resolvedDueDate,
+        checklist: [],
+        position: count ?? 0,
+      })
+      .select("id")
+      .single();
+
+    if (error || !newProjectTask) {
+      console.error("[daily-tasks] linked project task creation failed:", error);
+      toast.error("Task saved, but couldn't add it to the project board.");
+      return null;
+    }
+    return newProjectTask.id;
+  }
+
   async function handleSave() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
     setSaving(true);
 
-    const payload = {
-      title: trimmedTitle,
-      brief: brief.trim() || null,
-      stage_id: stageId,
-      client_id: clientId === "__none__" ? null : clientId,
-      project_id: projectId === "__none__" ? null : projectId,
-      assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
-      priority,
-      target_date: targetDate || null,
-    };
-
     try {
+      const linkedProjectTaskId = await syncLinkedProjectTask(task?.linked_project_task_id ?? null);
+
+      const payload = {
+        title: trimmedTitle,
+        brief: brief.trim() || null,
+        stage_id: stageId,
+        client_id: clientId === "__none__" ? null : clientId,
+        project_id: projectId === "__none__" ? null : projectId,
+        assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
+        priority,
+        target_date: targetDate || null,
+        linked_project_task_id: linkedProjectTaskId,
+      };
+
       if (isEditing) {
         const { error } = await supabase.from("daily_tasks").update(payload).eq("id", task!.id);
         if (error) {
@@ -135,6 +217,9 @@ export function DailyTaskForm({
     if (!task) return;
     setDeleting(true);
     try {
+      if (task.linked_project_task_id) {
+        await supabase.from("project_tasks").delete().eq("id", task.linked_project_task_id);
+      }
       const { error } = await supabase.from("daily_tasks").delete().eq("id", task.id);
       if (error) {
         toast.error("Could not delete task.");

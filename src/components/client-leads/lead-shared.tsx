@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -181,6 +181,173 @@ export function TaskChecklist({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Grouped-by-enquiry flat task list — the Client Enquiry "All Tasks"
+// tab, reused verbatim by Daily Tasks' "Enquiry Tasks" tab (same
+// component, same API calls) so the two can never drift out of sync
+// with each other.
+export interface TaskGroup {
+  leadId: string;
+  leadTitle: string;
+  tasks: ClientLeadTask[];
+  /** Optional extra context columns in the group header — shown when
+   * given, omitted otherwise, so callers that don't have them (or
+   * deliberately don't want them, like Client Enquiry's own "All
+   * Tasks" tab) aren't forced to render empty badges. */
+  leadPriority?: LeadPriority;
+  leadStatus?: LeadStatus;
+}
+
+export function AllTasksTab({
+  groups,
+  canEdit,
+  onChanged,
+}: {
+  groups: TaskGroup[];
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [renaming, setRenaming] = useState<{ leadId: string; taskId: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  async function toggle(leadId: string, task: ClientLeadTask) {
+    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_done: !task.is_done }),
+    });
+    if (!res.ok) {
+      toast.error("Could not update task.");
+      return;
+    }
+    onChanged();
+  }
+
+  async function remove(leadId: string, task: ClientLeadTask) {
+    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Could not delete task.");
+      return;
+    }
+    onChanged();
+  }
+
+  function startRename(leadId: string, task: ClientLeadTask) {
+    setRenaming({ leadId, taskId: task.id });
+    setRenameValue(task.title);
+  }
+
+  async function submitRename() {
+    if (!renaming) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      setRenaming(null);
+      return;
+    }
+    const res = await fetch(`/api/client-leads/${renaming.leadId}/tasks/${renaming.taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: trimmed }),
+    });
+    setRenaming(null);
+    if (!res.ok) {
+      toast.error("Could not rename task.");
+      return;
+    }
+    onChanged();
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
+        <p className="text-sm text-muted-foreground">No tasks across any enquiry yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 flex flex-col gap-4">
+      {groups.map((group) => (
+        <div key={group.leadId} className="rounded-lg border border-border">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.leadTitle}</p>
+            {group.leadPriority && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${PRIORITY_STYLE[group.leadPriority]}`}>
+                {group.leadPriority}
+              </span>
+            )}
+            {group.leadStatus && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${STATUS_STYLE[group.leadStatus]}`}>
+                {STATUS_LABEL[group.leadStatus]}
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-border">
+            {group.tasks.map((task) => {
+              const isRenaming = renaming?.leadId === group.leadId && renaming?.taskId === task.id;
+              return (
+                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => canEdit && toggle(group.leadId, task)}
+                    disabled={!canEdit}
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      task.is_done ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                    }`}
+                    aria-label={task.is_done ? "Mark as not done" : "Mark as done"}
+                  >
+                    {task.is_done && <CheckCircle2 className="h-3 w-3" />}
+                  </button>
+                  {isRenaming ? (
+                    <>
+                      <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                        className="h-7 flex-1 border-border bg-muted text-sm text-foreground"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitRename();
+                          if (e.key === "Escape") setRenaming(null);
+                        }}
+                      />
+                      <button type="button" onClick={submitRename} className="shrink-0 text-emerald-500 hover:text-emerald-400" aria-label="Save">
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <span className={`flex-1 truncate text-sm ${task.is_done ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                      {task.title}
+                    </span>
+                  )}
+                  {canEdit && !isRenaming && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startRename(group.leadId, task)}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="Edit task title"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => remove(group.leadId, task)}
+                        className="shrink-0 text-muted-foreground hover:text-red-400"
+                        aria-label="Delete task"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

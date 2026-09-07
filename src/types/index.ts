@@ -734,6 +734,11 @@ export interface DailyTask {
   assignee_user_id: string | null;
   priority: TaskPriority;
   target_date: string | null;
+  /** Set when `project_id` is also set — the mirrored row this Daily
+   *  Task keeps in sync on that project's own Kanban board (and, via
+   *  common_status_id, the unified cross-project board). See
+   *  064_daily_task_project_link.sql. */
+  linked_project_task_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

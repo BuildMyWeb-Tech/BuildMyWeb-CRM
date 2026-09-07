@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListTodo, Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
+import { ListTodo, Loader2, Plus, SlidersHorizontal, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
+import { AllTasksTab, type TaskGroup } from "@/components/client-leads/lead-shared";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { fetchAccountMembers } from "@/hooks/use-account-members";
@@ -15,6 +16,7 @@ import type {
   PipelineStage,
   AccountMember,
   Client,
+  ClientLead,
   Project,
   ProjectTask,
   Pipeline,
@@ -75,6 +77,8 @@ export default function DailyTasksPage() {
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
+  const [tab, setTab] = useState<"project" | "enquiry">("project");
+  const [leads, setLeads] = useState<ClientLead[] | null>(null);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -178,14 +182,18 @@ export default function DailyTasksPage() {
         .from("project_tasks")
         .select("*, project:projects(id,name), stage:pipeline_stages(name,color)")
         .eq("account_id", accountId),
+      // Same endpoint Client Enquiry's own "All Tasks" tab calls —
+      // the "Enquiry Tasks" tab here is that exact list, reused.
+      fetch("/api/client-leads").then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(async ([pipelineRes, membersRows, clientsData, projectsData, projectTasksRes]) => {
+      .then(async ([pipelineRes, membersRows, clientsData, projectsData, projectTasksRes, leadsData]) => {
         const pipelineRow = pipelineRes.data as Pipeline | null;
         setPipeline(pipelineRow);
         setMembers(membersRows);
         if (clientsData) setClients(clientsData.clients ?? []);
         if (projectsData) setProjects(projectsData.projects ?? []);
         setProjectTasks((projectTasksRes.data ?? []) as ProjectTask[]);
+        if (leadsData) setLeads(leadsData.leads ?? []);
 
         if (pipelineRow) {
           const [stagesRes, tasksRes] = await Promise.all([
@@ -274,6 +282,19 @@ export default function DailyTasksPage() {
     );
   }
 
+  // Same grouping Client Enquiry's own "All Tasks" tab builds — kept
+  // here too (not just imported behavior) so both surfaces show the
+  // literal same data, not a lookalike.
+  const taskGroups: TaskGroup[] = (leads ?? [])
+    .filter((l) => l.status !== "rejected" && (l.tasks ?? []).length > 0)
+    .map((lead) => ({
+      leadId: lead.id,
+      leadTitle: lead.title,
+      tasks: lead.tasks ?? [],
+      leadPriority: lead.priority,
+      leadStatus: lead.status,
+    }));
+
   const filteredTasks = unifiedRows.filter((t) => {
     if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
     if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
@@ -298,16 +319,18 @@ export default function DailyTasksPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Daily Tasks</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
-            <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                {activeFilterCount}
-              </span>
-            )}
-          </Button>
-          {canCreateTask && (
+          {tab === "project" && (
+            <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
+              <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          )}
+          {tab === "project" && canCreateTask && (
             <Button onClick={openNewTask}>
               <Plus className="mr-1.5 h-4 w-4" />
               New task
@@ -316,10 +339,37 @@ export default function DailyTasksPage() {
         </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        {filteredTasks.length} of {unifiedRows.length} task{unifiedRows.length === 1 ? "" : "s"}
-        {activeFilterCount > 0 ? " — filtered" : ""}
+        {tab === "project"
+          ? `${filteredTasks.length} of ${unifiedRows.length} task${unifiedRows.length === 1 ? "" : "s"}${activeFilterCount > 0 ? " — filtered" : ""}`
+          : "Every task on every open Client Enquiry, grouped by enquiry — the same list as its own “All Tasks” tab."}
       </p>
 
+      <div className="mt-4 flex items-center gap-1 border-b border-border">
+        <button
+          type="button"
+          onClick={() => setTab("project")}
+          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            tab === "project" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Project Tasks
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("enquiry")}
+          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            tab === "enquiry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          Enquiry Tasks
+        </button>
+      </div>
+
+      {tab === "enquiry" ? (
+        <AllTasksTab groups={taskGroups} canEdit={canCreateTask} onChanged={load} />
+      ) : (
+        <>
       {/* Filters — a slide-in panel from the left (icon-triggered,
           not a permanent side column) so the table gets the full
           page width; content and behavior are unchanged from the
@@ -485,6 +535,8 @@ export default function DailyTasksPage() {
           )}
         </div>
       </div>
+        </>
+      )}
 
       {accountId && user && (
         <DailyTaskForm

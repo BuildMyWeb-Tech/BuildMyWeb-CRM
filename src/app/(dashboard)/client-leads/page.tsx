@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   UserPlus,
@@ -18,12 +18,10 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
-  X,
   AlertTriangle,
   FolderOpen,
   ListTodo,
   Info,
-  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +43,7 @@ import { FileManager } from "@/components/files/file-manager";
 import {
   LeadFormDialog,
   TaskChecklist,
+  AllTasksTab,
   PRIORITIES,
   PRIORITY_STYLE,
   STATUS_STYLE,
@@ -55,11 +54,18 @@ import {
   formatFollowUp,
   isOverdue,
 } from "@/components/client-leads/lead-shared";
-import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadSource, LeadStatus } from "@/types";
+import type { AccountMember, ClientLead, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { useAccountMembers } from "@/hooks/use-account-members";
+import { useCachedResource } from "@/hooks/use-cached-resource";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+
+async function fetchLeads(): Promise<ClientLead[]> {
+  const res = await fetch("/api/client-leads");
+  if (!res.ok) throw new Error("Could not load leads");
+  return (await res.json()).leads ?? [];
+}
 
 // Client Leads/Enquiry — everything that's still "in discussion",
 // one stage before Client Directory. A lead here either gets
@@ -70,7 +76,10 @@ import { toast } from "sonner";
 export default function ClientLeadsPage() {
   const { accountId, user } = useAuth();
   const { canCreate, canUpdate, canDelete } = usePagePermissions("client_leads");
-  const [leads, setLeads] = useState<ClientLead[] | null>(null);
+  const { data: leads, refresh: load } = useCachedResource(
+    accountId ? `client-leads-list:${accountId}` : null,
+    fetchLeads,
+  );
   const { members } = useAccountMembers();
   const [tab, setTab] = useState<"enquiries" | "tasks">("enquiries");
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
@@ -88,16 +97,6 @@ export default function ClientLeadsPage() {
     setViewMode(mode);
     window.localStorage.setItem("client-leads-view", mode);
   }
-
-  async function load() {
-    const leadsRes = await fetch("/api/client-leads");
-    if (leadsRes.ok) setLeads((await leadsRes.json()).leads ?? []);
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, []);
 
   const membersById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
 
@@ -369,147 +368,6 @@ export default function ClientLeadsPage() {
         members={members}
         onSaved={load}
       />
-    </div>
-  );
-}
-
-function AllTasksTab({
-  groups,
-  canEdit,
-  onChanged,
-}: {
-  groups: { leadId: string; leadTitle: string; tasks: ClientLeadTask[] }[];
-  canEdit: boolean;
-  onChanged: () => void;
-}) {
-  const [renaming, setRenaming] = useState<{ leadId: string; taskId: string } | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-
-  async function toggle(leadId: string, task: ClientLeadTask) {
-    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_done: !task.is_done }),
-    });
-    if (!res.ok) {
-      toast.error("Could not update task.");
-      return;
-    }
-    onChanged();
-  }
-
-  async function remove(leadId: string, task: ClientLeadTask) {
-    const res = await fetch(`/api/client-leads/${leadId}/tasks/${task.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      toast.error("Could not delete task.");
-      return;
-    }
-    onChanged();
-  }
-
-  function startRename(leadId: string, task: ClientLeadTask) {
-    setRenaming({ leadId, taskId: task.id });
-    setRenameValue(task.title);
-  }
-
-  async function submitRename() {
-    if (!renaming) return;
-    const trimmed = renameValue.trim();
-    if (!trimmed) {
-      setRenaming(null);
-      return;
-    }
-    const res = await fetch(`/api/client-leads/${renaming.leadId}/tasks/${renaming.taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: trimmed }),
-    });
-    setRenaming(null);
-    if (!res.ok) {
-      toast.error("Could not rename task.");
-      return;
-    }
-    onChanged();
-  }
-
-  if (groups.length === 0) {
-    return (
-      <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
-        <p className="text-sm text-muted-foreground">No tasks across any enquiry yet.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-6 flex flex-col gap-4">
-      {groups.map((group) => (
-        <div key={group.leadId} className="rounded-lg border border-border">
-          <div className="border-b border-border bg-muted/40 px-4 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.leadTitle}</p>
-          </div>
-          <div className="divide-y divide-border">
-            {group.tasks.map((task) => {
-              const isRenaming = renaming?.leadId === group.leadId && renaming?.taskId === task.id;
-              return (
-                <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <button
-                    type="button"
-                    onClick={() => canEdit && toggle(group.leadId, task)}
-                    disabled={!canEdit}
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                      task.is_done ? "border-primary bg-primary text-primary-foreground" : "border-border"
-                    }`}
-                    aria-label={task.is_done ? "Mark as not done" : "Mark as done"}
-                  >
-                    {task.is_done && <CheckCircle2 className="h-3 w-3" />}
-                  </button>
-                  {isRenaming ? (
-                    <>
-                      <Input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        autoFocus
-                        className="h-7 flex-1 border-border bg-muted text-sm text-foreground"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") submitRename();
-                          if (e.key === "Escape") setRenaming(null);
-                        }}
-                      />
-                      <button type="button" onClick={submitRename} className="shrink-0 text-emerald-500 hover:text-emerald-400" aria-label="Save">
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                    </>
-                  ) : (
-                    <span className={`flex-1 truncate text-sm ${task.is_done ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                      {task.title}
-                    </span>
-                  )}
-                  {canEdit && !isRenaming && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => startRename(group.leadId, task)}
-                        className="shrink-0 text-muted-foreground hover:text-foreground"
-                        aria-label="Edit task title"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => remove(group.leadId, task)}
-                        className="shrink-0 text-muted-foreground hover:text-red-400"
-                        aria-label="Delete task"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

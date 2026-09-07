@@ -73,12 +73,37 @@ export async function PATCH(
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 
-  const { error } = await supabaseAdmin()
+  const admin = supabaseAdmin()
+  const { error } = await admin
     .from('clients')
     .update(update)
     .eq('id', id)
     .eq('account_id', ctx.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Client status is the source of truth for the relationship — a
+  // client going inactive/archived should carry its project(s) along
+  // rather than leaving them showing "active" while the client isn't.
+  // One-directional (client -> its projects), not the other way: a
+  // client can have multiple projects in different states, so there's
+  // no single sensible status to bounce back onto the client.
+  if (typeof update.status === 'string') {
+    const projectStatus: Record<string, string> = {
+      active: 'active',
+      inactive: 'on_hold',
+      archived: 'cancelled',
+    }
+    const mapped = projectStatus[update.status]
+    if (mapped) {
+      const { error: projectError } = await admin
+        .from('projects')
+        .update({ status: mapped })
+        .eq('client_id', id)
+        .eq('account_id', ctx.accountId)
+      if (projectError) console.error('[clients] project status cascade failed:', projectError)
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
 
