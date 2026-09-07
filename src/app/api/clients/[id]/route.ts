@@ -81,27 +81,22 @@ export async function PATCH(
     .eq('account_id', ctx.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Client status is the source of truth for the relationship — a
-  // client going inactive/archived should carry its project(s) along
-  // rather than leaving them showing "active" while the client isn't.
-  // One-directional (client -> its projects), not the other way: a
-  // client can have multiple projects in different states, so there's
-  // no single sensible status to bounce back onto the client.
+  // Client and Project status now share one vocabulary
+  // (065_unify_project_client_status.sql) specifically so this
+  // cascade can be a direct copy — a client going inactive/archived
+  // carries its project(s) along instead of leaving them showing
+  // "active" while the client isn't. One-directional here (client ->
+  // its projects): a client can have multiple projects, so there's
+  // no ambiguity going this way, unlike the reverse (see the
+  // matching cascade in PATCH /api/projects/[id], which only ever
+  // has exactly one client to bounce back to).
   if (typeof update.status === 'string') {
-    const projectStatus: Record<string, string> = {
-      active: 'active',
-      inactive: 'on_hold',
-      archived: 'cancelled',
-    }
-    const mapped = projectStatus[update.status]
-    if (mapped) {
-      const { error: projectError } = await admin
-        .from('projects')
-        .update({ status: mapped })
-        .eq('client_id', id)
-        .eq('account_id', ctx.accountId)
-      if (projectError) console.error('[clients] project status cascade failed:', projectError)
-    }
+    const { error: projectError } = await admin
+      .from('projects')
+      .update({ status: update.status })
+      .eq('client_id', id)
+      .eq('account_id', ctx.accountId)
+    if (projectError) console.error('[clients] project status cascade failed:', projectError)
   }
 
   return NextResponse.json({ ok: true })

@@ -77,7 +77,7 @@ export async function PATCH(
   if ('start_date' in body) update.start_date = body.start_date ?? null
   if ('due_date' in body) update.due_date = body.due_date ?? null
   if (typeof body.status === 'string') {
-    if (!['active', 'on_hold', 'completed', 'cancelled'].includes(body.status)) {
+    if (!['active', 'inactive', 'archived'].includes(body.status)) {
       return NextResponse.json({ error: 'invalid status' }, { status: 400 })
     }
     update.status = body.status
@@ -85,12 +85,29 @@ export async function PATCH(
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 
-  const { error } = await supabaseAdmin()
+  const admin = supabaseAdmin()
+  const { data: updated, error } = await admin
     .from('projects')
     .update(update)
     .eq('id', id)
     .eq('account_id', ctx.accountId)
+    .select('client_id')
+    .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Same interlink as the client -> project cascade in
+  // PATCH /api/clients/[id], mirrored back the other way — the two
+  // now share one status vocabulary (065_unify_project_client_status.sql)
+  // specifically so this can just be a direct copy, no mapping.
+  if (typeof update.status === 'string' && updated?.client_id) {
+    const { error: clientError } = await admin
+      .from('clients')
+      .update({ status: update.status })
+      .eq('id', updated.client_id)
+      .eq('account_id', ctx.accountId)
+    if (clientError) console.error('[projects] client status cascade failed:', clientError)
+  }
+
   return NextResponse.json({ ok: true })
 }
 

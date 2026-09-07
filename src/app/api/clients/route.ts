@@ -94,7 +94,8 @@ export async function POST(request: Request) {
         pipeline_id: pipeline.id,
         client_id: client.id,
         name,
-        status: status === 'archived' ? 'cancelled' : 'active',
+        // Same status vocabulary as clients now (065_unify_project_client_status.sql)
+        status,
         owner_user_id: ctx.userId,
       })
       if (projectError) console.error('[clients] auto-project creation failed:', projectError)

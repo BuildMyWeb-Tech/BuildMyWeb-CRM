@@ -119,7 +119,7 @@ export default function UserManagementPage() {
           {users.map((u) => (
             <div key={u.user_id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{u.username}</p>
+                <p className="truncate text-sm font-medium capitalize text-foreground">{u.username}</p>
                 <p className="text-xs capitalize text-muted-foreground">{u.role}</p>
               </div>
               <button

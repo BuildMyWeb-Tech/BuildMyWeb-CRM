@@ -17,6 +17,7 @@
   "Sidebar": {
     "title": "BuildMyWeb CRM",
     "dashboard": "Dashboard",
+    "overview": "Overview",
     "inbox": "Inbox",
     "notifications": "Notifications",
     "contacts": "Contacts",

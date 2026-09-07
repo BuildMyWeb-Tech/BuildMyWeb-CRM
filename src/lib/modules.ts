@@ -35,6 +35,7 @@ import {
   PenSquare,
   Phone,
   Radio,
+  Rows3,
   UserPlus,
   Users,
   Users2,
@@ -74,6 +75,10 @@ export interface CrmModule {
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, minRole: "viewer" },
+  // No pageKey, same as Dashboard — it only aggregates data other
+  // pages already gate their own way (project tasks, enquiry tasks,
+  // active projects), nothing new to grant/deny here.
+  { href: "/overview", labelKey: "overview", icon: Rows3, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,

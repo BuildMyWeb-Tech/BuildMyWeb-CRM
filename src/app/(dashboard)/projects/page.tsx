@@ -45,15 +45,26 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import type { Project, ProjectStatus } from "@/types";
 import { toast } from "sonner";
 
+// Same 3 values and the same styling as Client Directory's own
+// STATUS_STYLE (src/app/(dashboard)/clients/page.tsx) — the two are
+// interlinked (065_unify_project_client_status.sql), so they should
+// look interlinked too, not just share a data model.
+const STATUSES: ProjectStatus[] = ["active", "inactive", "archived"];
 const STATUS_STYLE: Record<ProjectStatus, string> = {
   active: "bg-primary/10 text-primary",
-  on_hold: "bg-amber-500/15 text-amber-500",
-  completed: "bg-emerald-500/15 text-emerald-500",
-  cancelled: "bg-muted text-muted-foreground",
+  inactive: "bg-amber-500/15 text-amber-500",
+  archived: "bg-muted text-muted-foreground",
 };
 
 // Projects list — client projects each get their own task board
@@ -68,6 +79,7 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
 
   async function loadProjects() {
     const res = await fetch("/api/projects");
@@ -111,6 +123,8 @@ export default function ProjectsPage() {
     }
   }
 
+  const visibleProjects = (projects ?? []).filter((p) => statusFilter === "all" || p.status === statusFilter);
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -120,10 +134,25 @@ export default function ProjectsPage() {
             Projects
           </h1>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          New project
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v as "all" | ProjectStatus)}>
+            <SelectTrigger size="sm">
+              <SelectValue className="truncate capitalize">
+                {(v: string) => (v === "all" ? "Status: All" : `Status: ${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value="all">Status: All</SelectItem>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            New project
+          </Button>
+        </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Each project gets its own task board. Not every project needs a
@@ -143,9 +172,13 @@ export default function ProjectsPage() {
             Create your first project
           </Button>
         </div>
+      ) : visibleProjects.length === 0 ? (
+        <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
+          <p className="text-sm text-muted-foreground">No projects match this filter.</p>
+        </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => (
+          {visibleProjects.map((p) => (
             <Link key={p.id} href={`/projects/${p.id}`}>
               <Card className="h-full transition-colors hover:border-primary/40">
                 <CardHeader>

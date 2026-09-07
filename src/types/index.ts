@@ -397,7 +397,12 @@ export interface Deal {
 // Client Projects module (Phase 2)
 // ============================================================
 
-export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'cancelled';
+// Same vocabulary as ClientStatus (declared further below) — see
+// 065_unify_project_client_status.sql. Kept as its own named type
+// (not a re-export of ClientStatus) since the two describe different
+// entities and evolving one shouldn't silently change the other's
+// type signature.
+export type ProjectStatus = 'active' | 'inactive' | 'archived';
 
 export interface Project {
   id: string;
