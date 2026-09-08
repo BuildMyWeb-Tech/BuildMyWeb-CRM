@@ -1,28 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Rows3, ListTodo, UserPlus as UserPlusIcon, KanbanSquare, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Rows3, ListTodo, UserPlus as UserPlusIcon, KanbanSquare, FolderKanban } from "lucide-react";
 import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
+import { KanbanBoardView } from "@/components/kanban/kanban-board-view";
 import { AllTasksTab, type TaskGroup } from "@/components/client-leads/lead-shared";
+import { ProjectStatusGroups } from "@/components/overview/project-status-groups";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
-import type { ClientLead, Project, ProjectStatus } from "@/types";
+import { useAccountMembers } from "@/hooks/use-account-members";
+import type { ClientLead, LeadStatus, Project } from "@/types";
+import { toast } from "sonner";
 
-const STATUS_STYLE: Record<ProjectStatus, string> = {
-  active: "bg-primary/10 text-primary",
-  inactive: "bg-amber-500/15 text-amber-500",
-  archived: "bg-muted text-muted-foreground",
-};
+type OverviewTab = "project" | "enquiry" | "projects" | "kanban";
 
 // Overview — the landing hub next to Dashboard: every task worth
-// tracking (Project Tasks, Enquiry Tasks — same components/APIs as
-// their own pages, reused verbatim) plus a running list of active
-// projects, all in one place instead of hopping between pages to
-// check status.
+// tracking (Project Tasks, Enquiry Tasks, Kanban — all reused
+// verbatim from their own pages, not lookalikes) plus the full
+// project roster grouped by status.
 export default function OverviewPage() {
   const { canUpdate: canEditLeadTasks } = usePagePermissions("client_leads");
-  const [tab, setTab] = useState<"project" | "enquiry">("project");
+  const { members } = useAccountMembers();
+  const [tab, setTab] = useState<OverviewTab>("project");
   const [leads, setLeads] = useState<ClientLead[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
 
@@ -41,6 +39,8 @@ export default function OverviewPage() {
       });
   }, []);
 
+  const membersById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
+
   const taskGroups: TaskGroup[] = (leads ?? [])
     .filter((l) => l.status !== "rejected" && (l.tasks ?? []).length > 0)
     .map((lead) => ({
@@ -49,9 +49,59 @@ export default function OverviewPage() {
       tasks: lead.tasks ?? [],
       leadPriority: lead.priority,
       leadStatus: lead.status,
+      leadPhone: lead.phone,
+      leadAllocatedName: lead.allocated_user_id ? membersById.get(lead.allocated_user_id)?.full_name : null,
     }));
 
-  const activeProjects = (projects ?? []).filter((p) => p.status === "active");
+  async function handleConfirmLead(leadId: string) {
+    const lead = leads?.find((l) => l.id === leadId);
+    if (!lead) return;
+    if (!window.confirm(`Confirm "${lead.title}" as a client? This moves it into Client Directory.`)) return;
+    const res = await fetch(`/api/client-leads/${leadId}/confirm`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data?.error ?? "Could not confirm this lead.");
+      return;
+    }
+    loadLeads();
+    toast.success(`"${lead.title}" moved to Client Directory.`);
+  }
+
+  async function handleRejectLead(leadId: string) {
+    const lead = leads?.find((l) => l.id === leadId);
+    if (!lead) return;
+    if (!window.confirm(`Reject "${lead.title}"? This deletes the lead — this can't be undone.`)) return;
+    const res = await fetch(`/api/client-leads/${leadId}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Could not reject this lead.");
+      return;
+    }
+    loadLeads();
+    toast.success("Lead rejected and removed.");
+  }
+
+  async function handleToggleHoldLead(leadId: string) {
+    const lead = leads?.find((l) => l.id === leadId);
+    if (!lead) return;
+    const nextStatus: LeadStatus = lead.status === "hold" ? "in_discussion" : "hold";
+    const res = await fetch(`/api/client-leads/${leadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    if (!res.ok) {
+      toast.error("Could not update status.");
+      return;
+    }
+    loadLeads();
+  }
+
+  const TABS: { key: OverviewTab; label: string; icon: typeof ListTodo }[] = [
+    { key: "project", label: "Project Tasks", icon: ListTodo },
+    { key: "enquiry", label: "Enquiry Tasks", icon: UserPlusIcon },
+    { key: "projects", label: "Projects", icon: FolderKanban },
+    { key: "kanban", label: "Kanban", icon: KanbanSquare },
+  ];
 
   return (
     <div>
@@ -60,78 +110,39 @@ export default function OverviewPage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Overview</h1>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Every task worth tracking, and every active project, in one place.
+        Every task worth tracking, every project, and the board — all in one place.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1 border-b border-border">
-            <button
-              type="button"
-              onClick={() => setTab("project")}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-                tab === "project" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <ListTodo className="h-3.5 w-3.5" />
-              Project Tasks
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("enquiry")}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-                tab === "enquiry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <UserPlusIcon className="h-3.5 w-3.5" />
-              Enquiry Tasks
-            </button>
-          </div>
+      <div className="mt-6 flex items-center gap-1 border-b border-border">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === t.key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <t.icon className="h-3.5 w-3.5" />
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          <div className="mt-4">
-            {tab === "project" ? (
-              <UnifiedTasksView />
-            ) : (
-              <AllTasksTab groups={taskGroups} canEdit={canEditLeadTasks} onChanged={loadLeads} />
-            )}
-          </div>
-        </div>
-
-        <div className="shrink-0">
-          <div className="flex items-center gap-1.5">
-            <KanbanSquare className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Active projects</h2>
-          </div>
-          {projects === null ? (
-            <div className="mt-6 flex justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : activeProjects.length === 0 ? (
-            <p className="mt-3 text-xs text-muted-foreground">No active projects right now.</p>
-          ) : (
-            <div className="mt-3 flex flex-col gap-2">
-              {activeProjects.map((p) => (
-                <Link key={p.id} href={`/projects/${p.id}`}>
-                  <Card className="transition-colors hover:border-primary/40">
-                    <CardHeader className="pb-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-sm">{p.name}</CardTitle>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[p.status]}`}>
-                          {p.status}
-                        </span>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-1.5">
-                      <p className="truncate text-xs text-muted-foreground">
-                        {p.client_name || "No client set"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className="mt-4">
+        {tab === "project" && <UnifiedTasksView />}
+        {tab === "enquiry" && (
+          <AllTasksTab
+            groups={taskGroups}
+            canEdit={canEditLeadTasks}
+            onChanged={loadLeads}
+            onConfirmLead={canEditLeadTasks ? handleConfirmLead : undefined}
+            onRejectLead={canEditLeadTasks ? handleRejectLead : undefined}
+            onToggleHoldLead={canEditLeadTasks ? handleToggleHoldLead : undefined}
+          />
+        )}
+        {tab === "projects" && <ProjectStatusGroups projects={projects ?? []} />}
+        {tab === "kanban" && <KanbanBoardView />}
       </div>
     </div>
   );

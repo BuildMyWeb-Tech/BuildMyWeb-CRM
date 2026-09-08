@@ -2,8 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, Plus, SlidersHorizontal, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
@@ -226,19 +233,37 @@ export function UnifiedTasksView() {
       dateValue: t.target_date,
       daily: t,
     }));
-    const projectRows: UnifiedRow[] = projectTasks.map((t) => ({
-      kind: "project",
-      id: t.id,
-      title: t.title,
-      stageId: t.stage_id,
-      stageName: t.stage?.name ?? null,
-      stageColor: t.stage?.color ?? null,
-      clientId: projectClientById.get(t.project_id) ?? null,
-      projectId: t.project_id,
-      priority: t.priority,
-      assigneeUserId: t.assignee_user_id,
-      dateValue: t.due_date,
-    }));
+    // A Daily Task with a project selected mirrors itself into a
+    // project_tasks row (see daily-task-form.tsx's syncLinkedProjectTask
+    // and 064_daily_task_project_link.sql) so it shows up on that
+    // project's own board — but that means the SAME task now has a
+    // row in both `tasks` and `projectTasks` here. Without excluding
+    // the mirror, it rendered as two separate table rows for one
+    // task (reported: created once, showed twice; deleting either
+    // row deleted both underneath, which looked like data loss).
+    // The daily_tasks row is the one this table lets you edit
+    // in-place (DailyTaskForm), so that's the row that stays; its
+    // project_tasks mirror is dropped from THIS list — it still
+    // exists and still shows on the project's own board, just not
+    // duplicated here.
+    const linkedProjectTaskIds = new Set(
+      tasks.map((t) => t.linked_project_task_id).filter((id): id is string => !!id),
+    );
+    const projectRows: UnifiedRow[] = projectTasks
+      .filter((t) => !linkedProjectTaskIds.has(t.id))
+      .map((t) => ({
+        kind: "project",
+        id: t.id,
+        title: t.title,
+        stageId: t.stage_id,
+        stageName: t.stage?.name ?? null,
+        stageColor: t.stage?.color ?? null,
+        clientId: projectClientById.get(t.project_id) ?? null,
+        projectId: t.project_id,
+        priority: t.priority,
+        assigneeUserId: t.assignee_user_id,
+        dateValue: t.due_date,
+      }));
     return [...dailyRows, ...projectRows].sort((a, b) => {
       if (!a.dateValue && !b.dateValue) return 0;
       if (!a.dateValue) return 1;
@@ -280,9 +305,50 @@ export function UnifiedTasksView() {
     return true;
   });
 
+  function quickSetAssignee(id: string) {
+    const next = id === "all" ? new Set<string>() : new Set([id]);
+    setAssigneeFilter(next);
+    window.localStorage.setItem("daily-tasks-assignee-filter", JSON.stringify([...next]));
+  }
+  function quickSetPriority(p: string) {
+    const next = p === "all" ? new Set<TaskPriority>() : new Set([p as TaskPriority]);
+    setPriorityFilter(next);
+    window.localStorage.setItem("daily-tasks-priority-filter", JSON.stringify([...next]));
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* Quick filters — single-pick shortcuts ahead of the full
+            Filters drawer, same row (same pattern on the Kanban
+            page). Write into the same Sets the drawer's chips use. */}
+        <Select value={assigneeFilter.size === 1 ? [...assigneeFilter][0] : "all"} onValueChange={(v) => v && quickSetAssignee(v)}>
+          <SelectTrigger size="sm">
+            <User className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue className="truncate">
+              {(v: string) => (v === "all" ? "People: All" : members.find((m) => m.user_id === v)?.full_name ?? "People: All")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectItem value="all">People: All</SelectItem>
+            {members.map((m) => (
+              <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={priorityFilter.size === 1 ? [...priorityFilter][0] : "all"} onValueChange={(v) => v && quickSetPriority(v)}>
+          <SelectTrigger size="sm">
+            <SelectValue className="truncate">
+              {(v: string) => (v === "all" ? "Priority: All" : `Priority: ${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            <SelectItem value="all">Priority: All</SelectItem>
+            {(["low", "normal", "high", "urgent"] as TaskPriority[]).map((p) => (
+              <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
           Filters
@@ -316,8 +382,8 @@ export function UnifiedTasksView() {
         }`}
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-full max-w-xs flex-col overflow-y-auto border-r border-border bg-card p-4 shadow-xl transition-transform duration-200 sm:max-w-sm ${
-          filtersOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-xs flex-col overflow-y-auto border-l border-border bg-card p-4 shadow-xl transition-transform duration-200 sm:max-w-sm ${
+          filtersOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between">

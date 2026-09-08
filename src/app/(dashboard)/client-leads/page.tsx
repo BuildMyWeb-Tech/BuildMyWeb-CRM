@@ -44,6 +44,7 @@ import {
   LeadFormDialog,
   TaskChecklist,
   AllTasksTab,
+  FollowUpDialog,
   PRIORITIES,
   PRIORITY_STYLE,
   STATUS_STYLE,
@@ -402,6 +403,7 @@ function LeadCard({
   // someone actually asks to see its documents.
   const [tasksOpen, setTasksOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   const tasks = lead.tasks ?? [];
   const doneCount = tasks.filter((t) => t.is_done).length;
   const overdue = isOverdue(lead);
@@ -488,10 +490,22 @@ function LeadCard({
             {SOURCE_LABEL[lead.source]}
           </span>
         )}
-        <p className={`flex items-center gap-1 text-xs ${overdue ? "font-semibold text-red-400" : "text-muted-foreground"}`}>
-          {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-          Next follow-up: {formatFollowUp(lead.next_follow_up_at)}
-        </p>
+        <div className={`flex items-center justify-between gap-1 text-xs ${overdue ? "font-semibold text-red-400" : "text-muted-foreground"}`}>
+          <span className="flex items-center gap-1">
+            {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+            Next follow-up: {formatFollowUp(lead.next_follow_up_at)}
+          </span>
+          {overdue && canUpdate && (
+            <button
+              type="button"
+              onClick={() => setFollowUpOpen(true)}
+              className="shrink-0 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25"
+            >
+              Mark done
+            </button>
+          )}
+        </div>
+        <FollowUpDialog open={followUpOpen} onOpenChange={setFollowUpOpen} leadId={lead.id} onSaved={onTasksChanged} />
         <p className="text-xs text-muted-foreground">
           Allocated to: {allocated?.full_name || <span className="italic">Unassigned</span>}
         </p>

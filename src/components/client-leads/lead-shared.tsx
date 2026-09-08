@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X, Pencil, Check } from "lucide-react";
+import { Plus, X, Pencil, Check, ArrowUpRight, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -193,23 +193,50 @@ export interface TaskGroup {
   leadId: string;
   leadTitle: string;
   tasks: ClientLeadTask[];
-  /** Optional extra context columns in the group header — shown when
-   * given, omitted otherwise, so callers that don't have them (or
-   * deliberately don't want them, like Client Enquiry's own "All
-   * Tasks" tab) aren't forced to render empty badges. */
+  /** Optional extra context columns/actions in the group header —
+   * shown when given, omitted otherwise, so callers that don't have
+   * them (or deliberately don't want them, like Client Enquiry's own
+   * "All Tasks" tab, which stays title-only by design) aren't forced
+   * to render empty badges or dead buttons. */
   leadPriority?: LeadPriority;
   leadStatus?: LeadStatus;
+  leadPhone?: string | null;
+  leadAllocatedName?: string | null;
 }
+
+// Status groups sort first (In Discussion, then Hold, then anything
+// else) when leadStatus is provided — a no-op when it isn't, so
+// Client Enquiry's own tab (which doesn't pass it) keeps whatever
+// order its caller built.
+const STATUS_SORT_RANK: Record<LeadStatus, number> = {
+  in_discussion: 0,
+  hold: 1,
+  confirmed: 2,
+  rejected: 3,
+};
 
 export function AllTasksTab({
   groups,
   canEdit,
   onChanged,
+  onConfirmLead,
+  onRejectLead,
+  onToggleHoldLead,
 }: {
   groups: TaskGroup[];
   canEdit: boolean;
   onChanged: () => void;
+  /** Per-group Confirm/Reject/Hold actions — omit to hide the icons
+   * entirely (Client Enquiry's own tab has these one click away via
+   * its own card already, so it doesn't pass them). */
+  onConfirmLead?: (leadId: string) => void;
+  onRejectLead?: (leadId: string) => void;
+  onToggleHoldLead?: (leadId: string) => void;
 }) {
+  const sortedGroups = [...groups].sort((a, b) => {
+    if (!a.leadStatus || !b.leadStatus) return 0;
+    return STATUS_SORT_RANK[a.leadStatus] - STATUS_SORT_RANK[b.leadStatus];
+  });
   const [renaming, setRenaming] = useState<{ leadId: string; taskId: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -270,7 +297,7 @@ export function AllTasksTab({
 
   return (
     <div className="mt-6 flex flex-col gap-4">
-      {groups.map((group) => (
+      {sortedGroups.map((group) => (
         <div key={group.leadId} className="rounded-lg border border-border">
           <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.leadTitle}</p>
@@ -284,6 +311,52 @@ export function AllTasksTab({
                 {STATUS_LABEL[group.leadStatus]}
               </span>
             )}
+            {group.leadAllocatedName && (
+              <span className="text-[10px] text-muted-foreground">→ {group.leadAllocatedName}</span>
+            )}
+            {group.leadPhone && (
+              <a
+                href={whatsappLink(group.leadPhone)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open in WhatsApp"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-emerald-500 hover:bg-emerald-500/10"
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
+            )}
+            <div className="ml-auto flex items-center gap-1">
+              {onToggleHoldLead && (
+                <button
+                  type="button"
+                  onClick={() => onToggleHoldLead(group.leadId)}
+                  aria-label={group.leadStatus === "hold" ? "Resume" : "Put on hold"}
+                  className="flex h-5 w-5 items-center justify-center rounded text-amber-500 hover:bg-amber-500/10"
+                >
+                  {group.leadStatus === "hold" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                </button>
+              )}
+              {onConfirmLead && (
+                <button
+                  type="button"
+                  onClick={() => onConfirmLead(group.leadId)}
+                  aria-label="Confirm to Client Directory"
+                  className="flex h-5 w-5 items-center justify-center rounded text-emerald-500 hover:bg-emerald-500/10"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {onRejectLead && (
+                <button
+                  type="button"
+                  onClick={() => onRejectLead(group.leadId)}
+                  aria-label="Reject"
+                  className="flex h-5 w-5 items-center justify-center rounded text-red-400 hover:bg-red-500/10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="divide-y divide-border">
             {group.tasks.map((task) => {
@@ -349,6 +422,85 @@ export function AllTasksTab({
         </div>
       ))}
     </div>
+  );
+}
+
+// "Mark followed up" — clears an overdue/past follow-up and
+// optionally schedules the next one in the same step, instead of
+// forcing a trip through the full edit dialog just to update one
+// field. Skip = clear it with no new date (next_follow_up_at: null,
+// so the overdue banner goes away without demanding a new date).
+export function FollowUpDialog({
+  open,
+  onOpenChange,
+  leadId,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  leadId: string;
+  onSaved: () => void;
+}) {
+  const [nextFollowUp, setNextFollowUp] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setNextFollowUp("");
+  }, [open]);
+
+  async function submit(value: string | null) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/client-leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ next_follow_up_at: value }),
+      });
+      if (!res.ok) {
+        toast.error("Could not update follow-up.");
+        return;
+      }
+      onOpenChange(false);
+      onSaved();
+      toast.success("Follow-up marked complete.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm bg-popover border-border">
+        <DialogHeader>
+          <DialogTitle className="text-popover-foreground">Follow-up complete</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-2 py-2">
+          <Label className="text-muted-foreground">Next follow-up (optional)</Label>
+          <Input
+            type="datetime-local"
+            value={nextFollowUp}
+            onChange={(e) => setNextFollowUp(e.target.value)}
+            className="border-border bg-muted text-foreground"
+          />
+        </div>
+        <DialogFooter className="border-border bg-popover/50">
+          <Button
+            variant="outline"
+            onClick={() => submit(null)}
+            disabled={saving}
+            className="border-border bg-transparent text-muted-foreground hover:bg-muted"
+          >
+            Skip
+          </Button>
+          <Button
+            onClick={() => submit(nextFollowUp ? new Date(nextFollowUp).toISOString() : null)}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

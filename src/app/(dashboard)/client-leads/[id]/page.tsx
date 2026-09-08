@@ -29,6 +29,7 @@ import { FileManager } from "@/components/files/file-manager";
 import {
   LeadFormDialog,
   TaskChecklist,
+  FollowUpDialog,
   PRIORITY_STYLE,
   STATUS_STYLE,
   STATUS_LABEL,
@@ -54,6 +55,7 @@ export default function ClientLeadDetailPage() {
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [tab, setTab] = useState<DetailTab>("info");
   const [formOpen, setFormOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   async function load() {
@@ -235,12 +237,24 @@ export default function ClientLeadDetailPage() {
           <InfoRow
             label="Next follow-up"
             value={
-              <span className={`flex items-center gap-1 ${overdue ? "font-semibold text-red-400" : ""}`}>
-                {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-                {formatFollowUp(lead.next_follow_up_at)}
+              <span className="flex items-center gap-2">
+                <span className={`flex items-center gap-1 ${overdue ? "font-semibold text-red-400" : ""}`}>
+                  {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                  {formatFollowUp(lead.next_follow_up_at)}
+                </span>
+                {overdue && canUpdate && (
+                  <button
+                    type="button"
+                    onClick={() => setFollowUpOpen(true)}
+                    className="shrink-0 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-semibold text-red-400 hover:bg-red-500/25"
+                  >
+                    Mark done
+                  </button>
+                )}
               </span>
             }
           />
+          <FollowUpDialog open={followUpOpen} onOpenChange={setFollowUpOpen} leadId={lead.id} onSaved={load} />
           <InfoRow label="Allocated to" value={allocated?.full_name || "Unassigned"} />
           <InfoRow label="Notes" value={lead.notes || "—"} multiline />
         </div>

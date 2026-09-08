@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { ChevronLeft, ChevronRight, MoreVertical, Pencil, Trash2, Plus, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical, MoreVertical, Pencil, Trash2, Plus, Check, X } from "lucide-react";
 import type { ProjectTask, KanbanCommonStatus } from "@/types";
 import { CommonKanbanCard } from "./common-kanban-card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,9 @@ interface CommonKanbanBoardProps {
   onRenameStatus: (statusId: string, newName: string) => void;
   onDeleteStatus: (statusId: string) => void;
   onAddStatus: (name: string) => void;
+  /** Drag-and-drop column reordering — omit to leave columns in
+   *  whatever order `statuses` arrives in (no grip handle rendered). */
+  onReorderStatuses?: (orderedStatusIds: string[]) => void;
   /** Controlled collapse state — lets the page's board-level 3-dot
    *  menu drive a "collapse all / expand all" action. Falls back to
    *  internal state when omitted. */
@@ -65,10 +68,12 @@ export function CommonKanbanBoard({
   onRenameStatus,
   onDeleteStatus,
   onAddStatus,
+  onReorderStatuses,
   collapsed: collapsedProp,
   onCollapsedChange,
 }: CommonKanbanBoardProps) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
   const [collapsedState, setCollapsedState] = useState<Set<string>>(new Set());
   const collapsed = collapsedProp ?? collapsedState;
   const setCollapsed = onCollapsedChange ?? setCollapsedState;
@@ -106,14 +111,38 @@ export function CommonKanbanBoard({
   }
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveTaskId(String(event.active.id));
+    const id = String(event.active.id);
+    if (id.startsWith("col:")) {
+      setDraggingColumnId(id.slice(4));
+    } else {
+      setActiveTaskId(id);
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveTaskId(null);
+    setDraggingColumnId(null);
     const { active, over } = event;
     if (!over) return;
-    const taskId = String(active.id);
+    const activeId = String(active.id);
+
+    if (activeId.startsWith("col:")) {
+      if (!onReorderStatuses) return;
+      const draggedStatusId = activeId.slice(4);
+      const targetStatusId = String(over.id);
+      if (draggedStatusId === targetStatusId) return;
+      const ids = sortedStatuses.map((s) => s.id);
+      const fromIndex = ids.indexOf(draggedStatusId);
+      const toIndex = ids.indexOf(targetStatusId);
+      if (fromIndex === -1 || toIndex === -1) return;
+      const reordered = [...ids];
+      reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, draggedStatusId);
+      onReorderStatuses(reordered);
+      return;
+    }
+
+    const taskId = activeId;
     const targetStatusId = String(over.id);
 
     const task = tasks.find((t) => t.id === taskId);
@@ -125,6 +154,7 @@ export function CommonKanbanBoard({
 
   function handleDragCancel() {
     setActiveTaskId(null);
+    setDraggingColumnId(null);
   }
 
   function submitAddColumn() {
@@ -151,6 +181,8 @@ export function CommonKanbanBoard({
             tasks={tasksByStatus.get(status.id) ?? []}
             isAdmin={isAdmin}
             isCollapsed={collapsed.has(status.id)}
+            isDraggingOtherColumn={!!draggingColumnId && draggingColumnId !== status.id}
+            draggable={!!onReorderStatuses}
             onToggleCollapse={() => toggleCollapse(status.id)}
             onEditTask={onEditTask}
             onRename={(name) => onRenameStatus(status.id, name)}
@@ -199,6 +231,10 @@ export function CommonKanbanBoard({
           <div className="w-[260px] opacity-90">
             <CommonKanbanCard task={activeTask} onEdit={() => {}} isOverlay />
           </div>
+        ) : draggingColumnId ? (
+          <div className="w-[260px] rounded-xl border border-primary/40 bg-card/90 p-3 text-sm font-semibold text-foreground opacity-90">
+            {sortedStatuses.find((s) => s.id === draggingColumnId)?.name}
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>
@@ -210,6 +246,8 @@ function StatusColumn({
   tasks,
   isAdmin,
   isCollapsed,
+  isDraggingOtherColumn,
+  draggable,
   onToggleCollapse,
   onEditTask,
   onRename,
@@ -219,12 +257,18 @@ function StatusColumn({
   tasks: ProjectTask[];
   isAdmin: boolean;
   isCollapsed: boolean;
+  isDraggingOtherColumn: boolean;
+  draggable: boolean;
   onToggleCollapse: () => void;
   onEditTask: (task: ProjectTask) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status.id, disabled: isCollapsed });
+  const { attributes, listeners, setNodeRef: setHandleRef, isDragging: isThisColumnDragging } = useDraggable({
+    id: `col:${status.id}`,
+    disabled: !draggable,
+  });
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(status.name);
 
@@ -255,9 +299,25 @@ function StatusColumn({
   }
 
   return (
-    <div className="flex w-[85vw] min-w-[260px] max-w-[320px] shrink-0 snap-start flex-col rounded-xl border border-border bg-card/60 p-4 lg:w-auto lg:max-w-none lg:flex-1 lg:basis-[260px] lg:shrink lg:snap-none">
+    <div
+      ref={setHandleRef}
+      className={`flex w-[85vw] min-w-[260px] max-w-[320px] shrink-0 snap-start flex-col rounded-xl border border-border bg-card/60 p-4 lg:w-auto lg:max-w-none lg:flex-1 lg:basis-[260px] lg:shrink lg:snap-none ${
+        isThisColumnDragging ? "opacity-30" : ""
+      } ${isDraggingOtherColumn && isOver ? "outline outline-2 outline-dashed outline-primary/60 outline-offset-2" : ""}`}
+    >
       <div className="-mx-4 -mt-4 h-[3px] rounded-t-xl" style={{ backgroundColor: status.color }} />
       <div className="flex items-center justify-between gap-1 pt-3">
+        {draggable && !renaming && (
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            aria-label={`Drag to reorder ${status.name}`}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        )}
         {renaming ? (
           <div className="flex flex-1 items-center gap-1">
             <Input
