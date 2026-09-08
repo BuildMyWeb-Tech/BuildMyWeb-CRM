@@ -134,6 +134,16 @@ export function NotificationBell() {
       <DropdownMenuTrigger
         className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none data-popup-open:bg-muted"
         aria-label="Notifications"
+        onClick={() => {
+          // Native OS notifications need permission, and browsers
+          // only honor that prompt from a real user gesture — this
+          // click is the first one most people make on this button,
+          // so it's the natural place to ask (once; a prior grant or
+          // denial is remembered and this becomes a no-op).
+          if (typeof Notification !== "undefined" && Notification.permission === "default") {
+            Notification.requestPermission().catch(() => {});
+          }
+        }}
       >
         <Bell className="h-[18px] w-[18px]" />
         {unreadCount > 0 && (

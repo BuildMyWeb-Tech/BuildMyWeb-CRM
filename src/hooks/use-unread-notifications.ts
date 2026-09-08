@@ -45,7 +45,23 @@ export function useUnreadNotifications(): number {
         (payload) => {
           if (payload.eventType === "INSERT") {
             const row = payload.new as Notification;
-            if (!row.read_at) setCount((n) => n + 1);
+            if (!row.read_at) {
+              setCount((n) => n + 1);
+              // "Native-like" OS notification for a PWA/installed tab
+              // — only fires once permission was actually granted (see
+              // the bell's request-on-click; never auto-prompted here,
+              // browsers block or annoy-block that without a gesture).
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                try {
+                  new Notification(row.title, { body: row.body ?? undefined, tag: row.id });
+                } catch {
+                  // Some browsers (notably iOS Safari outside an
+                  // installed PWA) reject `new Notification()` even
+                  // with permission granted — never let that break
+                  // the in-app unread count.
+                }
+              }
+            }
           } else if (payload.eventType === "UPDATE") {
             // Updates here only ever set read_at (marking a notification
             // read). Derive purely from the new row so we don't rely on

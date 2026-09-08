@@ -4,15 +4,19 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 
 /**
  * Fires a 'lead_follow_up_due' notification for every client_leads
- * row whose next_follow_up_at has arrived (or passed) and hasn't
- * been notified for yet. Meant to be hit on a schedule (external
- * pinger — same shape as /api/automations/cron), guarded by the
- * same shared secret so operators only manage one.
+ * row whose next_follow_up_at has arrived (or passed). Meant to be
+ * hit on a schedule (external pinger — same shape as
+ * /api/automations/cron), guarded by the same shared secret so
+ * operators only manage one.
  *
- * "Not yet notified for yet" = follow_up_notified_at is NULL, or
- * older than next_follow_up_at (covers the case where the lead was
- * notified once, then its follow-up got rescheduled later — see
- * 059_client_leads_extras.sql).
+ * "Already notified, don't repeat" = an UNREAD notification for this
+ * lead already exists — so it keeps nagging (one fresh notification
+ * per cron tick) for as long as the lead stays overdue AND unread,
+ * but goes quiet the moment either becomes false: read it and it's
+ * still overdue next tick, you get another one; leave it unread and
+ * you won't get duplicates piling up; use the lead's "Mark done"
+ * action (clears/reschedules next_follow_up_at) and it drops out of
+ * the `due` query entirely, done for real.
  */
 export async function GET(request: Request) {
   const expected = process.env.AUTOMATION_CRON_SECRET
@@ -34,7 +38,7 @@ export async function GET(request: Request) {
 
   const { data: due, error } = await admin
     .from('client_leads')
-    .select('id, account_id, title, allocated_user_id, next_follow_up_at, follow_up_notified_at')
+    .select('id, account_id, title, allocated_user_id, next_follow_up_at')
     .in('status', ['in_discussion', 'hold'])
     .not('allocated_user_id', 'is', null)
     .not('next_follow_up_at', 'is', null)
@@ -44,9 +48,18 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!due || due.length === 0) return NextResponse.json({ processed: 0 })
 
+  const { data: unreadExisting, error: existingError } = await admin
+    .from('notifications')
+    .select('lead_id')
+    .eq('type', 'lead_follow_up_due')
+    .is('read_at', null)
+    .in('lead_id', due.map((l) => l.id))
+  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 })
+  const alreadyNagging = new Set((unreadExisting ?? []).map((n) => n.lead_id))
+
   let processed = 0
   for (const lead of due) {
-    if (lead.follow_up_notified_at && lead.follow_up_notified_at >= lead.next_follow_up_at!) continue
+    if (alreadyNagging.has(lead.id)) continue
 
     const { error: notifyError } = await admin.from('notifications').insert({
       account_id: lead.account_id,
@@ -60,12 +73,6 @@ export async function GET(request: Request) {
       console.error('[client-leads cron] notify failed for lead', lead.id, notifyError)
       continue
     }
-
-    const { error: markError } = await admin
-      .from('client_leads')
-      .update({ follow_up_notified_at: nowIso })
-      .eq('id', lead.id)
-    if (markError) console.error('[client-leads cron] mark-notified failed for lead', lead.id, markError)
 
     processed++
   }
