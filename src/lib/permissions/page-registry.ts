@@ -31,6 +31,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   // Clients
   { key: "client_directory", label: "Client Directory", category: "Clients" },
   { key: "client_leads", label: "Client Enquiry", category: "Clients" },
+  { key: "future_clients", label: "Future Clients", category: "Clients" },
   // Projects
   { key: "projects", label: "Projects", category: "Projects" },
   { key: "kanban", label: "Kanban", category: "Projects" },

@@ -617,6 +617,25 @@ export interface ClientLead {
   tasks?: ClientLeadTask[];
 }
 
+// ============================================================
+// Future Clients — a 4th Client Enquiry outcome ("maybe later"),
+// alongside Confirm / Reject / Hold. See 068_stage_uniform_
+// future_client_schedule.sql.
+// ============================================================
+
+export interface FutureClient {
+  id: string;
+  account_id: string;
+  title: string;
+  client_name: string | null;
+  phone: string | null;
+  notes: string | null;
+  source_lead_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ClientLeadTask {
   id: string;
   account_id: string;

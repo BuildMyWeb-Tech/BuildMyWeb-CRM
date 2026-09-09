@@ -68,6 +68,11 @@ export default function ClientsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [status, setStatus] = useState<ClientStatus>("active");
+  const [interfaceName, setInterfaceName] = useState("");
+  const [interfaceNumber, setInterfaceNumber] = useState("");
+  const [accentColor, setAccentColor] = useState("");
+  const [clientSince, setClientSince] = useState("");
+  const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
 
   // Quick-edit — the "edit it like Info simply from the 3-dot" ask.
@@ -95,7 +100,15 @@ export default function ClientsPage() {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, status }),
+        body: JSON.stringify({
+          name: trimmed,
+          status,
+          interface_name: interfaceName.trim() || null,
+          interface_contact_number: interfaceNumber.trim() || null,
+          accent_color: accentColor.trim() || null,
+          client_since: clientSince || null,
+          notes: notes.trim() || null,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -105,6 +118,11 @@ export default function ClientsPage() {
       setCreateOpen(false);
       setName("");
       setStatus("active");
+      setInterfaceName("");
+      setInterfaceNumber("");
+      setAccentColor("");
+      setClientSince("");
+      setNotes("");
       loadClients();
       toast.success("Client created — a matching project was set up for it too.");
     } finally {
@@ -317,8 +335,32 @@ export default function ClientsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Interface contact name</Label>
+                <Input value={interfaceName} onChange={(e) => setInterfaceName(e.target.value)} className="border-border bg-muted text-foreground" />
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Interface contact number</Label>
+                <Input value={interfaceNumber} onChange={(e) => setInterfaceNumber(e.target.value)} className="border-border bg-muted text-foreground" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Client since</Label>
+                <Input type="date" value={clientSince} onChange={(e) => setClientSince(e.target.value)} className="border-border bg-muted text-foreground" />
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Accent color</Label>
+                <Input type="color" value={accentColor || "#3b82f6"} onChange={(e) => setAccentColor(e.target.value)} className="h-9 border-border bg-muted p-1" />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Notes</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={3} />
+            </div>
             <p className="text-xs text-muted-foreground">
-              Everything else (logo, interface contact, accent color, notes) can be filled in after — only a name is required. A matching project + task board gets created automatically.
+              Logo can be uploaded after creation, from the client&apos;s own page. A matching project + task board gets created automatically.
             </p>
           </div>
           <DialogFooter className="border-border bg-popover/50">

@@ -26,7 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Settings, Loader2, Paperclip } from "lucide-react";
+import { Plus, Trash2, Settings, Loader2, Paperclip, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 
 // The generic Custom Fields engine (047_custom_fields.sql) — one
@@ -84,6 +84,13 @@ export function CustomFieldsSection({
   const [addingField, setAddingField] = useState(false);
   const [editingDefId, setEditingDefId] = useState<string | null>(null);
   const [editingDefName, setEditingDefName] = useState("");
+  // Full edit (type/options/required), separate from the click-to-rename
+  // above — opened via the pencil icon instead of clicking the name.
+  const [editingFullDefId, setEditingFullDefId] = useState<string | null>(null);
+  const [editFieldType, setEditFieldType] = useState<CustomFieldType>("text");
+  const [editFieldOptions, setEditFieldOptions] = useState("");
+  const [editFieldRequired, setEditFieldRequired] = useState(false);
+  const [savingFullEdit, setSavingFullEdit] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,6 +282,39 @@ export function CustomFieldsSection({
     cancelRenameField();
   }
 
+  function startFullEdit(field: CustomFieldDef) {
+    setEditingFullDefId(field.id);
+    setEditFieldType(field.field_type);
+    setEditFieldOptions(field.field_options.join(", "));
+    setEditFieldRequired(field.is_required);
+  }
+
+  function cancelFullEdit() {
+    setEditingFullDefId(null);
+  }
+
+  async function saveFullEdit(field: CustomFieldDef) {
+    setSavingFullEdit(true);
+    try {
+      const options =
+        editFieldType === "dropdown" || editFieldType === "radio"
+          ? editFieldOptions.split(",").map((o) => o.trim()).filter(Boolean)
+          : [];
+      const { error } = await supabase
+        .from("custom_field_defs")
+        .update({ field_type: editFieldType, field_options: options, is_required: editFieldRequired })
+        .eq("id", field.id);
+      if (error) {
+        toast.error("Could not save field.");
+        return;
+      }
+      setFields(fields.map((f) => (f.id === field.id ? { ...f, field_type: editFieldType, field_options: options, is_required: editFieldRequired } : f)));
+      setEditingFullDefId(null);
+    } finally {
+      setSavingFullEdit(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-4">
@@ -424,46 +464,87 @@ export function CustomFieldsSection({
             {fields.length > 0 && (
               <div className="space-y-2">
                 {fields.map((field) => (
-                  <div
-                    key={field.id}
-                    className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2"
-                  >
-                    <div className="flex-1">
-                      {editingDefId === field.id ? (
-                        <Input
-                          value={editingDefName}
-                          onChange={(e) => setEditingDefName(e.target.value)}
-                          autoFocus
-                          onBlur={() => saveRenameField(field)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveRenameField(field);
-                            if (e.key === "Escape") cancelRenameField();
-                          }}
-                          className="h-7 border-border bg-card text-sm text-foreground"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => startRenameField(field)}
-                          className="block truncate text-left text-sm text-foreground hover:underline"
-                          title="Click to rename"
-                        >
-                          {field.field_name}
-                        </button>
-                      )}
-                      <p className="text-[10px] uppercase text-muted-foreground">
-                        {FIELD_TYPE_LABELS[field.field_type]}
-                        {field.is_required ? " · required" : ""}
-                      </p>
+                  <div key={field.id} className="rounded-lg border border-border bg-muted p-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        {editingDefId === field.id ? (
+                          <Input
+                            value={editingDefName}
+                            onChange={(e) => setEditingDefName(e.target.value)}
+                            autoFocus
+                            onBlur={() => saveRenameField(field)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveRenameField(field);
+                              if (e.key === "Escape") cancelRenameField();
+                            }}
+                            className="h-7 border-border bg-card text-sm text-foreground"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startRenameField(field)}
+                            className="block truncate text-left text-sm text-foreground hover:underline"
+                            title="Click to rename"
+                          >
+                            {field.field_name}
+                          </button>
+                        )}
+                        <p className="text-[10px] uppercase text-muted-foreground">
+                          {FIELD_TYPE_LABELS[field.field_type]}
+                          {field.is_required ? " · required" : ""}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => (editingFullDefId === field.id ? cancelFullEdit() : startFullEdit(field))}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Edit type/options/required"
+                      >
+                        {editingFullDefId === field.id ? <X className="h-3 w-3" /> : <Pencil className="h-3 w-3" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => handleDeleteField(field.id)}
+                        className="text-muted-foreground hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => handleDeleteField(field.id)}
-                      className="text-muted-foreground hover:text-red-400"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+
+                    {editingFullDefId === field.id && (
+                      <div className="mt-2 flex flex-col gap-2 border-t border-border pt-2">
+                        <Select value={editFieldType} onValueChange={(v) => v && setEditFieldType(v as CustomFieldType)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue className="truncate">{(v: string) => FIELD_TYPE_LABELS[v as CustomFieldType]}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(FIELD_TYPE_LABELS) as CustomFieldType[]).map((t) => (
+                              <SelectItem key={t} value={t}>{FIELD_TYPE_LABELS[t]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {(editFieldType === "dropdown" || editFieldType === "radio") && (
+                          <Input
+                            value={editFieldOptions}
+                            onChange={(e) => setEditFieldOptions(e.target.value)}
+                            placeholder="Comma-separated options"
+                            className="border-border bg-card text-sm text-foreground"
+                          />
+                        )}
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Checkbox checked={editFieldRequired} onCheckedChange={(checked) => setEditFieldRequired(checked === true)} />
+                          Required
+                        </label>
+                        <p className="text-[10px] text-muted-foreground">
+                          Changing type won&apos;t convert existing saved values — they&apos;ll show blank under the new type.
+                        </p>
+                        <Button variant="outline" size="sm" onClick={() => saveFullEdit(field)} disabled={savingFullEdit}>
+                          {savingFullEdit ? "Saving…" : "Save"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

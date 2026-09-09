@@ -16,6 +16,7 @@ import {
   PauseCircle,
   Pencil,
   PlayCircle,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,18 @@ export default function ClientLeadDetailPage() {
       return;
     }
     toast.success("Lead rejected and removed.");
+    router.push("/client-leads");
+  }
+
+  async function handleMarkFuture() {
+    if (!lead) return;
+    if (!window.confirm(`Move "${lead.title}" to Future Clients? It'll be removed from this list.`)) return;
+    const res = await fetch(`/api/client-leads/${lead.id}/future`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Could not move this lead.");
+      return;
+    }
+    toast.success(`"${lead.title}" moved to Future Clients.`);
     router.push("/client-leads");
   }
 
@@ -191,6 +204,12 @@ export default function ClientLeadDetailPage() {
               <DropdownMenuItem onClick={handleConfirm} className="text-emerald-500 focus:text-emerald-500">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Confirm → Client Directory
+              </DropdownMenuItem>
+            )}
+            {canUpdate && (
+              <DropdownMenuItem onClick={handleMarkFuture}>
+                <Sparkles className="h-3.5 w-3.5" />
+                Move to Future Clients
               </DropdownMenuItem>
             )}
             {canDelete && (

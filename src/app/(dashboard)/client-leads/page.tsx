@@ -22,6 +22,7 @@ import {
   FolderOpen,
   ListTodo,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,6 +163,17 @@ export default function ClientLeadsPage() {
     }
     load();
     toast.success("Lead rejected and removed.");
+  }
+
+  async function handleMarkFuture(lead: ClientLead) {
+    if (!window.confirm(`Move "${lead.title}" to Future Clients? It'll be removed from this list.`)) return;
+    const res = await fetch(`/api/client-leads/${lead.id}/future`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Could not move this lead.");
+      return;
+    }
+    load();
+    toast.success(`"${lead.title}" moved to Future Clients.`);
   }
 
   async function handleToggleHold(lead: ClientLead) {
@@ -363,6 +375,7 @@ export default function ClientLeadsPage() {
                   onConfirm={() => handleConfirm(lead)}
                   onReject={() => handleReject(lead)}
                   onToggleHold={() => handleToggleHold(lead)}
+                  onMarkFuture={() => handleMarkFuture(lead)}
                   onTasksChanged={load}
                 />
               ))}
@@ -393,6 +406,7 @@ function LeadCard({
   onConfirm,
   onReject,
   onToggleHold,
+  onMarkFuture,
   onTasksChanged,
 }: {
   lead: ClientLead;
@@ -405,6 +419,7 @@ function LeadCard({
   onConfirm: () => void;
   onReject: () => void;
   onToggleHold: () => void;
+  onMarkFuture: () => void;
   onTasksChanged: () => void;
 }) {
   // Both default collapsed — keeps a grid of many enquiries compact,
@@ -466,6 +481,12 @@ function LeadCard({
                   <DropdownMenuItem onClick={onConfirm} className="text-emerald-500 focus:text-emerald-500">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Confirm → Client Directory
+                  </DropdownMenuItem>
+                )}
+                {canUpdate && (
+                  <DropdownMenuItem onClick={onMarkFuture}>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Move to Future Clients
                   </DropdownMenuItem>
                 )}
                 {canDelete && (
