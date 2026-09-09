@@ -9,7 +9,7 @@ export async function GET() {
     const ctx = await getCurrentAccount()
     const { data, error } = await ctx.supabase
       .from('products')
-      .select('*')
+      .select('*, credentials:product_credentials(*)')
       .eq('account_id', ctx.accountId)
       .order('project_name', { ascending: true })
     if (error) throw error
@@ -18,6 +18,9 @@ export async function GET() {
     return toErrorResponse(err)
   }
 }
+
+const STAGE_TAGS = ['idea', 'planning', 'development', 'deployment', 'testing', 'launch', 'sales']
+const PRIORITIES = ['high', 'urgent', 'medium', 'low', 'hold']
 
 export async function POST(request: Request) {
   let ctx
@@ -42,6 +45,8 @@ export async function POST(request: Request) {
       project_url_1: typeof body.project_url_1 === 'string' ? body.project_url_1.trim() || null : null,
       project_url_2: typeof body.project_url_2 === 'string' ? body.project_url_2.trim() || null : null,
       tech_stack: typeof body.tech_stack === 'string' ? body.tech_stack.trim() || null : null,
+      stage_tags: Array.isArray(body.stage_tags) ? body.stage_tags.filter((s: unknown) => typeof s === 'string' && STAGE_TAGS.includes(s)) : [],
+      priority: typeof body.priority === 'string' && PRIORITIES.includes(body.priority) ? body.priority : 'medium',
       created_by: ctx.userId,
     })
     .select('*')

@@ -5,6 +5,9 @@ import { supabaseAdmin } from '@/lib/automations/admin-client'
 // PATCH /api/products/[id] — update fields.
 // DELETE /api/products/[id] — agent+ only.
 
+const STAGE_TAGS = ['idea', 'planning', 'development', 'deployment', 'testing', 'launch', 'sales']
+const PRIORITIES = ['high', 'urgent', 'medium', 'low', 'hold']
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -30,6 +33,15 @@ export async function PATCH(
   if ('project_url_1' in body) update.project_url_1 = typeof body.project_url_1 === 'string' ? body.project_url_1.trim() || null : null
   if ('project_url_2' in body) update.project_url_2 = typeof body.project_url_2 === 'string' ? body.project_url_2.trim() || null : null
   if ('tech_stack' in body) update.tech_stack = typeof body.tech_stack === 'string' ? body.tech_stack.trim() || null : null
+  if ('stage_tags' in body) {
+    update.stage_tags = Array.isArray(body.stage_tags)
+      ? body.stage_tags.filter((s: unknown) => typeof s === 'string' && STAGE_TAGS.includes(s))
+      : []
+  }
+  if (typeof body.priority === 'string') {
+    if (!PRIORITIES.includes(body.priority)) return NextResponse.json({ error: 'invalid priority' }, { status: 400 })
+    update.priority = body.priority
+  }
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 

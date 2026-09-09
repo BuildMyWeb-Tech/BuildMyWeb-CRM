@@ -58,6 +58,8 @@ interface FileManagerProps {
   clientId?: string | null;
   /** Set = a Client Enquiry's own tree (independent of projectId/clientId — pass only one). */
   leadId?: string | null;
+  /** Set = a Product's own tree (independent of projectId/clientId/leadId — pass only one). */
+  productId?: string | null;
   /**
    * Lets a wrapping component (e.g. a combined Drive+Files view) share
    * ONE view toggle across both sections instead of each managing its
@@ -117,6 +119,7 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
   projectId,
   clientId = null,
   leadId = null,
+  productId = null,
   viewMode: controlledViewMode,
   onViewModeChange,
   hideViewToggle = false,
@@ -127,7 +130,7 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([
-    { id: null, name: clientId ? "Client files" : projectId ? "Project files" : leadId ? "Enquiry documents" : "Office files" },
+    { id: null, name: clientId ? "Client files" : projectId ? "Project files" : leadId ? "Enquiry documents" : productId ? "Product documents" : "Office files" },
   ]);
   const [folders, setFolders] = useState<FileFolder[]>([]);
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -176,8 +179,10 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
       folderQuery = folderQuery.eq("project_id", projectId).is("client_id", null);
     } else if (leadId) {
       folderQuery = folderQuery.eq("lead_id", leadId);
+    } else if (productId) {
+      folderQuery = folderQuery.eq("product_id", productId);
     } else {
-      folderQuery = folderQuery.is("project_id", null).is("client_id", null).is("lead_id", null);
+      folderQuery = folderQuery.is("project_id", null).is("client_id", null).is("lead_id", null).is("product_id", null);
     }
     folderQuery = currentFolderId
       ? folderQuery.eq("parent_id", currentFolderId)
@@ -194,8 +199,10 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
       fileQuery = fileQuery.eq("project_id", projectId).is("client_id", null);
     } else if (leadId) {
       fileQuery = fileQuery.eq("lead_id", leadId);
+    } else if (productId) {
+      fileQuery = fileQuery.eq("product_id", productId);
     } else {
-      fileQuery = fileQuery.is("project_id", null).is("client_id", null).is("lead_id", null);
+      fileQuery = fileQuery.is("project_id", null).is("client_id", null).is("lead_id", null).is("product_id", null);
     }
     fileQuery = currentFolderId
       ? fileQuery.eq("folder_id", currentFolderId)
@@ -205,7 +212,7 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
     setFolders(foldersRes.data ?? []);
     setFiles(filesRes.data ?? []);
     setLoading(false);
-  }, [supabase, accountId, projectId, clientId, leadId, currentFolderId]);
+  }, [supabase, accountId, projectId, clientId, leadId, productId, currentFolderId]);
 
   useEffect(() => {
     load();
@@ -228,9 +235,10 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
     try {
       const { error } = await supabase.from("file_folders").insert({
         account_id: accountId,
-        project_id: clientId || leadId ? null : projectId,
+        project_id: clientId || leadId || productId ? null : projectId,
         client_id: clientId,
         lead_id: leadId,
+        product_id: productId,
         parent_id: currentFolderId,
         name: trimmed,
         created_by: userId,
@@ -263,9 +271,10 @@ export const FileManager = forwardRef<FileManagerHandle, FileManagerProps>(funct
         }
         const { error: insertError } = await supabase.from("files").insert({
           account_id: accountId,
-          project_id: clientId || leadId ? null : projectId,
+          project_id: clientId || leadId || productId ? null : projectId,
           client_id: clientId,
           lead_id: leadId,
+          product_id: productId,
           folder_id: currentFolderId,
           name: file.name,
           storage_path: path,

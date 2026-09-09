@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Settings, Loader2, LayoutGrid, Folder, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Settings, Loader2, LayoutGrid, Folder, MessageSquare, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { TaskBoard } from "@/components/projects/task-board";
@@ -10,6 +10,7 @@ import { TaskForm } from "@/components/projects/task-form";
 import { BoardSettings } from "@/components/projects/board-settings";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import { CombinedFilesView } from "@/components/files/combined-files-view";
+import { ProjectChat } from "@/components/projects/project-chat";
 import { useAuth } from "@/hooks/use-auth";
 import type {
   Project,
@@ -22,7 +23,7 @@ import { toast } from "sonner";
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const { accountId, user } = useAuth();
-  const [tab, setTab] = useState<"board" | "files">("board");
+  const [tab, setTab] = useState<"board" | "files" | "chat">("board");
 
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -136,7 +137,7 @@ export default function ProjectDetailPage() {
             variant="outline"
             size="sm"
             onClick={() => setBoardSettingsOpen(true)}
-            className={tab === "files" ? "invisible" : undefined}
+            className={tab !== "board" ? "invisible" : undefined}
           >
             <Settings className="mr-1.5 h-3.5 w-3.5" />
             Board settings
@@ -169,9 +170,21 @@ export default function ProjectDetailPage() {
           <Folder className="h-3.5 w-3.5" />
           Files
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("chat")}
+          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium ${
+            tab === "chat"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          Chat
+        </button>
       </div>
 
-      {tab === "board" ? (
+      {tab === "board" && (
         <div className="mt-6">
           <TaskBoard
             stages={stages}
@@ -181,13 +194,16 @@ export default function ProjectDetailPage() {
             onEditTask={handleEditTask}
           />
         </div>
-      ) : (
-        accountId &&
-        user && (
-          <div className="mt-6">
-            <CombinedFilesView accountId={accountId} userId={user.id} projectId={project.id} />
-          </div>
-        )
+      )}
+      {tab === "files" && accountId && user && (
+        <div className="mt-6">
+          <CombinedFilesView accountId={accountId} userId={user.id} projectId={project.id} />
+        </div>
+      )}
+      {tab === "chat" && accountId && user && (
+        <div className="mt-6">
+          <ProjectChat projectId={project.id} accountId={accountId} currentUserId={user.id} members={members} />
+        </div>
       )}
 
       {accountId && (

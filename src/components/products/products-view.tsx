@@ -10,6 +10,12 @@ import {
   Trash2,
   Search,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  FolderOpen,
+  Eye,
+  EyeOff,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +35,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Product } from "@/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileManager } from "@/components/files/file-manager";
+import type { Product, ProductCredential, ProductPriority, ProductStageTag } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
+import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 
 // The Products page's body — extracted so it can be reused as-is on
@@ -39,12 +54,35 @@ import { toast } from "sonner";
 // client products: what it's for, where it lives, what it's built
 // with. Distinct from Client Directory (a relationship) and Projects
 // (a piece of active work) — a product can predate or outlive either.
+
+export const STAGE_TAGS: ProductStageTag[] = ["idea", "planning", "development", "deployment", "testing", "launch", "sales"];
+export const STAGE_TAG_LABEL: Record<ProductStageTag, string> = {
+  idea: "Idea",
+  planning: "Planning",
+  development: "Development",
+  deployment: "Deployment",
+  testing: "Testing",
+  launch: "Launch",
+  sales: "Sales",
+};
+export const PRIORITIES: ProductPriority[] = ["high", "urgent", "medium", "low", "hold"];
+export const PRIORITY_STYLE: Record<ProductPriority, string> = {
+  high: "bg-amber-500/15 text-amber-500",
+  urgent: "bg-red-500/15 text-red-400",
+  medium: "bg-primary/10 text-primary",
+  low: "bg-muted text-muted-foreground",
+  hold: "bg-purple-500/15 text-purple-400",
+};
+
 export function ProductsView() {
+  const { accountId, user } = useAuth();
   const { canCreate, canUpdate, canDelete } = usePagePermissions("products");
   const [products, setProducts] = useState<Product[] | null>(null);
   const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState<Set<ProductStageTag>>(new Set());
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
+  const [docsOpenId, setDocsOpenId] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch("/api/products");
@@ -56,7 +94,17 @@ export function ProductsView() {
     load();
   }, []);
 
+  function toggleStageFilter(tag: ProductStageTag) {
+    setStageFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
   const visible = (products ?? []).filter((p) => {
+    if (stageFilter.size > 0 && !p.stage_tags.some((t) => stageFilter.has(t))) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     return `${p.project_name} ${p.purpose ?? ""} ${p.tech_stack ?? ""}`.toLowerCase().includes(q);
@@ -100,14 +148,30 @@ export function ProductsView() {
         )}
       </div>
 
-      <div className="relative mt-4 w-full max-w-xs">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, purpose, tech stack…"
-          className="border-border bg-muted pl-8 text-foreground"
-        />
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, purpose, tech stack…"
+            className="border-border bg-muted pl-8 text-foreground"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {STAGE_TAGS.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => toggleStageFilter(tag)}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                stageFilter.has(tag) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {STAGE_TAG_LABEL[tag]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {products === null ? (
@@ -117,7 +181,7 @@ export function ProductsView() {
       ) : visible.length === 0 ? (
         <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm text-muted-foreground">
-            {products.length === 0 ? "No products yet." : "Nothing matches this search."}
+            {products.length === 0 ? "No products yet." : "Nothing matches this filter."}
           </p>
           {canCreate && products.length === 0 && (
             <Button variant="outline" size="sm" onClick={openCreate}>
@@ -155,6 +219,16 @@ export function ProductsView() {
                     </DropdownMenu>
                   )}
                 </div>
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${PRIORITY_STYLE[p.priority]}`}>
+                    {p.priority}
+                  </span>
+                  {p.stage_tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                      {STAGE_TAG_LABEL[tag]}
+                    </span>
+                  ))}
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
                 {p.purpose && <p className="line-clamp-3 text-xs text-muted-foreground">{p.purpose}</p>}
@@ -163,32 +237,41 @@ export function ProductsView() {
                     <span className="font-medium text-foreground">Tech:</span> {p.tech_stack}
                   </p>
                 )}
-                {(p.project_url_1 || p.project_url_2) && (
+                {p.credentials && p.credentials.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {p.project_url_1 && (
-                      <a
-                        href={p.project_url_1}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Link 1
-                      </a>
-                    )}
-                    {p.project_url_2 && (
-                      <a
-                        href={p.project_url_2}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Link 2
-                      </a>
+                    {p.credentials.map((c) =>
+                      c.url ? (
+                        <a
+                          key={c.id}
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {c.label}
+                        </a>
+                      ) : null,
                     )}
                   </div>
                 )}
+
+                <div className="border-t border-border pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDocsOpenId((v) => (v === p.id ? null : p.id))}
+                    className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {docsOpenId === p.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    Documents
+                  </button>
+                  {docsOpenId === p.id && accountId && user?.id && (
+                    <div className="mt-2">
+                      <FileManager accountId={accountId} userId={user.id} projectId={null} productId={p.id} hideViewToggle />
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -213,19 +296,41 @@ function ProductFormDialog({
 }) {
   const [projectName, setProjectName] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [url1, setUrl1] = useState("");
-  const [url2, setUrl2] = useState("");
   const [techStack, setTechStack] = useState("");
+  const [priority, setPriority] = useState<ProductPriority>("medium");
+  const [stageTags, setStageTags] = useState<Set<ProductStageTag>>(new Set());
+  const [credentials, setCredentials] = useState<Partial<ProductCredential>[]>([]);
   const [saving, setSaving] = useState(false);
+  const { accountId } = useAuth();
 
   useEffect(() => {
     if (!open) return;
     setProjectName(initial?.project_name ?? "");
     setPurpose(initial?.purpose ?? "");
-    setUrl1(initial?.project_url_1 ?? "");
-    setUrl2(initial?.project_url_2 ?? "");
     setTechStack(initial?.tech_stack ?? "");
+    setPriority(initial?.priority ?? "medium");
+    setStageTags(new Set(initial?.stage_tags ?? []));
+    setCredentials(initial?.credentials?.length ? initial.credentials : []);
   }, [open, initial]);
+
+  function toggleStageTag(tag: ProductStageTag) {
+    setStageTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
+  function addCredential() {
+    setCredentials((prev) => [...prev, { label: "", url: "", username: "", password: "" }]);
+  }
+  function updateCredential(i: number, patch: Partial<ProductCredential>) {
+    setCredentials((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  }
+  function removeCredential(i: number) {
+    setCredentials((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   async function handleSave() {
     const trimmed = projectName.trim();
@@ -235,9 +340,9 @@ function ProductFormDialog({
       const payload = {
         project_name: trimmed,
         purpose: purpose.trim() || null,
-        project_url_1: url1.trim() || null,
-        project_url_2: url2.trim() || null,
         tech_stack: techStack.trim() || null,
+        priority,
+        stage_tags: [...stageTags],
       };
       const res = await fetch(initial ? `/api/products/${initial.id}` : "/api/products", {
         method: initial ? "PATCH" : "POST",
@@ -249,6 +354,10 @@ function ProductFormDialog({
         toast.error(data?.error ?? "Could not save this product.");
         return;
       }
+
+      const productId = initial ? initial.id : (await res.json()).product.id;
+      await syncCredentials(productId);
+
       onOpenChange(false);
       onSaved();
       toast.success(initial ? "Product updated." : "Product added.");
@@ -257,9 +366,34 @@ function ProductFormDialog({
     }
   }
 
+  // Credentials aren't behind a REST route (RLS already lets an agent+
+  // manage them directly, same pattern as Kanban/Company Info) — a
+  // simple replace-all keeps the diffing logic out of this form: wipe
+  // this product's rows, reinsert whatever's currently in the list.
+  async function syncCredentials(productId: string) {
+    if (!accountId) return;
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    await supabase.from("product_credentials").delete().eq("product_id", productId);
+    const rows = credentials
+      .filter((c) => c.label?.trim() || c.url?.trim())
+      .map((c, i) => ({
+        account_id: accountId,
+        product_id: productId,
+        label: c.label?.trim() || `Link ${i + 1}`,
+        url: c.url?.trim() || null,
+        username: c.username?.trim() || null,
+        password: c.password?.trim() || null,
+        position: i,
+      }));
+    if (rows.length > 0) {
+      await supabase.from("product_credentials").insert(rows);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[88vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="sm:max-w-xl bg-popover border-border max-h-[88vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-popover-foreground">{initial ? `Edit ${initial.project_name}` : "New product"}</DialogTitle>
         </DialogHeader>
@@ -272,19 +406,55 @@ function ProductFormDialog({
             <Label className="text-muted-foreground">Purpose</Label>
             <Textarea value={purpose} onChange={(e) => setPurpose(e.target.value)} className="border-border bg-muted text-foreground" rows={3} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Project URL 1</Label>
-              <Input value={url1} onChange={(e) => setUrl1(e.target.value)} placeholder="https://…" className="border-border bg-muted text-foreground" />
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Project URL 2</Label>
-              <Input value={url2} onChange={(e) => setUrl2(e.target.value)} placeholder="https://…" className="border-border bg-muted text-foreground" />
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Stage (select all that apply)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {STAGE_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleStageTag(tag)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    stageTags.has(tag) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {STAGE_TAG_LABEL[tag]}
+                </button>
+              ))}
             </div>
           </div>
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Priority</Label>
+            <Select value={priority} onValueChange={(v) => v && setPriority(v as ProductPriority)}>
+              <SelectTrigger className="w-full">
+                <SelectValue className="truncate capitalize">{(v: string) => v}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITIES.map((p) => (
+                  <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Tech stack</Label>
             <Textarea value={techStack} onChange={(e) => setTechStack(e.target.value)} className="border-border bg-muted text-foreground" rows={2} />
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Links &amp; credentials</Label>
+            <div className="flex flex-col gap-2">
+              {credentials.map((c, i) => (
+                <CredentialRow key={i} value={c} onChange={(patch) => updateCredential(i, patch)} onRemove={() => removeCredential(i)} />
+              ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={addCredential} className="w-fit">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add a link
+            </Button>
           </div>
         </div>
         <DialogFooter className="border-border bg-popover/50">
@@ -297,5 +467,64 @@ function ProductFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CredentialRow({
+  value,
+  onChange,
+  onRemove,
+}: {
+  value: Partial<ProductCredential>;
+  onChange: (patch: Partial<ProductCredential>) => void;
+  onRemove: () => void;
+}) {
+  const [showPassword, setShowPassword] = useState(false);
+  return (
+    <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-border p-2">
+      <Input
+        value={value.label ?? ""}
+        onChange={(e) => onChange({ label: e.target.value })}
+        placeholder="Display name (e.g. Admin Panel)"
+        className="col-span-2 h-8 border-border bg-muted text-xs text-foreground"
+      />
+      <Input
+        value={value.url ?? ""}
+        onChange={(e) => onChange({ url: e.target.value })}
+        placeholder="https://…"
+        className="col-span-2 h-8 border-border bg-muted text-xs text-foreground"
+      />
+      <Input
+        value={value.username ?? ""}
+        onChange={(e) => onChange({ username: e.target.value })}
+        placeholder="Username"
+        className="h-8 border-border bg-muted text-xs text-foreground"
+      />
+      <div className="relative">
+        <Input
+          type={showPassword ? "text" : "password"}
+          value={value.password ?? ""}
+          onChange={(e) => onChange({ password: e.target.value })}
+          placeholder="Password"
+          className="h-8 border-border bg-muted pr-14 text-xs text-foreground"
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((v) => !v)}
+          className="absolute right-7 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          aria-label={showPassword ? "Hide password" : "Show password"}
+        >
+          {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-red-400"
+          aria-label="Remove link"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
   );
 }

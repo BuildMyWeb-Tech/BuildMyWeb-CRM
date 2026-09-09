@@ -503,6 +503,7 @@ export interface FileFolder {
   project_id: string | null;
   client_id: string | null;
   lead_id: string | null;
+  product_id: string | null;
   parent_id: string | null;
   name: string;
   created_by: string | null;
@@ -516,6 +517,7 @@ export interface ManagedFile {
   project_id: string | null;
   client_id: string | null;
   lead_id: string | null;
+  product_id: string | null;
   folder_id: string | null;
   name: string;
   storage_path: string;
@@ -650,6 +652,9 @@ export interface ClientLeadTask {
 // Product module — see 062_product_marketing_modules.sql
 // ============================================================
 
+export type ProductStageTag = "idea" | "planning" | "development" | "deployment" | "testing" | "launch" | "sales";
+export type ProductPriority = "high" | "urgent" | "medium" | "low" | "hold";
+
 export interface Product {
   id: string;
   account_id: string;
@@ -658,9 +663,30 @@ export interface Product {
   project_url_1: string | null;
   project_url_2: string | null;
   tech_stack: string | null;
+  /** Multi-select — a product can be in more than one stage at once
+   *  (e.g. sales + development, when a closed sale surfaces a new
+   *  requirement). See 070_todos_project_chat_products_extras.sql. */
+  stage_tags: ProductStageTag[];
+  priority: ProductPriority;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  credentials?: ProductCredential[];
+}
+
+/** Named URL + optional login for a product — replaces the old
+ *  "Link 1"/"Link 2" fields (still present on Product for backward
+ *  compat, unused going forward). */
+export interface ProductCredential {
+  id: string;
+  account_id: string;
+  product_id: string;
+  label: string;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+  position: number;
+  created_at: string;
 }
 
 // ============================================================
@@ -1174,4 +1200,40 @@ export interface QuickReply {
   interactive_payload?: InteractiveMessagePayload | null;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================
+// Personal / public to-do list — see
+// 070_todos_project_chat_products_extras.sql
+// ============================================================
+
+export type TodoPriority = "low" | "medium" | "high" | "urgent";
+
+export interface Todo {
+  id: string;
+  account_id: string;
+  user_id: string;
+  title: string;
+  notes: string | null;
+  priority: TodoPriority;
+  due_date: string | null;
+  is_done: boolean;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Project chat — one group per project, see
+// 070_todos_project_chat_products_extras.sql
+// ============================================================
+
+export interface ProjectChatMessage {
+  id: string;
+  account_id: string;
+  project_id: string;
+  sender_user_id: string | null;
+  body: string;
+  created_at: string;
+  sender?: AccountMember;
 }
