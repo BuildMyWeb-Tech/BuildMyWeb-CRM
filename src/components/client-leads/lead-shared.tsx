@@ -358,7 +358,7 @@ export function AllTasksTab({
                       : "text-muted-foreground"
                 }`}
               >
-                Ask Update {formatFollowUp(group.leadNextFollowUpAt, group.leadNextFollowUpHasTime ?? true)}
+                {formatFollowUp(group.leadNextFollowUpAt, group.leadNextFollowUpHasTime ?? true)}
               </span>
             )}
             {group.leadPhone && (
