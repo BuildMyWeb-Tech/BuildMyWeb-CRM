@@ -228,3 +228,13 @@ html[data-theme="rose"] {
     @apply font-sans;
   }
 }
+
+/* Scrollable but no visible scrollbar track/thumb — mouse wheel and
+   touch scrolling still work, there's just nothing drawn for it. */
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/new Edge */
+}

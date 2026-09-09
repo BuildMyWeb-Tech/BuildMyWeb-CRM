@@ -36,6 +36,12 @@ export async function GET(request: Request) {
   const admin = supabaseAdmin()
   const nowIso = new Date().toISOString()
 
+  // Retention: activity_logs keeps a rolling ~10-day window — piggy-backed
+  // on this same scheduled hit rather than standing up a second cron.
+  const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+  const { error: cleanupError } = await admin.from('activity_logs').delete().lt('created_at', tenDaysAgo)
+  if (cleanupError) console.error('[client-leads cron] activity_logs cleanup failed:', cleanupError)
+
   const { data: due, error } = await admin
     .from('client_leads')
     .select('id, account_id, title, allocated_user_id, allocated_user_ids, next_follow_up_at')

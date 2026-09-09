@@ -340,6 +340,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // profile enriches async. Callers that need to branch on
           // profile data gate on `profileLoading` instead.
           fetchProfile(currentUser.id);
+          // Covers a browser session that was already signed in before
+          // this tab opened (persisted cookie) — logLogin no-ops if
+          // this tab already logged one (see its own sessionStorage
+          // guard), so this is safe to call unconditionally here too.
+          logLogin(currentUser.id, currentUser.email ?? null);
         } else {
           // No user → no profile to load. Flip profileLoading off so
           // pages that gate on it don't wait forever on the logged-out
@@ -358,7 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -367,12 +372,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentUser.id !== lastFetchedUserIdRef.current) {
           fetchProfile(currentUser.id);
         }
-        // Only a real sign-in, not a tab reload's INITIAL_SESSION or a
-        // token refresh — those fire with the same event shape but
-        // aren't a new session worth logging.
-        if (event === "SIGNED_IN") {
-          logLogin(currentUser.id, currentUser.email ?? null);
-        }
+        // Called on every event (SIGNED_IN, TOKEN_REFRESHED, ...), not
+        // just SIGNED_IN — logLogin's own sessionStorage guard is what
+        // limits this to one row per browser tab session, so an
+        // already-signed-in session that never fires SIGNED_IN again
+        // still gets logged once instead of never.
+        logLogin(currentUser.id, currentUser.email ?? null);
       } else {
         lastFetchedUserIdRef.current = null;
         setProfile(null);

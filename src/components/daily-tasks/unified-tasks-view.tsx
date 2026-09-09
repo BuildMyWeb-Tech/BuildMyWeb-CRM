@@ -123,6 +123,7 @@ export function UnifiedTasksView() {
     return DATE_PRESETS.some((d) => d.id === saved) ? (saved as DatePreset) : "all";
   });
   const [dateSort, setDateSort] = useState<"asc" | "desc" | null>(null);
+  const [stageSort, setStageSort] = useState<"asc" | "desc" | null>(null);
   // "Schedule for later" — a task with a future show_date is hidden
   // from the normal view; this toggle flips to showing ONLY those
   // scheduled-future tasks instead of everything else.
@@ -321,6 +322,12 @@ export function UnifiedTasksView() {
       return true;
     })
     .sort((a, b) => {
+      if (stageSort) {
+        const aName = (a.kind === "daily" ? stages.find((s) => s.id === a.stageId)?.name : a.stageName) ?? "";
+        const bName = (b.kind === "daily" ? stages.find((s) => s.id === b.stageId)?.name : b.stageName) ?? "";
+        const cmp = aName.localeCompare(bName);
+        return stageSort === "asc" ? cmp : -cmp;
+      }
       if (dateSort) {
         if (!a.dateValue && !b.dateValue) return 0;
         if (!a.dateValue) return 1;
@@ -334,7 +341,12 @@ export function UnifiedTasksView() {
     });
 
   function toggleDateSort() {
+    setStageSort(null);
     setDateSort((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
+  }
+  function toggleStageSort() {
+    setDateSort(null);
+    setStageSort((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
   }
 
   function quickSetAssignees(ids: string[]) {
@@ -502,7 +514,12 @@ export function UnifiedTasksView() {
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Task</th>
-                  <th className="px-3 py-2 font-medium">Stage</th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={toggleStageSort} className="flex items-center gap-1 hover:text-foreground">
+                      Stage
+                      {stageSort === "asc" ? <ArrowUp className="h-3 w-3" /> : stageSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
                   <th className="px-3 py-2 font-medium">Client / Project</th>
                   <th className="px-3 py-2 font-medium">Priority</th>
                   <th className="px-3 py-2 font-medium">Assignee</th>

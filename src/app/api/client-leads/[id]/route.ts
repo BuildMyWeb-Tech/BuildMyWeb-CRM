@@ -16,6 +16,44 @@ const PRIORITIES = ['low', 'medium', 'high']
 const SOURCES = ['referral', 'website', 'cold_call', 'social_media', 'advertisement', 'other']
 const STATUSES = ['in_discussion', 'hold', 'confirmed', 'rejected']
 
+type LeadRow = Record<string, unknown>
+
+function fmtDate(v: unknown): string {
+  if (!v || typeof v !== 'string') return 'not set'
+  return new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// Human-readable "what changed" for the activity log — before→after on
+// the fields a person actually recognizes, not a dump of every DB
+// column touched (follow_up_notified_at is a side-effect reset, not
+// something anyone "changed"; allocated_user_id just mirrors
+// allocated_user_ids' first entry). Returns "" when nothing worth
+// reporting changed (e.g. only the side-effect field did).
+function describeLeadUpdate(before: LeadRow, update: Record<string, unknown>): string {
+  const parts: string[] = []
+  if ('title' in update && update.title !== before.title) {
+    parts.push(`title "${before.title}" → "${update.title}"`)
+  }
+  if ('status' in update && update.status !== before.status) {
+    parts.push(`status ${before.status} → ${update.status}`)
+  }
+  if ('priority' in update && update.priority !== before.priority) {
+    parts.push(`priority ${before.priority} → ${update.priority}`)
+  }
+  if ('next_follow_up_at' in update && update.next_follow_up_at !== before.next_follow_up_at) {
+    parts.push(`follow-up ${fmtDate(before.next_follow_up_at)} → ${fmtDate(update.next_follow_up_at)}`)
+  }
+  if ('allocated_user_ids' in update) {
+    const beforeIds = JSON.stringify([...((before.allocated_user_ids as string[]) ?? [])].sort())
+    const afterIds = JSON.stringify([...((update.allocated_user_ids as string[]) ?? [])].sort())
+    if (beforeIds !== afterIds) parts.push('assignees changed')
+  }
+  if ('phone' in update && update.phone !== before.phone) parts.push('phone updated')
+  if ('notes' in update && update.notes !== before.notes) parts.push('notes updated')
+  if ('source' in update && update.source !== before.source) parts.push('source updated')
+  return parts.length > 0 ? `Updated enquiry "${before.title}" — ${parts.join(', ')}` : ''
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -103,21 +141,31 @@ export async function PATCH(
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 
-  const { error } = await supabaseAdmin()
+  const admin = supabaseAdmin()
+  const { data: before } = await admin
+    .from('client_leads')
+    .select('title, status, priority, next_follow_up_at, allocated_user_ids, phone, notes, source')
+    .eq('id', id)
+    .maybeSingle()
+
+  const { error } = await admin
     .from('client_leads')
     .update(update)
     .eq('id', id)
     .eq('account_id', ctx.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  logServerActivity({
-    accountId: ctx.accountId,
-    userId: ctx.userId,
-    action: 'update',
-    entityType: 'client_lead',
-    entityId: id,
-    description: `Updated enquiry (${Object.keys(update).join(', ')})`,
-  })
+  const description = before ? describeLeadUpdate(before, update) : ''
+  if (description) {
+    logServerActivity({
+      accountId: ctx.accountId,
+      userId: ctx.userId,
+      action: 'update',
+      entityType: 'client_lead',
+      entityId: id,
+      description,
+    })
+  }
 
   return NextResponse.json({ ok: true })
 }
