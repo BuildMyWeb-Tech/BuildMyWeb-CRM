@@ -53,9 +53,9 @@ import {
   SOURCE_LABEL,
   whatsappLink,
   formatFollowUp,
-  isOverdue,
+  followUpState,
 } from "@/components/client-leads/lead-shared";
-import type { AccountMember, ClientLead, LeadPriority, LeadSource, LeadStatus } from "@/types";
+import type { ClientLead, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { useAccountMembers } from "@/hooks/use-account-members";
 import { useCachedResource } from "@/hooks/use-cached-resource";
@@ -113,19 +113,25 @@ export default function ClientLeadsPage() {
     return SOURCES.map((s) => ({ source: s, count: counts.get(s) ?? 0 })).filter((s) => s.count > 0);
   }, [leads]);
 
-  const visibleLeads = (leads ?? []).filter((lead) => {
-    if (statusFilter === "in_discussion" && lead.status !== "in_discussion") return false;
-    if (statusFilter === "hold" && lead.status !== "hold") return false;
-    if (statusFilter === "all" && (lead.status === "confirmed" || lead.status === "rejected")) return false;
-    if (priorityFilter !== "all" && lead.priority !== priorityFilter) return false;
-    if (peopleFilter !== "all" && lead.allocated_user_id !== peopleFilter) return false;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      const haystack = `${lead.title} ${lead.phone ?? ""} ${lead.notes ?? ""}`.toLowerCase();
-      if (!haystack.includes(q)) return false;
-    }
-    return true;
-  });
+  const STATUS_ORDER: Record<LeadStatus, number> = { in_discussion: 0, hold: 1, confirmed: 2, rejected: 3 };
+
+  const visibleLeads = (leads ?? [])
+    .filter((lead) => {
+      if (statusFilter === "in_discussion" && lead.status !== "in_discussion") return false;
+      if (statusFilter === "hold" && lead.status !== "hold") return false;
+      if (statusFilter === "all" && (lead.status === "confirmed" || lead.status === "rejected")) return false;
+      if (priorityFilter !== "all" && lead.priority !== priorityFilter) return false;
+      if (peopleFilter !== "all" && !(lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : []).includes(peopleFilter)) return false;
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const haystack = `${lead.title} ${lead.phone ?? ""} ${lead.notes ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    })
+    // In Discussion first, then Hold (then anything else, for the "all" filter's stray states) —
+    // matches the same grouping used on the Enquiry Tasks tab.
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 
   // Grouped by lead — the "All Tasks" tab. Grouping (instead of one
   // flat list with no context) is what makes a shared title like
@@ -345,7 +351,10 @@ export default function ClientLeadsPage() {
                 <LeadCard
                   key={lead.id}
                   lead={lead}
-                  allocated={lead.allocated_user_id ? membersById.get(lead.allocated_user_id) : undefined}
+                  allocatedNames={(lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : [])
+                    .map((id) => membersById.get(id)?.full_name)
+                    .filter(Boolean)
+                    .join(", ")}
                   canUpdate={canUpdate}
                   canDelete={canDelete}
                   accountId={accountId}
@@ -375,7 +384,7 @@ export default function ClientLeadsPage() {
 
 function LeadCard({
   lead,
-  allocated,
+  allocatedNames,
   canUpdate,
   canDelete,
   accountId,
@@ -387,7 +396,7 @@ function LeadCard({
   onTasksChanged,
 }: {
   lead: ClientLead;
-  allocated?: AccountMember;
+  allocatedNames?: string;
   canUpdate: boolean;
   canDelete: boolean;
   accountId: string | null;
@@ -406,7 +415,8 @@ function LeadCard({
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const tasks = lead.tasks ?? [];
   const doneCount = tasks.filter((t) => t.is_done).length;
-  const overdue = isOverdue(lead);
+  const fu = followUpState(lead.next_follow_up_at, lead.status);
+  const overdue = fu === "overdue";
 
   return (
     <Card className="border-l-4" style={{ borderLeftColor: lead.priority === "high" ? "#ef4444" : lead.priority === "medium" ? "#f59e0b" : "#94a3b8" }}>
@@ -490,10 +500,14 @@ function LeadCard({
             {SOURCE_LABEL[lead.source]}
           </span>
         )}
-        <div className={`flex items-center justify-between gap-1 text-xs ${overdue ? "font-semibold text-red-400" : "text-muted-foreground"}`}>
+        <div
+          className={`flex items-center justify-between gap-1 text-xs ${
+            fu === "overdue" ? "font-semibold text-red-400" : fu === "today" ? "font-semibold text-emerald-500" : "text-muted-foreground"
+          }`}
+        >
           <span className="flex items-center gap-1">
             {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-            Next follow-up: {formatFollowUp(lead.next_follow_up_at)}
+            Next follow-up: {formatFollowUp(lead.next_follow_up_at, lead.next_follow_up_has_time)}
           </span>
           {overdue && canUpdate && (
             <button
@@ -507,7 +521,7 @@ function LeadCard({
         </div>
         <FollowUpDialog open={followUpOpen} onOpenChange={setFollowUpOpen} leadId={lead.id} onSaved={onTasksChanged} />
         <p className="text-xs text-muted-foreground">
-          Allocated to: {allocated?.full_name || <span className="italic">Unassigned</span>}
+          Allocated to: {allocatedNames || <span className="italic">Unassigned</span>}
         </p>
 
         <div className="border-t border-border pt-2">

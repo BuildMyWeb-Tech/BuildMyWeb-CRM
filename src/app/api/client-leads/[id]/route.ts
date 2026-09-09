@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentAccount, requirePagePermission, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { logServerActivity } from '@/lib/activity/log-server'
 
 // GET /api/client-leads/[id] — one lead + its task checklist, for the
 //   detail page (/client-leads/[id]).
@@ -69,7 +70,18 @@ export async function PATCH(
     // this column.
     update.follow_up_notified_at = null
   }
+  if ('next_follow_up_has_time' in body) update.next_follow_up_has_time = body.next_follow_up_has_time !== false
   if ('allocated_user_id' in body) update.allocated_user_id = body.allocated_user_id ?? null
+  if ('allocated_user_ids' in body) {
+    update.allocated_user_ids = Array.isArray(body.allocated_user_ids)
+      ? body.allocated_user_ids.filter((v: unknown) => typeof v === 'string')
+      : []
+    // Keep the singular column (read by the cron job) as "primary" —
+    // first entry in the array, or whatever was explicitly sent.
+    if (!('allocated_user_id' in body)) {
+      update.allocated_user_id = (update.allocated_user_ids as string[])[0] ?? null
+    }
+  }
   if (typeof body.priority === 'string') {
     if (!PRIORITIES.includes(body.priority)) return NextResponse.json({ error: 'invalid priority' }, { status: 400 })
     update.priority = body.priority
@@ -97,6 +109,16 @@ export async function PATCH(
     .eq('id', id)
     .eq('account_id', ctx.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  logServerActivity({
+    accountId: ctx.accountId,
+    userId: ctx.userId,
+    action: 'update',
+    entityType: 'client_lead',
+    entityId: id,
+    description: `Updated enquiry (${Object.keys(update).join(', ')})`,
+  })
+
   return NextResponse.json({ ok: true })
 }
 
@@ -117,5 +139,15 @@ export async function DELETE(
     .eq('id', id)
     .eq('account_id', ctx.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  logServerActivity({
+    accountId: ctx.accountId,
+    userId: ctx.userId,
+    action: 'delete',
+    entityType: 'client_lead',
+    entityId: id,
+    description: 'Rejected/deleted an enquiry',
+  })
+
   return NextResponse.json({ ok: true })
 }

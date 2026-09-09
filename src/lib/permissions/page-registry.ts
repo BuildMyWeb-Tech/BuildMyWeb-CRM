@@ -34,7 +34,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   // Projects
   { key: "projects", label: "Projects", category: "Projects" },
   { key: "kanban", label: "Kanban", category: "Projects" },
-  { key: "daily_tasks", label: "Daily Tasks", category: "Projects" },
+  { key: "daily_tasks", label: "Project Tasks", category: "Projects" },
   // Product
   { key: "products", label: "Products", category: "Product" },
   // Marketing
@@ -46,6 +46,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   { key: "files", label: "Files", category: "Office" },
   { key: "accounts", label: "Accounts", category: "Office" },
   { key: "user_management", label: "User Management", category: "Office" },
+  { key: "activity_log", label: "Activity Log", category: "Office" },
 ];
 
 export const PAGE_CATEGORIES: string[] = [...new Set(PAGE_REGISTRY.map((p) => p.category))];

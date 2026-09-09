@@ -21,16 +21,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import type { ProjectTask, AccountMember, TaskPriority } from "@/types";
 import { toast } from "sonner";
 
-// Lightweight quick-edit for a card on the UNIFIED cross-project
-// board — priority/assignee/due date only, not the full task editor
-// (title, description, checklist, stage). Full editing stays on
-// that task's own project board (linked below), since this view
-// deliberately doesn't know that project's own stages/columns —
-// only its shared common_status_id, which drag-and-drop already
-// handles without needing this dialog at all.
+// Quick-edit for a project task from anywhere that lists it without
+// being on that task's own project board — the unified cross-project
+// Kanban, and Project Tasks / Overview's table. Covers title,
+// priority, assignee(s), due date; full editing (description,
+// checklist, stage) stays on the task's own project board (linked
+// below).
 
 interface UnifiedTaskQuickEditProps {
   task: ProjectTask | null;
@@ -42,28 +42,34 @@ interface UnifiedTaskQuickEditProps {
 const PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
 
 export function UnifiedTaskQuickEdit({ task, members, onClose, onSaved }: UnifiedTaskQuickEditProps) {
+  const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("normal");
-  const [assigneeId, setAssigneeId] = useState("__unassigned__");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!task) return;
+    setTitle(task.title);
     setPriority(task.priority);
-    setAssigneeId(task.assignee_user_id ?? "__unassigned__");
+    setAssigneeIds(task.assignee_user_ids?.length ? task.assignee_user_ids : task.assignee_user_id ? [task.assignee_user_id] : []);
     setDueDate(task.due_date ?? "");
   }, [task]);
 
   async function handleSave() {
     if (!task) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
     setSaving(true);
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from("project_tasks")
         .update({
+          title: trimmedTitle,
           priority,
-          assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
+          assignee_user_id: assigneeIds[0] ?? null,
+          assignee_user_ids: assigneeIds,
           due_date: dueDate || null,
         })
         .eq("id", task.id);
@@ -88,6 +94,10 @@ export function UnifiedTaskQuickEdit({ task, members, onClose, onSaved }: Unifie
 
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">
+            <Label className="text-muted-foreground">Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-border bg-muted text-foreground" />
+          </div>
+          <div className="grid gap-2">
             <Label className="text-muted-foreground">Priority</Label>
             <Select value={priority} onValueChange={(v) => v && setPriority(v as TaskPriority)}>
               <SelectTrigger className="w-full">
@@ -101,20 +111,8 @@ export function UnifiedTaskQuickEdit({ task, members, onClose, onSaved }: Unifie
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label className="text-muted-foreground">Assignee</Label>
-            <Select value={assigneeId} onValueChange={(v) => v && setAssigneeId(v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue className="truncate">
-                  {(v: string) => (v === "__unassigned__" ? "Unassigned" : members.find((m) => m.user_id === v)?.full_name ?? "Unassigned")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                {members.map((m) => (
-                  <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-muted-foreground">Assignees</Label>
+            <MultiUserSelect members={members} value={assigneeIds} onChange={setAssigneeIds} />
           </div>
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Due date</Label>
@@ -136,7 +134,7 @@ export function UnifiedTaskQuickEdit({ task, members, onClose, onSaved }: Unifie
           <Button variant="outline" onClick={onClose} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || !title.trim()}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

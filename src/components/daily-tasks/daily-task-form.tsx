@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { resolveCommonStatusId } from "@/lib/kanban/resolve-common-status";
 import { toast } from "sonner";
 
@@ -72,7 +73,7 @@ export function DailyTaskForm({
   const [stageId, setStageId] = useState("");
   const [clientId, setClientId] = useState("__none__");
   const [projectId, setProjectId] = useState("__none__");
-  const [assigneeId, setAssigneeId] = useState("__unassigned__");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [targetDate, setTargetDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -85,7 +86,7 @@ export function DailyTaskForm({
     setStageId(task?.stage_id ?? defaultStageId ?? stages[0]?.id ?? "");
     setClientId(task?.client_id ?? "__none__");
     setProjectId(task?.project_id ?? "__none__");
-    setAssigneeId(task?.assignee_user_id ?? "__unassigned__");
+    setAssigneeIds(task?.assignee_user_ids?.length ? task.assignee_user_ids : task?.assignee_user_id ? [task.assignee_user_id] : []);
     setPriority(task?.priority ?? "normal");
     setTargetDate(task?.target_date ?? "");
   }, [open, task, defaultStageId, stages]);
@@ -100,7 +101,7 @@ export function DailyTaskForm({
   // mirror is deleted rather than left behind as a stale card).
   async function syncLinkedProjectTask(existingLinkId: string | null): Promise<string | null> {
     const trimmedTitle = title.trim();
-    const resolvedAssignee = assigneeId === "__unassigned__" ? null : assigneeId;
+    const resolvedAssignee = assigneeIds[0] ?? null;
     const resolvedDueDate = targetDate || null;
 
     if (projectId === "__none__") {
@@ -113,7 +114,7 @@ export function DailyTaskForm({
     if (existingLinkId) {
       const { error } = await supabase
         .from("project_tasks")
-        .update({ title: trimmedTitle, assignee_user_id: resolvedAssignee, priority, due_date: resolvedDueDate })
+        .update({ title: trimmedTitle, assignee_user_id: resolvedAssignee, assignee_user_ids: assigneeIds, priority, due_date: resolvedDueDate })
         .eq("id", existingLinkId);
       if (error) {
         console.error("[daily-tasks] linked project task update failed:", error);
@@ -152,6 +153,7 @@ export function DailyTaskForm({
         common_status_id: commonStatusId,
         title: trimmedTitle,
         assignee_user_id: resolvedAssignee,
+        assignee_user_ids: assigneeIds,
         priority,
         due_date: resolvedDueDate,
         checklist: [],
@@ -182,7 +184,8 @@ export function DailyTaskForm({
         stage_id: stageId,
         client_id: clientId === "__none__" ? null : clientId,
         project_id: projectId === "__none__" ? null : projectId,
-        assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
+        assignee_user_id: assigneeIds[0] ?? null,
+        assignee_user_ids: assigneeIds,
         priority,
         target_date: targetDate || null,
         linked_project_task_id: linkedProjectTaskId,
@@ -319,20 +322,8 @@ export function DailyTaskForm({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">Assignee</Label>
-              <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? "__unassigned__")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__unassigned__" ? "Unassigned" : members.find((m) => m.user_id === v)?.full_name ?? "Unassigned")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                  {members.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-muted-foreground">Assignees</Label>
+              <MultiUserSelect members={members} value={assigneeIds} onChange={setAssigneeIds} />
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Target date</Label>

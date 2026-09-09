@@ -72,6 +72,12 @@ export function KanbanBoardView() {
     setCollapsedColumnsState(next);
     window.localStorage.setItem("kanban-collapsed-columns", JSON.stringify([...next]));
   }
+  // Only ever seeded once, the very first time this board loads with
+  // no saved collapse preference at all — after that, the user's own
+  // expand/collapse choices (the state above) are the only thing that
+  // decides it, exactly as before.
+  const hadStoredCollapsePref =
+    typeof window !== "undefined" && window.localStorage.getItem("kanban-collapsed-columns") !== null;
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -133,13 +139,25 @@ export function KanbanBoardView() {
       fetchAccountMembers(accountId),
     ])
       .then(([statusesRes, tasksRes, projectsData, membersRows]) => {
-        setStatuses(statusesRes.data ?? []);
-        setTasks((tasksRes.data ?? []) as ProjectTask[]);
+        const loadedStatuses = statusesRes.data ?? [];
+        const loadedTasks = (tasksRes.data ?? []) as ProjectTask[];
+        setStatuses(loadedStatuses);
+        setTasks(loadedTasks);
         if (projectsData) setProjects(projectsData.projects ?? []);
         setMembers(membersRows);
+
+        if (!hadStoredCollapsePref) {
+          const withTasks = new Set(loadedTasks.map((t) => t.common_status_id).filter((id): id is string => !!id));
+          const emptyStatusIds = loadedStatuses.filter((s) => !withTasks.has(s.id)).map((s) => s.id);
+          if (emptyStatusIds.length > 0) setCollapsedColumns(new Set(emptyStatusIds));
+        }
       })
       .catch((err) => console.error("[kanban] load failed:", err))
       .finally(() => setLoading(false));
+    // hadStoredCollapsePref is read once at mount (localStorage doesn't
+    // change from other tabs mid-session) — deliberately not a
+    // dependency so re-running `load()` later never re-seeds it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentAccount, requirePagePermission, toErrorResponse } from '@/lib/auth/account'
+import { logServerActivity } from '@/lib/activity/log-server'
 
 // GET /api/client-leads — list leads + their task checklists for this account.
 // POST /api/client-leads — create a lead. Only `title` is required.
@@ -47,6 +48,11 @@ export async function POST(request: Request) {
 
   const priority = typeof body.priority === 'string' && PRIORITIES.includes(body.priority) ? body.priority : 'medium'
   const source = typeof body.source === 'string' && SOURCES.includes(body.source) ? body.source : null
+  const allocatedUserIds = Array.isArray(body.allocated_user_ids)
+    ? body.allocated_user_ids.filter((v: unknown) => typeof v === 'string')
+    : typeof body.allocated_user_id === 'string'
+      ? [body.allocated_user_id]
+      : []
 
   const { data: lead, error } = await ctx.supabase
     .from('client_leads')
@@ -58,7 +64,9 @@ export async function POST(request: Request) {
       priority,
       source,
       next_follow_up_at: typeof body.next_follow_up_at === 'string' ? body.next_follow_up_at : null,
-      allocated_user_id: typeof body.allocated_user_id === 'string' ? body.allocated_user_id : null,
+      next_follow_up_has_time: body.next_follow_up_has_time !== false,
+      allocated_user_id: allocatedUserIds[0] ?? null,
+      allocated_user_ids: allocatedUserIds,
       created_by: ctx.userId,
     })
     .select('*')
@@ -68,6 +76,15 @@ export async function POST(request: Request) {
     console.error('[client-leads] create failed:', error)
     return NextResponse.json({ error: 'Could not create lead' }, { status: 500 })
   }
+
+  logServerActivity({
+    accountId: ctx.accountId,
+    userId: ctx.userId,
+    action: 'create',
+    entityType: 'client_lead',
+    entityId: lead.id,
+    description: `Created enquiry "${lead.title}"`,
+  })
 
   return NextResponse.json({ lead: { ...lead, tasks: [] } }, { status: 201 })
 }

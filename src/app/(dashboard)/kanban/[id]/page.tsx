@@ -118,6 +118,7 @@ export default function KanbanBoardPage() {
     title: c.title,
     description: c.description,
     assignee_user_id: c.assignee_user_id,
+    assignee_user_ids: c.assignee_user_id ? [c.assignee_user_id] : [],
     priority: c.priority,
     due_date: c.due_date,
     checklist: c.checklist,

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { logLogin, logLogout } from "@/lib/activity/log";
 import type { User } from "@supabase/supabase-js";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
@@ -357,7 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -365,6 +366,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentUser) {
         if (currentUser.id !== lastFetchedUserIdRef.current) {
           fetchProfile(currentUser.id);
+        }
+        // Only a real sign-in, not a tab reload's INITIAL_SESSION or a
+        // token refresh — those fire with the same event shape but
+        // aren't a new session worth logging.
+        if (event === "SIGNED_IN") {
+          logLogin(currentUser.id, currentUser.email ?? null);
         }
       } else {
         lastFetchedUserIdRef.current = null;
@@ -385,12 +392,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const supabase = createClient();
+    if (user) await logLogout(user.id, user.email ?? null);
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setAccount(null);
     window.location.href = "/login";
-  }, []);
+  }, [user]);
 
   const refreshProfile = useCallback(async () => {
     if (!user?.id) return;

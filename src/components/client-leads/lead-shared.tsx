@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CheckCircle2 } from "lucide-react";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import type { AccountMember, ClientLead, ClientLeadTask, LeadPriority, LeadSource, LeadStatus } from "@/types";
 import { toast } from "sonner";
 
@@ -62,19 +63,50 @@ export function whatsappLink(phone: string): string {
   return `https://wa.me/${digits}`;
 }
 
-export function formatFollowUp(iso: string | null): string {
-  if (!iso) return "No follow-up set";
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
-// Only "active" leads (still being worked) can be overdue — a held
-// or already-decided lead's follow-up date isn't a live deadline
-// anymore.
+// "20th Sep 2026 at 5:18 PM" — with the "at ..." clause dropped
+// entirely for a date-only follow-up (hasTime === false).
+export function formatFollowUp(iso: string | null, hasTime: boolean = true): string {
+  if (!iso) return "No follow-up set";
+  const d = new Date(iso);
+  const datePart = `${ordinal(d.getDate())} ${d.toLocaleString(undefined, { month: "short" })} ${d.getFullYear()}`;
+  if (!hasTime) return datePart;
+  const timePart = d.toLocaleString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${datePart} at ${timePart}`;
+}
+
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+export type FollowUpState = "none" | "overdue" | "today" | "normal";
+
+// Comparison is by calendar day, not exact timestamp, for both
+// date-only AND date+time follow-ups — a same-day follow-up isn't
+// "overdue" just because the clock time already passed, and only
+// "active" leads (still being worked) can be overdue at all — a held
+// or already-decided lead's date isn't a live deadline anymore.
+export function followUpState(iso: string | null, status: LeadStatus): FollowUpState {
+  if (!iso) return "none";
+  if (status !== "in_discussion" && status !== "hold") return "none";
+  const followDay = startOfDay(new Date(iso));
+  const today = startOfDay(new Date());
+  if (followDay < today) return "overdue";
+  if (followDay === today) return "today";
+  return "normal";
+}
+
 export function isOverdue(lead: ClientLead): boolean {
-  if (!lead.next_follow_up_at) return false;
-  if (lead.status !== "in_discussion" && lead.status !== "hold") return false;
-  return new Date(lead.next_follow_up_at).getTime() < Date.now();
+  return followUpState(lead.next_follow_up_at, lead.status) === "overdue";
+}
+
+export function isFollowUpToday(lead: ClientLead): boolean {
+  return followUpState(lead.next_follow_up_at, lead.status) === "today";
 }
 
 export function TaskChecklist({
@@ -202,6 +234,8 @@ export interface TaskGroup {
   leadStatus?: LeadStatus;
   leadPhone?: string | null;
   leadAllocatedName?: string | null;
+  leadNextFollowUpAt?: string | null;
+  leadNextFollowUpHasTime?: boolean;
 }
 
 // Status groups sort first (In Discussion, then Hold, then anything
@@ -314,6 +348,19 @@ export function AllTasksTab({
             {group.leadAllocatedName && (
               <span className="text-[10px] text-muted-foreground">→ {group.leadAllocatedName}</span>
             )}
+            {group.leadNextFollowUpAt && group.leadStatus && (
+              <span
+                className={`text-[10px] ${
+                  followUpState(group.leadNextFollowUpAt, group.leadStatus) === "overdue"
+                    ? "font-semibold text-red-400"
+                    : followUpState(group.leadNextFollowUpAt, group.leadStatus) === "today"
+                      ? "font-semibold text-emerald-500"
+                      : "text-muted-foreground"
+                }`}
+              >
+                Ask Update {formatFollowUp(group.leadNextFollowUpAt, group.leadNextFollowUpHasTime ?? true)}
+              </span>
+            )}
             {group.leadPhone && (
               <a
                 href={whatsappLink(group.leadPhone)}
@@ -425,6 +472,52 @@ export function AllTasksTab({
   );
 }
 
+// Date-only OR date+time — leaving the time field blank books a bare
+// date (next_follow_up_has_time: false), matching how overdue/today
+// coloring treats both the same way (calendar-day comparison either
+// way; the time field just controls what's *displayed*).
+function FollowUpPicker({
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+}: {
+  date: string;
+  time: string;
+  onDateChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <Input type="date" value={date} onChange={(e) => onDateChange(e.target.value)} className="border-border bg-muted text-foreground" />
+      <Input
+        type="time"
+        value={time}
+        onChange={(e) => onTimeChange(e.target.value)}
+        placeholder="Time (optional)"
+        className="border-border bg-muted text-foreground"
+      />
+    </div>
+  );
+}
+
+function splitIso(iso: string | null, hasTime: boolean): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const time = hasTime ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
+  return { date, time };
+}
+
+function combineDateTime(date: string, time: string): { iso: string | null; hasTime: boolean } {
+  if (!date) return { iso: null, hasTime: true };
+  if (time) {
+    return { iso: new Date(`${date}T${time}`).toISOString(), hasTime: true };
+  }
+  return { iso: new Date(`${date}T00:00`).toISOString(), hasTime: false };
+}
+
 // "Mark followed up" — clears an overdue/past follow-up and
 // optionally schedules the next one in the same step, instead of
 // forcing a trip through the full edit dialog just to update one
@@ -441,20 +534,24 @@ export function FollowUpDialog({
   leadId: string;
   onSaved: () => void;
 }) {
-  const [nextFollowUp, setNextFollowUp] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setNextFollowUp("");
+    if (open) {
+      setDate("");
+      setTime("");
+    }
   }, [open]);
 
-  async function submit(value: string | null) {
+  async function submit(payload: { next_follow_up_at: string | null; next_follow_up_has_time?: boolean }) {
     setSaving(true);
     try {
       const res = await fetch(`/api/client-leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ next_follow_up_at: value }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         toast.error("Could not update follow-up.");
@@ -475,25 +572,23 @@ export function FollowUpDialog({
           <DialogTitle className="text-popover-foreground">Follow-up complete</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2 py-2">
-          <Label className="text-muted-foreground">Next follow-up (optional)</Label>
-          <Input
-            type="datetime-local"
-            value={nextFollowUp}
-            onChange={(e) => setNextFollowUp(e.target.value)}
-            className="border-border bg-muted text-foreground"
-          />
+          <Label className="text-muted-foreground">Next follow-up (optional — date, or date + time)</Label>
+          <FollowUpPicker date={date} time={time} onDateChange={setDate} onTimeChange={setTime} />
         </div>
         <DialogFooter className="border-border bg-popover/50">
           <Button
             variant="outline"
-            onClick={() => submit(null)}
+            onClick={() => submit({ next_follow_up_at: null })}
             disabled={saving}
             className="border-border bg-transparent text-muted-foreground hover:bg-muted"
           >
             Skip
           </Button>
           <Button
-            onClick={() => submit(nextFollowUp ? new Date(nextFollowUp).toISOString() : null)}
+            onClick={() => {
+              const { iso, hasTime } = combineDateTime(date, time);
+              submit({ next_follow_up_at: iso, next_follow_up_has_time: hasTime });
+            }}
             disabled={saving}
           >
             {saving ? "Saving…" : "Save"}
@@ -502,13 +597,6 @@ export function FollowUpDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function LeadFormDialog({
@@ -529,8 +617,9 @@ export function LeadFormDialog({
   const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState<LeadPriority>("medium");
   const [source, setSource] = useState<string>("");
-  const [nextFollowUp, setNextFollowUp] = useState("");
-  const [allocatedUserId, setAllocatedUserId] = useState<string>("");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpTime, setFollowUpTime] = useState("");
+  const [allocatedUserIds, setAllocatedUserIds] = useState<string[]>([]);
   // Only meaningful when creating (initial === null) — once a lead
   // exists, adding more tasks goes through the card's own "+" (see
   // TaskChecklist), same UI either way, just after the lead exists
@@ -545,8 +634,12 @@ export function LeadFormDialog({
     setNotes(initial?.notes ?? "");
     setPriority(initial?.priority ?? "medium");
     setSource(initial?.source ?? "");
-    setNextFollowUp(toDatetimeLocal(initial?.next_follow_up_at ?? null));
-    setAllocatedUserId(initial?.allocated_user_id ?? "");
+    const { date, time } = splitIso(initial?.next_follow_up_at ?? null, initial?.next_follow_up_has_time ?? true);
+    setFollowUpDate(date);
+    setFollowUpTime(time);
+    setAllocatedUserIds(
+      initial?.allocated_user_ids?.length ? initial.allocated_user_ids : initial?.allocated_user_id ? [initial.allocated_user_id] : [],
+    );
     setNewTasks([""]);
   }, [open, initial]);
 
@@ -567,14 +660,17 @@ export function LeadFormDialog({
     if (!trimmed) return;
     setSaving(true);
     try {
+      const { iso, hasTime } = combineDateTime(followUpDate, followUpTime);
       const payload = {
         title: trimmed,
         phone: phone.trim() || null,
         notes: notes.trim() || null,
         priority,
         source: source || null,
-        next_follow_up_at: nextFollowUp ? new Date(nextFollowUp).toISOString() : null,
-        allocated_user_id: allocatedUserId || null,
+        next_follow_up_at: iso,
+        next_follow_up_has_time: hasTime,
+        allocated_user_id: allocatedUserIds[0] ?? null,
+        allocated_user_ids: allocatedUserIds,
       };
       const res = await fetch(initial ? `/api/client-leads/${initial.id}` : "/api/client-leads", {
         method: initial ? "PATCH" : "POST",
@@ -663,31 +759,14 @@ export function LeadFormDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
+            <div className="col-span-2 grid gap-2">
               <Label className="text-muted-foreground">Allocated to</Label>
-              <Select value={allocatedUserId || "__none"} onValueChange={(v) => setAllocatedUserId(v === "__none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__none" ? "Unassigned" : members.find((m) => m.user_id === v)?.full_name ?? "Unassigned")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectItem value="__none">Unassigned</SelectItem>
-                  {members.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiUserSelect members={members} value={allocatedUserIds} onChange={setAllocatedUserIds} />
             </div>
           </div>
           <div className="grid gap-2">
-            <Label className="text-muted-foreground">Next follow-up</Label>
-            <Input
-              type="datetime-local"
-              value={nextFollowUp}
-              onChange={(e) => setNextFollowUp(e.target.value)}
-              className="border-border bg-muted text-foreground"
-            />
+            <Label className="text-muted-foreground">Next follow-up (optional — date, or date + time)</Label>
+            <FollowUpPicker date={followUpDate} time={followUpTime} onDateChange={setFollowUpDate} onTimeChange={setFollowUpTime} />
           </div>
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Notes</Label>

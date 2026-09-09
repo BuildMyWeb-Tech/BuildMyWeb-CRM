@@ -36,7 +36,7 @@ import {
   SOURCE_LABEL,
   whatsappLink,
   formatFollowUp,
-  isOverdue,
+  followUpState,
 } from "@/components/client-leads/lead-shared";
 import type { AccountMember, ClientLead, LeadStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
@@ -135,8 +135,10 @@ export default function ClientLeadDetailPage() {
     );
   }
 
-  const allocated = members.find((m) => m.user_id === lead.allocated_user_id);
-  const overdue = isOverdue(lead);
+  const allocatedIds = lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : [];
+  const allocatedNames = allocatedIds.map((id) => members.find((m) => m.user_id === id)?.full_name).filter(Boolean).join(", ");
+  const fu = followUpState(lead.next_follow_up_at, lead.status);
+  const overdue = fu === "overdue";
   const tasks = lead.tasks ?? [];
   const doneCount = tasks.filter((t) => t.is_done).length;
 
@@ -238,9 +240,13 @@ export default function ClientLeadDetailPage() {
             label="Next follow-up"
             value={
               <span className="flex items-center gap-2">
-                <span className={`flex items-center gap-1 ${overdue ? "font-semibold text-red-400" : ""}`}>
+                <span
+                  className={`flex items-center gap-1 ${
+                    fu === "overdue" ? "font-semibold text-red-400" : fu === "today" ? "font-semibold text-emerald-500" : ""
+                  }`}
+                >
                   {overdue && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-                  {formatFollowUp(lead.next_follow_up_at)}
+                  {formatFollowUp(lead.next_follow_up_at, lead.next_follow_up_has_time)}
                 </span>
                 {overdue && canUpdate && (
                   <button
@@ -255,7 +261,7 @@ export default function ClientLeadDetailPage() {
             }
           />
           <FollowUpDialog open={followUpOpen} onOpenChange={setFollowUpOpen} leadId={lead.id} onSaved={load} />
-          <InfoRow label="Allocated to" value={allocated?.full_name || "Unassigned"} />
+          <InfoRow label="Allocated to" value={allocatedNames || "Unassigned"} />
           <InfoRow label="Notes" value={lead.notes || "—"} multiline />
         </div>
       )}

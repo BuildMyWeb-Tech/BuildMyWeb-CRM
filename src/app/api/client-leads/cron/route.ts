@@ -38,9 +38,8 @@ export async function GET(request: Request) {
 
   const { data: due, error } = await admin
     .from('client_leads')
-    .select('id, account_id, title, allocated_user_id, next_follow_up_at')
+    .select('id, account_id, title, allocated_user_id, allocated_user_ids, next_follow_up_at')
     .in('status', ['in_discussion', 'hold'])
-    .not('allocated_user_id', 'is', null)
     .not('next_follow_up_at', 'is', null)
     .lte('next_follow_up_at', nowIso)
     .limit(200)
@@ -50,31 +49,34 @@ export async function GET(request: Request) {
 
   const { data: unreadExisting, error: existingError } = await admin
     .from('notifications')
-    .select('lead_id')
+    .select('lead_id, user_id')
     .eq('type', 'lead_follow_up_due')
     .is('read_at', null)
     .in('lead_id', due.map((l) => l.id))
   if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 })
-  const alreadyNagging = new Set((unreadExisting ?? []).map((n) => n.lead_id))
+  const alreadyNagging = new Set((unreadExisting ?? []).map((n) => `${n.lead_id}:${n.user_id}`))
 
   let processed = 0
   for (const lead of due) {
-    if (alreadyNagging.has(lead.id)) continue
+    const recipients = lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : []
+    for (const userId of recipients) {
+      if (alreadyNagging.has(`${lead.id}:${userId}`)) continue
 
-    const { error: notifyError } = await admin.from('notifications').insert({
-      account_id: lead.account_id,
-      user_id: lead.allocated_user_id,
-      type: 'lead_follow_up_due',
-      lead_id: lead.id,
-      title: 'Lead follow-up due',
-      body: `"${lead.title}" is due for follow-up.`,
-    })
-    if (notifyError) {
-      console.error('[client-leads cron] notify failed for lead', lead.id, notifyError)
-      continue
+      const { error: notifyError } = await admin.from('notifications').insert({
+        account_id: lead.account_id,
+        user_id: userId,
+        type: 'lead_follow_up_due',
+        lead_id: lead.id,
+        title: 'Lead follow-up due',
+        body: `"${lead.title}" is due for follow-up.`,
+      })
+      if (notifyError) {
+        console.error('[client-leads cron] notify failed for lead', lead.id, notifyError)
+        continue
+      }
+
+      processed++
     }
-
-    processed++
   }
 
   return NextResponse.json({ processed })

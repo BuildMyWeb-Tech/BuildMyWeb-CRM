@@ -440,6 +440,9 @@ export interface ProjectTask {
   title: string;
   description: string | null;
   assignee_user_id: string | null;
+  /** Multi-assignee — assignee_user_id above still holds the first
+   *  entry as "primary"; this array is the source of truth. */
+  assignee_user_ids: string[];
   priority: TaskPriority;
   due_date: string | null;
   checklist: ChecklistItem[];
@@ -447,6 +450,7 @@ export interface ProjectTask {
   created_at: string;
   updated_at: string;
   assignee?: AccountMember;
+  assignees?: AccountMember[];
   attachments?: TaskAttachment[];
   /** Only populated by the unified cross-project Kanban's own query
    * (src/app/(dashboard)/kanban/page.tsx) — not fetched by a
@@ -590,8 +594,17 @@ export interface ClientLead {
   priority: LeadPriority;
   source: LeadSource | null;
   next_follow_up_at: string | null;
+  /** FALSE when the follow-up was booked as a bare date (no clock
+   *  time) — the UI hides the time-of-day and overdue/today
+   *  comparisons use calendar-day granularity either way. */
+  next_follow_up_has_time: boolean;
   follow_up_notified_at: string | null;
   allocated_user_id: string | null;
+  /** Multi-assignee — allocated_user_id above still holds the first
+   *  entry as "primary" (read by the cron job and anything else that
+   *  only wants one owner); this array is the source of truth for
+   *  who's actually assigned. */
+  allocated_user_ids: string[];
   status: LeadStatus;
   created_by: string | null;
   created_at: string;
@@ -737,6 +750,9 @@ export interface DailyTask {
   title: string;
   brief: string | null;
   assignee_user_id: string | null;
+  /** Multi-assignee — assignee_user_id above still holds the first
+   *  entry as "primary"; this array is the source of truth. */
+  assignee_user_ids: string[];
   priority: TaskPriority;
   target_date: string | null;
   /** Set when `project_id` is also set — the mirrored row this Daily
@@ -750,6 +766,7 @@ export interface DailyTask {
   client?: Client;
   project?: Project;
   assignee?: AccountMember;
+  assignees?: AccountMember[];
 }
 
 // ============================================================

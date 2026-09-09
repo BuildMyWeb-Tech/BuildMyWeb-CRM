@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Plus, SlidersHorizontal, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
+import { UnifiedTaskQuickEdit } from "@/components/kanban/unified-task-quick-edit";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { fetchAccountMembers } from "@/hooks/use-account-members";
@@ -46,6 +46,7 @@ interface UnifiedRow {
   assigneeUserId: string | null;
   dateValue: string | null;
   daily?: DailyTask;
+  project_task?: ProjectTask;
 }
 
 const PRIORITY_STYLE: Record<TaskPriority, string> = {
@@ -59,7 +60,6 @@ export function UnifiedTasksView() {
   const { accountId, user, canManageMembers, canSendMessages } = useAuth();
   const { canCreate: gridCanCreate } = usePagePermissions("daily_tasks");
   const canCreateTask = canSendMessages && gridCanCreate;
-  const router = useRouter();
 
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -73,6 +73,7 @@ export function UnifiedTasksView() {
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
+  const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -263,6 +264,7 @@ export function UnifiedTasksView() {
         priority: t.priority,
         assigneeUserId: t.assignee_user_id,
         dateValue: t.due_date,
+        project_task: t,
       }));
     return [...dailyRows, ...projectRows].sort((a, b) => {
       if (!a.dateValue && !b.dateValue) return 0;
@@ -488,7 +490,7 @@ export function UnifiedTasksView() {
                   return (
                     <tr
                       key={`${task.kind}-${task.id}`}
-                      onClick={() => (task.kind === "daily" ? openEditTask(task.daily!) : router.push(`/projects/${task.projectId}`))}
+                      onClick={() => (task.kind === "daily" ? openEditTask(task.daily!) : setEditingProjectTask(task.project_task!))}
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
                       <td className="px-3 py-2 text-foreground">
@@ -549,6 +551,13 @@ export function UnifiedTasksView() {
           onDeleted={load}
         />
       )}
+
+      <UnifiedTaskQuickEdit
+        task={editingProjectTask}
+        members={members}
+        onClose={() => setEditingProjectTask(null)}
+        onSaved={load}
+      />
     </div>
   );
 }

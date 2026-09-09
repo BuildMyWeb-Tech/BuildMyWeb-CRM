@@ -21,6 +21,7 @@ import { hasMinRole } from "@/lib/auth/roles";
 import {
   Bot,
   Building2,
+  Clock,
   Folder,
   GitBranch,
   IndianRupee,
@@ -149,6 +150,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/files", labelKey: "files", icon: Folder, minRole: "admin", pageKey: "files" },
       { href: "/accounts", labelKey: "accounts", icon: IndianRupee, minRole: "admin", pageKey: "accounts" },
       { href: "/user-management", labelKey: "userManagement", icon: Users2, minRole: "admin", pageKey: "user_management" },
+      { href: "/activity-log", labelKey: "activityLog", icon: Clock, minRole: "admin", pageKey: "activity_log" },
     ],
   },
 ];

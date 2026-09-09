@@ -52,7 +52,12 @@ export default function OverviewPage() {
       leadPriority: lead.priority,
       leadStatus: lead.status,
       leadPhone: lead.phone,
-      leadAllocatedName: lead.allocated_user_id ? membersById.get(lead.allocated_user_id)?.full_name : null,
+      leadAllocatedName: (lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : [])
+        .map((id) => membersById.get(id)?.full_name)
+        .filter(Boolean)
+        .join(", ") || null,
+      leadNextFollowUpAt: lead.next_follow_up_at,
+      leadNextFollowUpHasTime: lead.next_follow_up_has_time,
     }));
 
   async function handleConfirmLead(leadId: string) {
