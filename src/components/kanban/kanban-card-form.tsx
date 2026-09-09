@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -78,7 +79,7 @@ export function KanbanCardForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [stageId, setStageId] = useState("");
-  const [assigneeId, setAssigneeId] = useState("__unassigned__");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [dueDate, setDueDate] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -91,7 +92,7 @@ export function KanbanCardForm({
     setTitle(card?.title ?? "");
     setDescription(card?.description ?? "");
     setStageId(card?.stage_id ?? defaultStageId ?? stages[0]?.id ?? "");
-    setAssigneeId(card?.assignee_user_id ?? "__unassigned__");
+    setAssigneeIds(card?.assignee_user_ids?.length ? card.assignee_user_ids : card?.assignee_user_id ? [card.assignee_user_id] : []);
     setPriority(card?.priority ?? "normal");
     setDueDate(card?.due_date ?? "");
     setChecklist(card?.checklist ?? []);
@@ -122,7 +123,8 @@ export function KanbanCardForm({
       title: trimmedTitle,
       description: description.trim() || null,
       stage_id: stageId,
-      assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
+      assignee_user_id: assigneeIds[0] ?? null,
+      assignee_user_ids: assigneeIds,
       priority,
       due_date: dueDate || null,
       checklist,
@@ -229,22 +231,8 @@ export function KanbanCardForm({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">Assignee</Label>
-              <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? "__unassigned__")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(value: string) =>
-                      value === "__unassigned__" ? "Unassigned" : members.find((m) => m.user_id === value)?.full_name ?? "Unassigned"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                  {members.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-muted-foreground">Assignees</Label>
+              <MultiUserSelect members={members} value={assigneeIds} onChange={setAssigneeIds} />
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Due date</Label>

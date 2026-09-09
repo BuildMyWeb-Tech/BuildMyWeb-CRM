@@ -79,6 +79,8 @@ export async function POST(request: Request) {
       { name: 'In Progress', color: '#60a5fa' },
       { name: 'Review', color: '#facc15' },
       { name: 'Done', color: '#22c55e' },
+      { name: 'Hold', color: '#f59e0b' },
+      { name: 'Waiting on Client', color: '#a855f7' },
     ]
     const { error: stagesError } = await ctx.supabase.from('pipeline_stages').insert(
       DEFAULT_STAGES.map((s, i) => ({

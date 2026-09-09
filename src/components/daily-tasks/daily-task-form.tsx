@@ -76,6 +76,7 @@ export function DailyTaskForm({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [targetDate, setTargetDate] = useState("");
+  const [showDate, setShowDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -89,6 +90,7 @@ export function DailyTaskForm({
     setAssigneeIds(task?.assignee_user_ids?.length ? task.assignee_user_ids : task?.assignee_user_id ? [task.assignee_user_id] : []);
     setPriority(task?.priority ?? "normal");
     setTargetDate(task?.target_date ?? "");
+    setShowDate(task?.show_date ?? "");
   }, [open, task, defaultStageId, stages]);
 
   // Keeps the mirrored `project_tasks` row (see
@@ -188,6 +190,7 @@ export function DailyTaskForm({
         assignee_user_ids: assigneeIds,
         priority,
         target_date: targetDate || null,
+        show_date: showDate || null,
         linked_project_task_id: linkedProjectTaskId,
       };
 
@@ -329,6 +332,14 @@ export function DailyTaskForm({
               <Label className="text-muted-foreground">Target date</Label>
               <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="border-border bg-muted text-foreground" />
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Show date (optional — schedule for later)</Label>
+            <Input type="date" value={showDate} onChange={(e) => setShowDate(e.target.value)} className="border-border bg-muted text-foreground" />
+            <p className="text-xs text-muted-foreground">
+              Hidden from the task list until this date — shows up under the &quot;Scheduled&quot; filter until then.
+            </p>
           </div>
 
           <CustomFieldsSection

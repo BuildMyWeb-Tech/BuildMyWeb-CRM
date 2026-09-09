@@ -445,6 +445,10 @@ export interface ProjectTask {
   assignee_user_ids: string[];
   priority: TaskPriority;
   due_date: string | null;
+  /** Schedule this task to only appear from this date onward — NULL
+   *  (the default) shows it immediately. See "Scheduled" filter in
+   *  Project Tasks / Overview. */
+  show_date: string | null;
   checklist: ChecklistItem[];
   position: number;
   created_at: string;
@@ -728,6 +732,9 @@ export interface KanbanCard {
   title: string;
   description: string | null;
   assignee_user_id: string | null;
+  /** Multi-assignee — assignee_user_id above still holds the first
+   *  entry as "primary"; this array is the source of truth. */
+  assignee_user_ids: string[];
   priority: TaskPriority;
   due_date: string | null;
   checklist: ChecklistItem[];
@@ -755,6 +762,9 @@ export interface DailyTask {
   assignee_user_ids: string[];
   priority: TaskPriority;
   target_date: string | null;
+  /** Schedule this task to only appear from this date onward — NULL
+   *  (the default) shows it immediately. */
+  show_date: string | null;
   /** Set when `project_id` is also set — the mirrored row this Daily
    *  Task keeps in sync on that project's own Kanban board (and, via
    *  common_status_id, the unified cross-project board). See

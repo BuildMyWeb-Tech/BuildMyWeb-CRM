@@ -62,6 +62,11 @@ export async function POST(
   }
 
   const commonStatusId = await resolveCommonStatusId(db, ctx.accountId, stageId)
+  const assigneeUserIds = Array.isArray(body.assignee_user_ids)
+    ? body.assignee_user_ids.filter((v: unknown) => typeof v === 'string')
+    : typeof body.assignee_user_id === 'string'
+      ? [body.assignee_user_id]
+      : []
 
   const { data: task, error: taskError } = await db
     .from('project_tasks')
@@ -72,9 +77,11 @@ export async function POST(
       common_status_id: commonStatusId,
       title,
       description: typeof body.description === 'string' ? body.description : null,
-      assignee_user_id: typeof body.assignee_user_id === 'string' ? body.assignee_user_id : null,
+      assignee_user_id: assigneeUserIds[0] ?? null,
+      assignee_user_ids: assigneeUserIds,
       priority: ['low', 'normal', 'high', 'urgent'].includes(body.priority) ? body.priority : 'normal',
       due_date: typeof body.due_date === 'string' ? body.due_date : null,
+      show_date: typeof body.show_date === 'string' ? body.show_date : null,
       checklist: Array.isArray(body.checklist) ? body.checklist : [],
       position,
     })

@@ -6,6 +6,8 @@ const DEFAULT_STAGES = [
   { name: 'In Progress', color: '#60a5fa' },
   { name: 'Review', color: '#facc15' },
   { name: 'Done', color: '#22c55e' },
+  { name: 'Hold', color: '#f59e0b' },
+  { name: 'Waiting on Client', color: '#a855f7' },
 ]
 
 // ============================================================
@@ -21,9 +23,63 @@ const DEFAULT_STAGES = [
 //   already enforces agent+ access.
 // ============================================================
 
+// Self-heals a gap from before this was reliable: POST /api/clients'
+// auto-project-creation is best-effort (see its comment), so a client
+// created while that step failed — or predating it entirely — has no
+// project row and silently never appears on any board or the Overview
+// side panel. Runs on every list load (cheap: a handful of rows per
+// account) rather than as a one-off backfill, so it self-corrects
+// going forward too, not just for today's gap.
+async function backfillMissingClientProjects(
+  supabase: Awaited<ReturnType<typeof getCurrentAccount>>['supabase'],
+  accountId: string,
+  ownerUserId: string,
+) {
+  const { data: clients } = await supabase.from('clients').select('id, name, status').eq('account_id', accountId)
+  if (!clients || clients.length === 0) return
+
+  const { data: existingProjects } = await supabase.from('projects').select('client_id').eq('account_id', accountId)
+  const clientIdsWithProject = new Set((existingProjects ?? []).map((p) => p.client_id).filter(Boolean))
+  const orphanClients = clients.filter((c) => !clientIdsWithProject.has(c.id))
+  if (orphanClients.length === 0) return
+
+  for (const client of orphanClients) {
+    const { data: pipeline, error: pipelineError } = await supabase
+      .from('pipelines')
+      .insert({ account_id: accountId, user_id: ownerUserId, name: `${client.name} Board` })
+      .select('id')
+      .single()
+    if (pipelineError || !pipeline) {
+      console.error('[projects] backfill pipeline creation failed for client', client.id, pipelineError)
+      continue
+    }
+    const { error: stagesError } = await supabase.from('pipeline_stages').insert(
+      DEFAULT_STAGES.map((s, i) => ({ pipeline_id: pipeline.id, name: s.name, position: i + 1, color: s.color })),
+    )
+    if (stagesError) {
+      console.error('[projects] backfill stage seeding failed for client', client.id, stagesError)
+      continue
+    }
+    const { error: projectError } = await supabase.from('projects').insert({
+      account_id: accountId,
+      pipeline_id: pipeline.id,
+      client_id: client.id,
+      name: client.name,
+      status: client.status,
+      owner_user_id: ownerUserId,
+    })
+    if (projectError) console.error('[projects] backfill project creation failed for client', client.id, projectError)
+  }
+}
+
 export async function GET() {
   try {
     const ctx = await getCurrentAccount()
+
+    if (ctx.userId) {
+      await backfillMissingClientProjects(ctx.supabase, ctx.accountId, ctx.userId)
+    }
+
     const { data, error } = await ctx.supabase
       .from('projects')
       .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name)')

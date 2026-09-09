@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, Paperclip, X, Loader2 } from "lucide-react";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { toast } from "sonner";
 
 // Create/edit dialog for a project task. Handles the checklist
@@ -73,9 +74,10 @@ export function TaskForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [stageId, setStageId] = useState<string>("");
-  const [assigneeId, setAssigneeId] = useState<string>("__unassigned__");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [dueDate, setDueDate] = useState("");
+  const [showDate, setShowDate] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [saving, setSaving] = useState(false);
@@ -88,9 +90,10 @@ export function TaskForm({
     setTitle(task?.title ?? "");
     setDescription(task?.description ?? "");
     setStageId(task?.stage_id ?? defaultStageId ?? stages[0]?.id ?? "");
-    setAssigneeId(task?.assignee_user_id ?? "__unassigned__");
+    setAssigneeIds(task?.assignee_user_ids?.length ? task.assignee_user_ids : task?.assignee_user_id ? [task.assignee_user_id] : []);
     setPriority(task?.priority ?? "normal");
     setDueDate(task?.due_date ?? "");
+    setShowDate(task?.show_date ?? "");
     setChecklist(task?.checklist ?? []);
     setAttachments(task?.attachments ?? []);
     setNewChecklistItem("");
@@ -120,9 +123,11 @@ export function TaskForm({
       title: trimmedTitle,
       description: description.trim() || null,
       stage_id: stageId,
-      assignee_user_id: assigneeId === "__unassigned__" ? null : assigneeId,
+      assignee_user_id: assigneeIds[0] ?? null,
+      assignee_user_ids: assigneeIds,
       priority,
       due_date: dueDate || null,
+      show_date: showDate || null,
       checklist,
     };
 
@@ -283,26 +288,8 @@ export function TaskForm({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">Assignee</Label>
-              <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? "__unassigned__")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(value: string) =>
-                      value === "__unassigned__"
-                        ? "Unassigned"
-                        : members.find((m) => m.user_id === value)?.full_name ?? "Unassigned"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                  {members.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>
-                      {m.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-muted-foreground">Assignees</Label>
+              <MultiUserSelect members={members} value={assigneeIds} onChange={setAssigneeIds} />
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Due date</Label>
@@ -313,6 +300,19 @@ export function TaskForm({
                 className="border-border bg-muted text-foreground"
               />
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Show date (optional — schedule for later)</Label>
+            <Input
+              type="date"
+              value={showDate}
+              onChange={(e) => setShowDate(e.target.value)}
+              className="border-border bg-muted text-foreground"
+            />
+            <p className="text-xs text-muted-foreground">
+              Hidden from the task list until this date — shows up under the &quot;Scheduled&quot; filter until then.
+            </p>
           </div>
 
           <div className="grid gap-2">

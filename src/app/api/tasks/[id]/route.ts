@@ -36,7 +36,14 @@ export async function PATCH(
   }
   if ('description' in body) update.description = body.description ?? null
   if ('assignee_user_id' in body) update.assignee_user_id = body.assignee_user_id ?? null
+  if ('assignee_user_ids' in body) {
+    update.assignee_user_ids = Array.isArray(body.assignee_user_ids)
+      ? body.assignee_user_ids.filter((v: unknown) => typeof v === 'string')
+      : []
+    if (!('assignee_user_id' in body)) update.assignee_user_id = (update.assignee_user_ids as string[])[0] ?? null
+  }
   if ('due_date' in body) update.due_date = body.due_date ?? null
+  if ('show_date' in body) update.show_date = body.show_date ?? null
   if ('checklist' in body && Array.isArray(body.checklist)) update.checklist = body.checklist
   if (typeof body.priority === 'string') {
     if (!['low', 'normal', 'high', 'urgent'].includes(body.priority)) {

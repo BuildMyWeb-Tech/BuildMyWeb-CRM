@@ -23,7 +23,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { fetchAccountMembers } from "@/hooks/use-account-members";
 import { createClient } from "@/lib/supabase/client";
-import { LayoutGrid, Loader2, User } from "lucide-react";
+import { LayoutGrid, Loader2 } from "lucide-react";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import type { KanbanCommonStatus, ProjectTask, Project, AccountMember, TaskPriority } from "@/types";
 import { toast } from "sonner";
 
@@ -239,7 +240,10 @@ export function KanbanBoardView() {
 
   const visibleTasks = tasks.filter((t) => {
     if (projectFilter.size > 0 && !projectFilter.has(t.project_id)) return false;
-    if (assigneeFilter.size > 0 && (!t.assignee_user_id || !assigneeFilter.has(t.assignee_user_id))) return false;
+    if (assigneeFilter.size > 0) {
+      const ids = t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [];
+      if (!ids.some((id) => assigneeFilter.has(id))) return false;
+    }
     if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
     return true;
   });
@@ -306,23 +310,18 @@ export function KanbanBoardView() {
             same Sets the drawer's own chips use, so there's one
             source of truth either way you filter. */}
         <div className="flex items-center gap-2">
-          <Select
-            value={assigneeFilter.size === 1 ? [...assigneeFilter][0] : "all"}
-            onValueChange={(v) => v && setAssigneeFilter(v === "all" ? new Set() : new Set([v]))}
-          >
-            <SelectTrigger size="sm">
-              <User className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue className="truncate">
-                {(v: string) => (v === "all" ? "People: All" : members.find((m) => m.user_id === v)?.full_name ?? "People: All")}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value="all">People: All</SelectItem>
-              {members.map((m) => (
-                <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-44">
+            <MultiUserSelect
+              members={members}
+              value={[...assigneeFilter]}
+              onChange={(ids) => {
+                const next = new Set(ids);
+                setAssigneeFilter(next);
+                window.localStorage.setItem("kanban-assignee-filter", JSON.stringify([...next]));
+              }}
+              placeholder="People: All"
+            />
+          </div>
           <Select
             value={priorityFilter.size === 1 ? [...priorityFilter][0] : "all"}
             onValueChange={(v) => v && setPriorityFilter(v === "all" ? new Set() : new Set([v as TaskPriority]))}

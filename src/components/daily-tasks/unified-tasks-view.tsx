@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, SlidersHorizontal, User, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Clock, Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { DailyTaskForm } from "@/components/daily-tasks/daily-task-form";
 import { UnifiedTaskQuickEdit } from "@/components/kanban/unified-task-quick-edit";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { useAuth } from "@/hooks/use-auth";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { fetchAccountMembers } from "@/hooks/use-account-members";
@@ -43,8 +44,9 @@ interface UnifiedRow {
   clientId: string | null;
   projectId: string | null;
   priority: TaskPriority;
-  assigneeUserId: string | null;
+  assigneeUserIds: string[];
   dateValue: string | null;
+  showDateValue: string | null;
   daily?: DailyTask;
   project_task?: ProjectTask;
 }
@@ -120,6 +122,11 @@ export function UnifiedTasksView() {
     const saved = window.localStorage.getItem("daily-tasks-date-filter");
     return DATE_PRESETS.some((d) => d.id === saved) ? (saved as DatePreset) : "all";
   });
+  const [dateSort, setDateSort] = useState<"asc" | "desc" | null>(null);
+  // "Schedule for later" — a task with a future show_date is hidden
+  // from the normal view; this toggle flips to showing ONLY those
+  // scheduled-future tasks instead of everything else.
+  const [showScheduledOnly, setShowScheduledOnly] = useState(false);
 
   function makeToggler<T>(setFn: React.Dispatch<React.SetStateAction<Set<T>>>, storageKey: string) {
     return (value: T) => {
@@ -230,8 +237,9 @@ export function UnifiedTasksView() {
       clientId: t.client_id,
       projectId: t.project_id,
       priority: t.priority,
-      assigneeUserId: t.assignee_user_id,
+      assigneeUserIds: t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [],
       dateValue: t.target_date,
+      showDateValue: t.show_date,
       daily: t,
     }));
     // A Daily Task with a project selected mirrors itself into a
@@ -262,16 +270,12 @@ export function UnifiedTasksView() {
         clientId: projectClientById.get(t.project_id) ?? null,
         projectId: t.project_id,
         priority: t.priority,
-        assigneeUserId: t.assignee_user_id,
+        assigneeUserIds: t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [],
         dateValue: t.due_date,
+        showDateValue: t.show_date,
         project_task: t,
       }));
-    return [...dailyRows, ...projectRows].sort((a, b) => {
-      if (!a.dateValue && !b.dateValue) return 0;
-      if (!a.dateValue) return 1;
-      if (!b.dateValue) return -1;
-      return a.dateValue.localeCompare(b.dateValue);
-    });
+    return [...dailyRows, ...projectRows];
   }, [tasks, projectTasks, projectClientById]);
 
   if (loading) {
@@ -292,23 +296,49 @@ export function UnifiedTasksView() {
     );
   }
 
-  const filteredTasks = unifiedRows.filter((t) => {
-    if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
-    if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
-    if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
-    if (assigneeFilter.size > 0 && (!t.assigneeUserId || !assigneeFilter.has(t.assigneeUserId))) return false;
-    // Stage chips are built from the Daily Tasks pipeline's own
-    // stages only — a project task's stage lives on a different
-    // pipeline entirely, so it can never match one of these chips.
-    // Filtering by stage therefore narrows to daily-task rows only,
-    // which is the correct behavior given the chips shown, not a bug.
-    if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
-    if (!matchesDatePreset(t.dateValue, datePreset)) return false;
-    return true;
-  });
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const scheduledCount = unifiedRows.filter((t) => t.showDateValue && t.showDateValue > todayStr).length;
 
-  function quickSetAssignee(id: string) {
-    const next = id === "all" ? new Set<string>() : new Set([id]);
+  const filteredTasks = unifiedRows
+    .filter((t) => {
+      const isFutureScheduled = !!t.showDateValue && t.showDateValue > todayStr;
+      if (showScheduledOnly) return isFutureScheduled;
+      // Hidden until its show date arrives — the whole point of "show
+      // date" scheduling (item 16): not visible in the normal list
+      // until then, only under the "Scheduled" toggle above.
+      if (isFutureScheduled) return false;
+      if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
+      if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
+      if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
+      if (assigneeFilter.size > 0 && !t.assigneeUserIds.some((id) => assigneeFilter.has(id))) return false;
+      // Stage chips are built from the Daily Tasks pipeline's own
+      // stages only — a project task's stage lives on a different
+      // pipeline entirely, so it can never match one of these chips.
+      // Filtering by stage therefore narrows to daily-task rows only,
+      // which is the correct behavior given the chips shown, not a bug.
+      if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
+      if (!matchesDatePreset(t.dateValue, datePreset)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (dateSort) {
+        if (!a.dateValue && !b.dateValue) return 0;
+        if (!a.dateValue) return 1;
+        if (!b.dateValue) return -1;
+        return dateSort === "asc" ? a.dateValue.localeCompare(b.dateValue) : b.dateValue.localeCompare(a.dateValue);
+      }
+      if (!a.dateValue && !b.dateValue) return 0;
+      if (!a.dateValue) return 1;
+      if (!b.dateValue) return -1;
+      return a.dateValue.localeCompare(b.dateValue);
+    });
+
+  function toggleDateSort() {
+    setDateSort((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
+  }
+
+  function quickSetAssignees(ids: string[]) {
+    const next = new Set(ids);
     setAssigneeFilter(next);
     window.localStorage.setItem("daily-tasks-assignee-filter", JSON.stringify([...next]));
   }
@@ -321,23 +351,12 @@ export function UnifiedTasksView() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* Quick filters — single-pick shortcuts ahead of the full
-            Filters drawer, same row (same pattern on the Kanban
-            page). Write into the same Sets the drawer's chips use. */}
-        <Select value={assigneeFilter.size === 1 ? [...assigneeFilter][0] : "all"} onValueChange={(v) => v && quickSetAssignee(v)}>
-          <SelectTrigger size="sm">
-            <User className="h-3.5 w-3.5 text-muted-foreground" />
-            <SelectValue className="truncate">
-              {(v: string) => (v === "all" ? "People: All" : members.find((m) => m.user_id === v)?.full_name ?? "People: All")}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value="all">People: All</SelectItem>
-            {members.map((m) => (
-              <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Quick filters — shortcuts ahead of the full Filters drawer,
+            same row (same pattern on the Kanban page). Write into the
+            same Sets the drawer's chips use. */}
+        <div className="w-44">
+          <MultiUserSelect members={members} value={[...assigneeFilter]} onChange={quickSetAssignees} placeholder="People: All" />
+        </div>
         <Select value={priorityFilter.size === 1 ? [...priorityFilter][0] : "all"} onValueChange={(v) => v && quickSetPriority(v)}>
           <SelectTrigger size="sm">
             <SelectValue className="truncate">
@@ -351,6 +370,19 @@ export function UnifiedTasksView() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          onClick={() => setShowScheduledOnly((v) => !v)}
+          className={showScheduledOnly ? "border-primary bg-primary/10 text-primary" : ""}
+        >
+          <Clock className="mr-1.5 h-3.5 w-3.5" />
+          Scheduled
+          {scheduledCount > 0 && (
+            <span className="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+              {scheduledCount}
+            </span>
+          )}
+        </Button>
         <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
           Filters
@@ -474,7 +506,12 @@ export function UnifiedTasksView() {
                   <th className="px-3 py-2 font-medium">Client / Project</th>
                   <th className="px-3 py-2 font-medium">Priority</th>
                   <th className="px-3 py-2 font-medium">Assignee</th>
-                  <th className="px-3 py-2 font-medium">Target date</th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={toggleDateSort} className="flex items-center gap-1 hover:text-foreground">
+                      Target date
+                      {dateSort === "asc" ? <ArrowUp className="h-3 w-3" /> : dateSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -493,14 +530,7 @@ export function UnifiedTasksView() {
                       onClick={() => (task.kind === "daily" ? openEditTask(task.daily!) : setEditingProjectTask(task.project_task!))}
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
-                      <td className="px-3 py-2 text-foreground">
-                        {task.title}
-                        {task.kind === "project" && (
-                          <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                            Project
-                          </span>
-                        )}
-                      </td>
+                      <td className="px-3 py-2 text-foreground">{task.title}</td>
                       <td className="px-3 py-2">
                         {stage && (
                           <span
@@ -520,7 +550,9 @@ export function UnifiedTasksView() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
-                        {members.find((m) => m.user_id === task.assigneeUserId)?.full_name ?? "Unassigned"}
+                        {task.assigneeUserIds.length > 0
+                          ? task.assigneeUserIds.map((id) => members.find((m) => m.user_id === id)?.full_name).filter(Boolean).join(", ")
+                          : "Unassigned"}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {task.dateValue ? new Date(task.dateValue).toLocaleDateString() : "—"}
