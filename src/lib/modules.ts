@@ -80,6 +80,7 @@ export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   // pages already gate their own way (project tasks, enquiry tasks,
   // active projects), nothing new to grant/deny here.
   { href: "/overview", labelKey: "overview", icon: Rows3, minRole: "viewer" },
+  { href: "/messages", labelKey: "messages", icon: MessageSquare, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,
@@ -104,6 +105,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer", pageKey: "kanban" },
       { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer", pageKey: "daily_tasks" },
       { href: "/projects/chat", labelKey: "projectChats", icon: MessageSquare, minRole: "viewer", pageKey: "projects" },
+      { href: "/projects/automations", labelKey: "crmAutomations", icon: Zap, minRole: "agent", pageKey: "projects" },
     ],
   },
   {

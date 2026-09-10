@@ -1259,6 +1259,86 @@ export interface ProjectChatMessage {
   project_id: string;
   sender_user_id: string | null;
   body: string;
+  is_note: boolean;
   created_at: string;
   sender?: AccountMember;
+}
+
+// ============================================================
+// CRM Automation Engine (#75)
+// ============================================================
+
+export type CrmTriggerType =
+  | 'project_status_changed'
+  | 'task_status_changed'
+  | 'task_created'
+  | 'task_assigned'
+  | 'task_overdue'
+  | 'enquiry_status_changed'
+  | 'enquiry_created'
+  | 'client_created'
+  | 'payment_received'
+
+export type CrmActionType =
+  | 'create_task'
+  | 'assign_user'
+  | 'send_notification'
+  | 'update_status'
+  | 'add_note'
+
+export interface CrmCondition {
+  field: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'gt' | 'lt';
+  value: string;
+}
+
+export interface CrmAction {
+  type: CrmActionType;
+  config: Record<string, unknown>;
+}
+
+export interface CrmAutomation {
+  id: string;
+  account_id: string;
+  name: string;
+  description: string | null;
+  trigger_type: CrmTriggerType;
+  trigger_config: Record<string, unknown>;
+  conditions: CrmCondition[];
+  actions: CrmAction[];
+  is_active: boolean;
+  run_count: number;
+  last_run_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  creator?: { full_name: string | null } | null;
+}
+
+export interface CrmAutomationLog {
+  id: string;
+  account_id: string;
+  automation_id: string;
+  trigger_data: Record<string, unknown>;
+  actions_taken: unknown[];
+  status: 'success' | 'error' | 'skipped';
+  error_message: string | null;
+  triggered_by: string | null;
+  created_at: string;
+}
+
+// ============================================================
+// Direct Messages (#26/#27)
+// ============================================================
+
+export interface DirectMessage {
+  id: string;
+  account_id: string;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  sender?: { full_name: string | null; avatar_url: string | null };
+  recipient?: { full_name: string | null; avatar_url: string | null };
 }
