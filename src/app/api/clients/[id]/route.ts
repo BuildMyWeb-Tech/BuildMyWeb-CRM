@@ -64,6 +64,11 @@ export async function PATCH(
   if ('client_since' in body) update.client_since = body.client_since ?? null
   if ('notes' in body) update.notes = body.notes ?? null
   if ('logo_storage_path' in body) update.logo_storage_path = body.logo_storage_path ?? null
+  if ('industry' in body) update.industry = body.industry ?? null
+  if ('phone' in body) update.phone = body.phone ?? null
+  if ('email' in body) update.email = body.email ?? null
+  if ('owner_user_id' in body) update.owner_user_id = body.owner_user_id ?? null
+  if ('next_follow_up_at' in body) update.next_follow_up_at = body.next_follow_up_at ?? null
   if (typeof body.status === 'string') {
     if (!['active', 'inactive', 'archived'].includes(body.status)) {
       return NextResponse.json({ error: 'invalid status' }, { status: 400 })

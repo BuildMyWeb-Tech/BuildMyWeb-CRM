@@ -417,6 +417,7 @@ export interface Project {
   owner_user_id: string | null;
   start_date: string | null;
   due_date: string | null;
+  progress_percentage: number;
   created_at: string;
   updated_at: string;
   contact?: Contact;
@@ -577,9 +578,25 @@ export interface Client {
   client_since: string | null;
   status: ClientStatus;
   notes: string | null;
+  industry: string | null;
+  phone: string | null;
+  email: string | null;
+  owner_user_id: string | null;
+  next_follow_up_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ClientNote {
+  id: string;
+  account_id: string;
+  client_id: string;
+  user_id: string | null;
+  note_text: string;
+  created_at: string;
+  updated_at: string;
+  author?: { full_name: string | null };
 }
 
 // ============================================================
@@ -841,20 +858,28 @@ export interface PaymentAllocation {
   created_at: string;
 }
 
+export type PaymentStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled' | 'refunded';
+
 export interface ClientPayment {
   id: string;
   account_id: string;
   client_id: string;
+  project_id: string | null;
   service_description: string | null;
-  received_date: string;
+  received_date: string | null;
+  expected_date: string | null;
   amount: number;
   domain_fee: number | null;
   hosting_fee: number | null;
+  payment_method: string | null;
+  transaction_id: string | null;
+  status: PaymentStatus;
   notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
   client?: Client;
+  project?: Project;
   allocations?: PaymentAllocation[];
 }
 

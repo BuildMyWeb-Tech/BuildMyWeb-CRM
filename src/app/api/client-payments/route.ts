@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       .from('client_payments')
       .select('*, client:clients(id, name), allocations:payment_allocations(*)')
       .eq('account_id', ctx.accountId)
-      .order('received_date', { ascending: false })
+      .order('created_at', { ascending: false })
 
     if (clientId) query = query.eq('client_id', clientId)
     if (from) query = query.gte('received_date', from)
@@ -51,11 +51,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
+  const PAYMENT_STATUSES = ['pending', 'partially_paid', 'paid', 'overdue', 'cancelled', 'refunded']
   const clientId = typeof body.client_id === 'string' ? body.client_id : ''
-  const receivedDate = typeof body.received_date === 'string' ? body.received_date : ''
+  const receivedDate = typeof body.received_date === 'string' ? body.received_date : null
   const amount = typeof body.amount === 'number' ? body.amount : NaN
   if (!clientId) return NextResponse.json({ error: 'client_id is required' }, { status: 400 })
-  if (!receivedDate) return NextResponse.json({ error: 'received_date is required' }, { status: 400 })
   if (!Number.isFinite(amount)) return NextResponse.json({ error: 'amount is required' }, { status: 400 })
 
   const rawAllocations: AllocationInput[] = Array.isArray(body.allocations) ? body.allocations : []
@@ -73,11 +73,16 @@ export async function POST(request: Request) {
     .insert({
       account_id: ctx.accountId,
       client_id: clientId,
+      project_id: typeof body.project_id === 'string' ? body.project_id : null,
       service_description: typeof body.service_description === 'string' ? body.service_description : null,
       received_date: receivedDate,
+      expected_date: typeof body.expected_date === 'string' ? body.expected_date : null,
       amount,
       domain_fee: typeof body.domain_fee === 'number' ? body.domain_fee : null,
       hosting_fee: typeof body.hosting_fee === 'number' ? body.hosting_fee : null,
+      payment_method: typeof body.payment_method === 'string' ? body.payment_method : null,
+      transaction_id: typeof body.transaction_id === 'string' ? body.transaction_id : null,
+      status: typeof body.status === 'string' && PAYMENT_STATUSES.includes(body.status) ? body.status : 'paid',
       notes: typeof body.notes === 'string' ? body.notes : null,
       created_by: ctx.userId,
     })

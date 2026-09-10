@@ -228,6 +228,20 @@ export default function ProjectsPage() {
                       {p.description}
                     </p>
                   )}
+                  {typeof p.progress_percentage === "number" && p.progress_percentage > 0 && (
+                    <div className="mt-3">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">Progress</span>
+                        <span className="text-[10px] font-medium text-foreground">{p.progress_percentage}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: `${p.progress_percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </Link>

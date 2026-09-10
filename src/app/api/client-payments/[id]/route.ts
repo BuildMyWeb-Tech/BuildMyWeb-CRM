@@ -55,13 +55,19 @@ export async function PATCH(
 
   const admin = supabaseAdmin()
 
+  const PAYMENT_STATUSES = ['pending', 'partially_paid', 'paid', 'overdue', 'cancelled', 'refunded']
   const update: Record<string, unknown> = {}
   if (typeof body.client_id === 'string') update.client_id = body.client_id
+  if ('project_id' in body) update.project_id = body.project_id ?? null
   if ('service_description' in body) update.service_description = body.service_description ?? null
-  if (typeof body.received_date === 'string') update.received_date = body.received_date
+  if ('received_date' in body) update.received_date = typeof body.received_date === 'string' ? body.received_date : null
+  if ('expected_date' in body) update.expected_date = typeof body.expected_date === 'string' ? body.expected_date : null
   if (typeof body.amount === 'number') update.amount = body.amount
   if ('domain_fee' in body) update.domain_fee = typeof body.domain_fee === 'number' ? body.domain_fee : null
   if ('hosting_fee' in body) update.hosting_fee = typeof body.hosting_fee === 'number' ? body.hosting_fee : null
+  if ('payment_method' in body) update.payment_method = body.payment_method ?? null
+  if ('transaction_id' in body) update.transaction_id = body.transaction_id ?? null
+  if (typeof body.status === 'string' && PAYMENT_STATUSES.includes(body.status)) update.status = body.status
   if ('notes' in body) update.notes = body.notes ?? null
 
   if (Object.keys(update).length > 0) {

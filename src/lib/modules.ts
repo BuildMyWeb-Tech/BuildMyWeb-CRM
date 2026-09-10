@@ -103,6 +103,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/projects", labelKey: "projects", icon: KanbanSquare, minRole: "viewer", pageKey: "projects" },
       { href: "/kanban", labelKey: "kanban", icon: LayoutGrid, minRole: "viewer", pageKey: "kanban" },
       { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer", pageKey: "daily_tasks" },
+      { href: "/projects/chat", labelKey: "projectChats", icon: MessageSquare, minRole: "viewer", pageKey: "projects" },
     ],
   },
   {

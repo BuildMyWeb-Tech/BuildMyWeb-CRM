@@ -82,6 +82,13 @@ export async function PATCH(
     }
     update.status = body.status
   }
+  if ('progress_percentage' in body) {
+    const p = Number(body.progress_percentage)
+    if (!Number.isFinite(p) || p < 0 || p > 100) {
+      return NextResponse.json({ error: 'progress_percentage must be 0-100' }, { status: 400 })
+    }
+    update.progress_percentage = Math.round(p)
+  }
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 

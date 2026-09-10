@@ -72,19 +72,24 @@ async function backfillMissingClientProjects(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const ctx = await getCurrentAccount()
+    const clientIdFilter = new URL(request.url).searchParams.get('client_id')
 
     if (ctx.userId) {
       await backfillMissingClientProjects(ctx.supabase, ctx.accountId, ctx.userId)
     }
 
-    const { data, error } = await ctx.supabase
+    let query = ctx.supabase
       .from('projects')
       .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name)')
       .eq('account_id', ctx.accountId)
       .order('created_at', { ascending: false })
+
+    if (clientIdFilter) query = query.eq('client_id', clientIdFilter)
+
+    const { data, error } = await query
 
     if (error) throw error
     return NextResponse.json({ projects: data ?? [] })
