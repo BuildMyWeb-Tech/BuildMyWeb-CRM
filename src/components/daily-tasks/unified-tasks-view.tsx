@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Clock, Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Clock, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -76,6 +77,7 @@ export function UnifiedTasksView() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
+  const [doneActionLoading, setDoneActionLoading] = useState(false);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -384,6 +386,35 @@ export function UnifiedTasksView() {
     window.localStorage.setItem("daily-tasks-priority-filter", JSON.stringify([...next]));
   }
 
+  async function handleDeleteNow(task: UnifiedRow) {
+    if (!window.confirm(`Delete "${task.title}" now? This cannot be undone.`)) return;
+    setDoneActionLoading(true);
+    const supabase = createClient();
+    const table = task.kind === "project" ? "project_tasks" : "daily_tasks";
+    const { error } = await supabase.from(table).delete().eq("id", task.id);
+    setDoneActionLoading(false);
+    if (error) {
+      toast.error("Delete failed: " + error.message);
+    } else {
+      toast.success("Task deleted");
+            load();
+    }
+  }
+
+  async function handleAutoDelete(task: UnifiedRow) {
+    setDoneActionLoading(true);
+    const supabase = createClient();
+    const table = task.kind === "project" ? "project_tasks" : "daily_tasks";
+    const { error } = await supabase.from(table).update({ done_at: new Date().toISOString() }).eq("id", task.id);
+    setDoneActionLoading(false);
+    if (error) {
+      toast.error("Failed to schedule auto-delete: " + error.message);
+    } else {
+      toast.success("Task will be auto-deleted in 24 hours");
+            load();
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -573,6 +604,10 @@ export function UnifiedTasksView() {
                       {sortKey === "date" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "date" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
                     </button>
                   </th>
+                  {showScheduledOnly && (
+                    <th className="px-3 py-2 font-medium">Show date</th>
+                  )}
+                  <th className="px-3 py-2 font-medium w-0" />
                 </tr>
               </thead>
               <tbody>
@@ -585,13 +620,19 @@ export function UnifiedTasksView() {
                         : undefined;
                   const client = clients.find((c) => c.id === task.clientId);
                   const project = projects.find((p) => p.id === task.projectId);
+                  const isDone = stage?.name?.toLowerCase() === "done";
                   return (
                     <tr
                       key={`${task.kind}-${task.id}`}
-                      onClick={() => (task.kind === "daily" ? openEditTask(task.daily!) : setEditingProjectTask(task.project_task!))}
+                      onClick={() => {
+                        if (isDone) return;
+                        task.kind === "daily" ? openEditTask(task.daily!) : setEditingProjectTask(task.project_task!);
+                      }}
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
-                      <td className="px-3 py-2 text-foreground">{task.title}</td>
+                      <td className="px-3 py-2 text-foreground">
+                        <span className={isDone ? "line-through text-muted-foreground" : ""}>{task.title}</span>
+                      </td>
                       <td className="px-3 py-2">
                         {stage && (
                           <span
@@ -617,6 +658,35 @@ export function UnifiedTasksView() {
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {task.dateValue ? new Date(task.dateValue).toLocaleDateString() : "—"}
+                      </td>
+                      {showScheduledOnly && (
+                        <td className="px-3 py-2 text-blue-500 font-medium text-xs">
+                          {task.showDateValue
+                            ? new Date(task.showDateValue + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                            : "—"}
+                        </td>
+                      )}
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                        {isDone && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="Delete now"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteNow(task); }}
+                              className="flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+                            >
+                              <Trash2 className="h-3 w-3" /> Delete
+                            </button>
+                            <button
+                              type="button"
+                              title="Auto-delete after 24 hours"
+                              onClick={(e) => { e.stopPropagation(); handleAutoDelete(task); }}
+                              className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-600 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+                            >
+                              <CalendarCheck className="h-3 w-3" /> 24hr
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
