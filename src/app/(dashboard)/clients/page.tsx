@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Users, Plus, Loader2, MoreVertical, Pencil, Trash2, List as ListIcon, LayoutGrid } from "lucide-react";
+import {
+  Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
+  List as ListIcon, LayoutGrid, Search, Phone, AlertTriangle,
+  Archive, TrendingUp, TrendingDown, Activity, Bell, CheckCircle2,
+  RefreshCw, FileText, ChevronRight, Home,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -41,17 +45,126 @@ async function fetchClients(): Promise<Client[]> {
 }
 
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
-const STATUS_STYLE: Record<ClientStatus, string> = {
-  active: "bg-primary/10 text-primary",
-  inactive: "bg-amber-500/15 text-amber-500",
-  archived: "bg-muted text-muted-foreground",
-};
 
 // Client Directory — the whole client relationship, from when they
 // first became a client until now (or archived). Distinct from
 // Sales `contacts` (leads) and Projects (one piece of active work) —
 // a Project may optionally link back to a Client, but Clients exist
 // independently.
+
+const AVATAR_COLORS = [
+  "bg-purple-500",
+  "bg-blue-500",
+  "bg-green-500",
+  "bg-yellow-500",
+  "bg-pink-500",
+  "bg-indigo-500",
+  "bg-red-500",
+  "bg-teal-500",
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function StatusBadge({ status }: { status: ClientStatus }) {
+  if (status === "active")
+    return (
+      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
+        Active
+      </span>
+    );
+  if (status === "inactive")
+    return (
+      <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+        Inactive
+      </span>
+    );
+  return (
+    <span className="rounded-full bg-slate-600/20 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+      Archived
+    </span>
+  );
+}
+
+const STATIC_ACTIVITIES = [
+  {
+    id: 1,
+    icon: Phone,
+    iconColor: "bg-blue-500/20 text-blue-400",
+    title: "Call logged",
+    client: "TechVision Labs",
+    desc: "Follow-up call — 15 min",
+    time: "2h ago",
+  },
+  {
+    id: 2,
+    icon: Plus,
+    iconColor: "bg-green-500/20 text-green-400",
+    title: "New client created",
+    client: "Nexus Digital",
+    desc: "Onboarding started",
+    time: "4h ago",
+  },
+  {
+    id: 3,
+    icon: CheckCircle2,
+    iconColor: "bg-purple-500/20 text-purple-400",
+    title: "Task completed",
+    client: "BrightPath Inc",
+    desc: "Design mockup approved",
+    time: "6h ago",
+  },
+  {
+    id: 4,
+    icon: Bell,
+    iconColor: "bg-yellow-500/20 text-yellow-400",
+    title: "Follow-up reminder",
+    client: "Apex Solutions",
+    desc: "Send proposal by EOD",
+    time: "8h ago",
+  },
+  {
+    id: 5,
+    icon: RefreshCw,
+    iconColor: "bg-teal-500/20 text-teal-400",
+    title: "Project updated",
+    client: "Orion Systems",
+    desc: "Phase 2 kicked off",
+    time: "1d ago",
+  },
+  {
+    id: 6,
+    icon: FileText,
+    iconColor: "bg-pink-500/20 text-pink-400",
+    title: "Note added",
+    client: "CloudNine Co",
+    desc: "Meeting summary saved",
+    time: "1d ago",
+  },
+  {
+    id: 7,
+    icon: Activity,
+    iconColor: "bg-indigo-500/20 text-indigo-400",
+    title: "Status changed",
+    client: "Stellar Works",
+    desc: "Moved to At Risk",
+    time: "2d ago",
+  },
+];
+
 export default function ClientsPage() {
   const { canCreate, canUpdate, canDelete } = usePagePermissions("client_directory");
   const { accountId } = useAuth();
@@ -64,6 +177,7 @@ export default function ClientsPage() {
     return window.localStorage.getItem("clients-view") === "list" ? "list" : "grid";
   });
   const [statusFilter, setStatusFilter] = useState<"all" | ClientStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -75,10 +189,6 @@ export default function ClientsPage() {
   const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Quick-edit — the "edit it like Info simply from the 3-dot" ask.
-  // Covers the everyday-editable fields; logo/accent color stay on
-  // the full detail page since they need more room (image upload,
-  // color swatches) than a quick dialog should try to fit.
   const [editTarget, setEditTarget] = useState<Client | null>(null);
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] = useState<ClientStatus>("active");
@@ -181,24 +291,163 @@ export default function ClientsPage() {
     toast.success("Client deleted.");
   }
 
-  const visibleClients = (clients ?? []).filter((c) => statusFilter === "all" || c.status === statusFilter);
+  const allClients = clients ?? [];
+  const totalCount = allClients.length;
+  const activeCount = allClients.filter((c) => c.status === "active").length;
+  const atRiskCount = allClients.filter((c) => c.status === "inactive").length;
+  const archivedCount = allClients.filter((c) => c.status === "archived").length;
+
+  const visibleClients = allClients.filter((c) => {
+    const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+    const matchesSearch =
+      !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Users className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Client Directory</h1>
+    <div className="flex min-h-screen bg-[#0f1117]">
+      {/* Main content */}
+      <div className="flex-1 min-w-0 p-6 pr-4">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-4">
+          <Home className="h-3 w-3" />
+          <span>Home</span>
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-slate-300">Clients</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border border-border p-0.5">
+
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-white">Client Directory</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Manage your clients, track relationships and never miss a follow-up.
+          </p>
+        </div>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Total Clients */}
+          <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Total Clients</span>
+              <div className="h-8 w-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <Users className="h-4 w-4 text-purple-400" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {clients === null ? "—" : totalCount}
+            </div>
+            <div className="flex items-center gap-1 text-xs text-green-400">
+              <TrendingUp className="h-3 w-3" />
+              <span>+12% vs last 30 days</span>
+            </div>
+          </div>
+
+          {/* Active */}
+          <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Active</span>
+              <div className="h-8 w-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-400 block" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {clients === null ? "—" : activeCount}
+            </div>
+            <div className="flex items-center gap-1 text-xs text-green-400">
+              <TrendingUp className="h-3 w-3" />
+              <span>+9% vs last 30 days</span>
+            </div>
+          </div>
+
+          {/* At Risk */}
+          <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">At Risk</span>
+              <div className="h-8 w-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {clients === null ? "—" : atRiskCount}
+            </div>
+            <div className="flex items-center gap-1 text-xs text-red-400">
+              <TrendingDown className="h-3 w-3" />
+              <span>-25% vs last 30 days</span>
+            </div>
+          </div>
+
+          {/* Archived */}
+          <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Archived</span>
+              <div className="h-8 w-8 rounded-lg bg-slate-500/20 flex items-center justify-center">
+                <Archive className="h-4 w-4 text-slate-400" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {clients === null ? "—" : archivedCount}
+            </div>
+            <div className="text-xs text-slate-500">no change</div>
+          </div>
+        </div>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {canCreate && (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Create client
+            </Button>
+          )}
+
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search clients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | ClientStatus)}
+            className="px-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="archived">Archived</option>
+          </select>
+
+          <select
+            className="px-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
+          >
+            <option>All Owners</option>
+          </select>
+
+          <select
+            className="px-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
+          >
+            <option>Recently Updated</option>
+          </select>
+
+          <div className="flex items-center rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5 ml-auto">
             <button
               type="button"
               onClick={() => changeViewMode("grid")}
               aria-label="Grid view"
               aria-pressed={viewMode === "grid"}
-              className={`flex h-7 w-8 items-center justify-center rounded-md ${
-                viewMode === "grid" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`flex h-7 w-8 items-center justify-center rounded-md transition-colors ${
+                viewMode === "grid"
+                  ? "bg-[#2a3045] text-white"
+                  : "text-slate-500 hover:text-slate-300"
               }`}
             >
               <LayoutGrid className="h-3.5 w-3.5" />
@@ -208,108 +457,160 @@ export default function ClientsPage() {
               onClick={() => changeViewMode("list")}
               aria-label="List view"
               aria-pressed={viewMode === "list"}
-              className={`flex h-7 w-8 items-center justify-center rounded-md ${
-                viewMode === "list" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              className={`flex h-7 w-8 items-center justify-center rounded-md transition-colors ${
+                viewMode === "list"
+                  ? "bg-[#2a3045] text-white"
+                  : "text-slate-500 hover:text-slate-300"
               }`}
             >
               <ListIcon className="h-3.5 w-3.5" />
             </button>
           </div>
-          <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v as "all" | ClientStatus)}>
-            <SelectTrigger size="sm">
-              <SelectValue className="truncate capitalize">
-                {(v: string) => (v === "all" ? "Status: All" : `Status: ${v.charAt(0).toUpperCase()}${v.slice(1)}`)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value="all">Status: All</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {canCreate && (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Create client
-            </Button>
-          )}
         </div>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {clients ? `${visibleClients.length} of ${clients.length} client${clients.length === 1 ? "" : "s"}` : "Loading…"} — the whole
-        relationship, from when they started to now.
-      </p>
 
-      {clients === null ? (
-        <div className="mt-10 flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : clients.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm text-muted-foreground">No clients yet.</p>
-          {canCreate && (
-            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Create your first client
-            </Button>
-          )}
-        </div>
-      ) : visibleClients.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm text-muted-foreground">No clients match this filter.</p>
-        </div>
-      ) : viewMode === "grid" ? (
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-          {visibleClients.map((c) => (
-            <Link key={c.id} href={`/clients/${c.id}`}>
-              <Card
-                className="h-full border-l-4 transition-colors hover:border-primary/40"
-                style={c.accent_color ? { borderLeftColor: c.accent_color } : undefined}
+        {/* Client list / grid */}
+        {clients === null ? (
+          <div className="mt-10 flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+          </div>
+        ) : clients.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#2a3045] py-16 text-center">
+            <Users className="h-10 w-10 text-slate-600" />
+            <p className="text-sm text-slate-500">No clients yet.</p>
+            {canCreate && (
+              <button
+                onClick={() => setCreateOpen(true)}
+                className="mt-1 flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 hover:bg-[#2a3045]"
               >
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base">{c.name}</CardTitle>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
-                        {c.status}
-                      </span>
-                      <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} canUpdate={canUpdate} canDelete={canDelete} />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground">
-                    {c.client_since ? `Client since ${new Date(c.client_since).toLocaleDateString()}` : "No start date set"}
+                <Plus className="h-3.5 w-3.5" />
+                Create your first client
+              </button>
+            )}
+          </div>
+        ) : visibleClients.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#2a3045] py-16 text-center">
+            <p className="text-sm text-slate-500">No clients match this filter.</p>
+          </div>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleClients.map((c, idx) => (
+              <ClientCard
+                key={c.id}
+                client={c}
+                idx={idx}
+                canUpdate={canUpdate}
+                canDelete={canDelete}
+                onEdit={(e) => openQuickEdit(c, e)}
+                onDelete={(e) => handleDelete(c, e)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2a3045] rounded-xl border border-[#2a3045] bg-[#1a1f2e]">
+            {visibleClients.map((c) => (
+              <Link
+                key={c.id}
+                href={`/clients/${c.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-[#2a3045]/50 transition-colors"
+              >
+                <div
+                  className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white ${getAvatarColor(c.name)}`}
+                >
+                  {getInitials(c.name)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{c.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {c.client_since
+                      ? `Client since ${new Date(c.client_since).toLocaleDateString()}`
+                      : "No start date set"}
                   </p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                </div>
+                <StatusBadge status={c.status} />
+                <ClientCardMenu
+                  onEdit={(e) => openQuickEdit(c, e)}
+                  onDelete={(e) => handleDelete(c, e)}
+                  canUpdate={canUpdate}
+                  canDelete={canDelete}
+                />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right sidebar */}
+      <aside className="w-80 shrink-0 p-4 pt-6 border-l border-[#2a3045] flex flex-col gap-6">
+        {/* Recent Activity */}
+        <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
+            <button className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300">
+              View all <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-3">
+            {STATIC_ACTIVITIES.map((a) => {
+              const Icon = a.icon;
+              return (
+                <div key={a.id} className="flex items-start gap-2.5">
+                  <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center ${a.iconColor}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-slate-200 leading-tight">{a.title}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{a.client} — {a.desc}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-500 shrink-0 pt-0.5">{a.time}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ) : (
-        <div className="mt-6 divide-y divide-border rounded-lg border border-border">
-          {visibleClients.map((c) => (
-            <Link
-              key={c.id}
-              href={`/clients/${c.id}`}
-              className="flex items-center gap-3 border-l-4 px-4 py-3 hover:bg-muted/50"
-              style={{ borderLeftColor: c.accent_color || "transparent" }}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {c.client_since ? `Client since ${new Date(c.client_since).toLocaleDateString()}` : "No start date set"}
-                </p>
+
+        {/* Quick Stats */}
+        <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-white mb-4">Quick Stats</h2>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                <span className="text-xs text-slate-400">Total Clients</span>
               </div>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[c.status]}`}>
-                {c.status}
+              <span className="text-sm font-semibold text-white">
+                {clients === null ? "—" : totalCount}
               </span>
-              <ClientCardMenu onEdit={(e) => openQuickEdit(c, e)} onDelete={(e) => handleDelete(c, e)} canUpdate={canUpdate} canDelete={canDelete} />
-            </Link>
-          ))}
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-green-400" />
+                <span className="text-xs text-slate-400">Active Clients</span>
+              </div>
+              <span className="text-sm font-semibold text-white">
+                {clients === null ? "—" : activeCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-yellow-400" />
+                <span className="text-xs text-slate-400">At Risk Clients</span>
+              </div>
+              <span className="text-sm font-semibold text-white">
+                {clients === null ? "—" : atRiskCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-slate-600" />
+                <span className="text-xs text-slate-400">Archived Clients</span>
+              </div>
+              <span className="text-sm font-semibold text-white">
+                {clients === null ? "—" : archivedCount}
+              </span>
+            </div>
+          </div>
         </div>
-      )}
+      </aside>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -320,7 +621,12 @@ export default function ClientsPage() {
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className="border-border bg-muted text-foreground" autoFocus />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="border-border bg-muted text-foreground"
+                autoFocus
+              />
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Status</Label>
@@ -338,33 +644,60 @@ export default function ClientsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Interface contact name</Label>
-                <Input value={interfaceName} onChange={(e) => setInterfaceName(e.target.value)} className="border-border bg-muted text-foreground" />
+                <Input
+                  value={interfaceName}
+                  onChange={(e) => setInterfaceName(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
               </div>
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Interface contact number</Label>
-                <Input value={interfaceNumber} onChange={(e) => setInterfaceNumber(e.target.value)} className="border-border bg-muted text-foreground" />
+                <Input
+                  value={interfaceNumber}
+                  onChange={(e) => setInterfaceNumber(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Client since</Label>
-                <Input type="date" value={clientSince} onChange={(e) => setClientSince(e.target.value)} className="border-border bg-muted text-foreground" />
+                <Input
+                  type="date"
+                  value={clientSince}
+                  onChange={(e) => setClientSince(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
               </div>
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Accent color</Label>
-                <Input type="color" value={accentColor || "#3b82f6"} onChange={(e) => setAccentColor(e.target.value)} className="h-9 border-border bg-muted p-1" />
+                <Input
+                  type="color"
+                  value={accentColor || "#3b82f6"}
+                  onChange={(e) => setAccentColor(e.target.value)}
+                  className="h-9 border-border bg-muted p-1"
+                />
               </div>
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Notes</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={3} />
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="border-border bg-muted text-foreground"
+                rows={3}
+              />
             </div>
             <p className="text-xs text-muted-foreground">
               Logo can be uploaded after creation, from the client&apos;s own page. A matching project + task board gets created automatically.
             </p>
           </div>
           <DialogFooter className="border-border bg-popover/50">
-            <Button variant="outline" onClick={() => setCreateOpen(false)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+            <Button
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              className="border-border bg-transparent text-muted-foreground hover:bg-muted"
+            >
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={creating || !name.trim()}>
@@ -374,7 +707,7 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Quick edit dialog — the 3-dot "Edit" action */}
+      {/* Quick edit dialog */}
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
         <DialogContent className="sm:max-w-md bg-popover border-border max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -383,7 +716,11 @@ export default function ClientsPage() {
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="border-border bg-muted text-foreground" />
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="border-border bg-muted text-foreground"
+              />
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Status</Label>
@@ -401,23 +738,40 @@ export default function ClientsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Client interface name</Label>
-                <Input value={editInterfaceName} onChange={(e) => setEditInterfaceName(e.target.value)} className="border-border bg-muted text-foreground" />
+                <Input
+                  value={editInterfaceName}
+                  onChange={(e) => setEditInterfaceName(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
               </div>
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Interface contact number</Label>
-                <Input value={editInterfaceNumber} onChange={(e) => setEditInterfaceNumber(e.target.value)} className="border-border bg-muted text-foreground" />
+                <Input
+                  value={editInterfaceNumber}
+                  onChange={(e) => setEditInterfaceNumber(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
               </div>
             </div>
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Notes</Label>
-              <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={2} />
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                className="border-border bg-muted text-foreground"
+                rows={2}
+              />
             </div>
             <p className="text-xs text-muted-foreground">
               Logo, accent color, and Scope of Work live on the full client page — this is the quick-edit set.
             </p>
           </div>
           <DialogFooter className="border-border bg-popover/50">
-            <Button variant="outline" onClick={() => setEditTarget(null)} className="border-border bg-transparent text-muted-foreground hover:bg-muted">
+            <Button
+              variant="outline"
+              onClick={() => setEditTarget(null)}
+              className="border-border bg-transparent text-muted-foreground hover:bg-muted"
+            >
               Cancel
             </Button>
             <Button onClick={handleQuickSave} disabled={saving || !editName.trim()}>
@@ -427,6 +781,99 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ClientCard({
+  client: c,
+  idx,
+  canUpdate,
+  canDelete,
+  onEdit,
+  onDelete,
+}: {
+  client: Client;
+  idx: number;
+  canUpdate: boolean;
+  canDelete: boolean;
+  onEdit: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
+  const avatarColor = c.accent_color ? undefined : getAvatarColor(c.name);
+  const progressPct = Math.min(100, ((idx * 37 + 20) % 80) + 10); // deterministic fake progress
+
+  return (
+    <Link href={`/clients/${c.id}`}>
+      <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4 hover:border-blue-500/40 transition-colors cursor-pointer h-full flex flex-col">
+        {/* Top row: avatar + name + status + menu */}
+        <div className="flex items-start gap-3 mb-3">
+          <div
+            className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-bold text-white ${avatarColor ?? ""}`}
+            style={c.accent_color ? { backgroundColor: c.accent_color } : undefined}
+          >
+            {getInitials(c.name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-sm font-semibold text-white truncate">{c.name}</p>
+              <StatusBadge status={c.status} />
+            </div>
+            <p className="text-xs text-slate-400 truncate">
+              {c.notes ? c.notes.split(" ").slice(0, 4).join(" ") : "No industry set"}
+            </p>
+          </div>
+          <ClientCardMenu
+            onEdit={onEdit}
+            onDelete={onDelete}
+            canUpdate={canUpdate}
+            canDelete={canDelete}
+          />
+        </div>
+
+        {/* Details */}
+        <div className="flex flex-col gap-1.5 mb-3 flex-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Owner</span>
+            <span className="text-slate-300">—</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Contact</span>
+            <span className="text-slate-300 truncate max-w-[130px]">
+              {c.interface_name || "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Last activity</span>
+            <span className="text-slate-300">
+              {c.client_since
+                ? new Date(c.client_since).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+                : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Next follow-up</span>
+            <span className="text-slate-300">—</span>
+          </div>
+        </div>
+
+        {/* Footer: projects + progress */}
+        <div className="border-t border-[#2a3045] pt-3 mt-auto">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-slate-400">Projects <span className="text-blue-400">1 active</span></span>
+            <span className="text-slate-400">Est. Value <span className="text-slate-200">—</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-[#2a3045]">
+              <div
+                className="h-full rounded-full bg-blue-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-slate-400 shrink-0">{progressPct}%</span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -450,7 +897,7 @@ function ClientCardMenu({
           e.preventDefault();
           e.stopPropagation();
         }}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-slate-300"
       >
         <MoreVertical className="h-3.5 w-3.5" />
       </DropdownMenuTrigger>
