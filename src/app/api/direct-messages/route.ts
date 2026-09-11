@@ -76,8 +76,11 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('[direct-messages] send failed:', error)
+      const detail = error.message?.includes('schema cache')
+        ? 'Direct messages table not found — apply migration 072_crm_automations_direct_messages.sql to your Supabase project'
+        : error.message
       return NextResponse.json(
-        { error: 'Could not send message', detail: error.message, code: error.code },
+        { error: 'Could not send message', detail, code: error.code },
         { status: 500 },
       )
     }

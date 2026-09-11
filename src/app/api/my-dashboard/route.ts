@@ -14,14 +14,13 @@ export async function GET(request: Request) {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
 
-    // Tasks assigned to targetUserId
+    // Tasks assigned to targetUserId (project_tasks)
     const { data: tasks } = await ctx.supabase
-      .from('tasks')
-      .select('id, title, status, priority, due_date, project_id, project:projects(id, name, client_id, client:clients(id, name))')
+      .from('project_tasks')
+      .select('id, title, priority, due_date, project_id, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
       .eq('account_id', ctx.accountId)
-      .contains('assigned_user_ids', [targetUserId])
-      .neq('status', 'done')
-      .order('due_date', { ascending: true })
+      .or(`assignee_user_id.eq.${targetUserId},assignee_user_ids.cs.{"${targetUserId}"}`)
+      .order('due_date', { ascending: true, nullsFirst: false })
 
     // Enquiry tasks assigned to targetUserId
     const { data: enquiryTasks } = await ctx.supabase
@@ -68,13 +67,17 @@ export async function GET(request: Request) {
       .eq('status', 'paid')
       .gte('received_date', monthStart)
 
-    // Unread DMs
-    const { count: unreadDMs } = await ctx.supabase
-      .from('direct_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('account_id', ctx.accountId)
-      .eq('recipient_id', targetUserId)
-      .is('read_at', null)
+    // Unread DMs — table may not exist yet; treat error as 0
+    let unreadDMs = 0
+    try {
+      const { count } = await ctx.supabase
+        .from('direct_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('account_id', ctx.accountId)
+        .eq('recipient_id', targetUserId)
+        .is('read_at', null)
+      unreadDMs = count ?? 0
+    } catch { /* table not yet migrated */ }
 
     // Unread project chat messages
     const { count: unreadChats } = await ctx.supabase
@@ -92,7 +95,11 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .limit(10)
 
-    const allTasks = tasks ?? []
+    const allTasks = (tasks ?? []).filter((t) => {
+      // Exclude done-stage tasks
+      const stageName = (t as { stage?: { name?: string } }).stage?.name?.toLowerCase()
+      return stageName !== 'done'
+    })
     const allEnquiryTasks = enquiryTasks ?? []
 
     const overdueTasks = allTasks.filter((t) => t.due_date && t.due_date < todayStr)
@@ -114,7 +121,7 @@ export async function GET(request: Request) {
         enquiry_count: (enquiries ?? []).length,
         project_count: (projects ?? []).length,
         month_revenue: monthRevenue,
-        unread_messages: (unreadDMs ?? 0) + (unreadChats ?? 0),
+        unread_messages: unreadDMs + (unreadChats ?? 0),
       },
       my_work: {
         overdue: overdueTasks,

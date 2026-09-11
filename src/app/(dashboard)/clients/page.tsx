@@ -4,9 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
-  List as ListIcon, LayoutGrid, Search, Phone, AlertTriangle,
-  Archive, TrendingUp, TrendingDown, Activity, Bell, CheckCircle2,
-  RefreshCw, FileText, ChevronRight, Home,
+  List as ListIcon, LayoutGrid, Search, AlertTriangle,
+  Archive, TrendingUp, TrendingDown, ChevronRight, Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,71 +98,6 @@ function StatusBadge({ status }: { status: ClientStatus }) {
   );
 }
 
-const STATIC_ACTIVITIES = [
-  {
-    id: 1,
-    icon: Phone,
-    iconColor: "bg-blue-500/20 text-blue-400",
-    title: "Call logged",
-    client: "TechVision Labs",
-    desc: "Follow-up call — 15 min",
-    time: "2h ago",
-  },
-  {
-    id: 2,
-    icon: Plus,
-    iconColor: "bg-green-500/20 text-green-400",
-    title: "New client created",
-    client: "Nexus Digital",
-    desc: "Onboarding started",
-    time: "4h ago",
-  },
-  {
-    id: 3,
-    icon: CheckCircle2,
-    iconColor: "bg-purple-500/20 text-purple-400",
-    title: "Task completed",
-    client: "BrightPath Inc",
-    desc: "Design mockup approved",
-    time: "6h ago",
-  },
-  {
-    id: 4,
-    icon: Bell,
-    iconColor: "bg-yellow-500/20 text-yellow-400",
-    title: "Follow-up reminder",
-    client: "Apex Solutions",
-    desc: "Send proposal by EOD",
-    time: "8h ago",
-  },
-  {
-    id: 5,
-    icon: RefreshCw,
-    iconColor: "bg-teal-500/20 text-teal-400",
-    title: "Project updated",
-    client: "Orion Systems",
-    desc: "Phase 2 kicked off",
-    time: "1d ago",
-  },
-  {
-    id: 6,
-    icon: FileText,
-    iconColor: "bg-pink-500/20 text-pink-400",
-    title: "Note added",
-    client: "CloudNine Co",
-    desc: "Meeting summary saved",
-    time: "1d ago",
-  },
-  {
-    id: 7,
-    icon: Activity,
-    iconColor: "bg-indigo-500/20 text-indigo-400",
-    title: "Status changed",
-    client: "Stellar Works",
-    desc: "Moved to At Risk",
-    time: "2d ago",
-  },
-];
 
 export default function ClientsPage() {
   const { canCreate, canUpdate, canDelete } = usePagePermissions("client_directory");
@@ -541,33 +475,6 @@ export default function ClientsPage() {
 
       {/* Right sidebar */}
       <aside className="w-80 shrink-0 p-4 pt-6 border-l border-[#2a3045] flex flex-col gap-6">
-        {/* Recent Activity */}
-        <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-white">Recent Activity</h2>
-            <button className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300">
-              View all <ChevronRight className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-3">
-            {STATIC_ACTIVITIES.map((a) => {
-              const Icon = a.icon;
-              return (
-                <div key={a.id} className="flex items-start gap-2.5">
-                  <div className={`mt-0.5 h-7 w-7 shrink-0 rounded-full flex items-center justify-center ${a.iconColor}`}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-200 leading-tight">{a.title}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{a.client} — {a.desc}</p>
-                  </div>
-                  <span className="text-[10px] text-slate-500 shrink-0 pt-0.5">{a.time}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Quick Stats */}
         <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
           <h2 className="text-sm font-semibold text-white mb-4">Quick Stats</h2>

@@ -338,7 +338,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             Office/future third-party modules), then Settings at
             the bottom. A module section is omitted entirely when
             the current role can't see any of its items. */}
-        <nav className="scrollbar-none flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-4" style={{ scrollbarWidth: "thin", scrollbarColor: "hsl(var(--border)) transparent" }}>
           <ul className="flex flex-col gap-1">
             {globalItems.map((item) => (
               <NavLink

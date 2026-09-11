@@ -78,6 +78,7 @@ export function UnifiedTasksView() {
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
   const [doneActionLoading, setDoneActionLoading] = useState(false);
+  const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -387,7 +388,6 @@ export function UnifiedTasksView() {
   }
 
   async function handleDeleteNow(task: UnifiedRow) {
-    if (!window.confirm(`Delete "${task.title}" now? This cannot be undone.`)) return;
     setDoneActionLoading(true);
     const supabase = createClient();
     const table = task.kind === "project" ? "project_tasks" : "daily_tasks";
@@ -668,24 +668,13 @@ export function UnifiedTasksView() {
                       )}
                       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         {isDone && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              title="Delete now"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteNow(task); }}
-                              className="flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
-                            >
-                              <Trash2 className="h-3 w-3" /> Delete
-                            </button>
-                            <button
-                              type="button"
-                              title="Auto-delete after 24 hours"
-                              onClick={(e) => { e.stopPropagation(); handleAutoDelete(task); }}
-                              className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-600 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-                            >
-                              <CalendarCheck className="h-3 w-3" /> 24hr
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDoneModalTask(task); }}
+                            className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="h-3 w-3" /> Remove
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -696,6 +685,65 @@ export function UnifiedTasksView() {
           </div>
         )}
       </div>
+
+      {/* Done-task action modal */}
+      {doneModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-1 flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20">
+                <CalendarCheck className="h-5 w-5 text-green-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Task Completed</p>
+                <p className="text-xs text-muted-foreground">Choose how to remove this task</p>
+              </div>
+            </div>
+            <p className="mt-3 mb-5 text-sm text-muted-foreground line-clamp-2">
+              &ldquo;{doneModalTask.title}&rdquo;
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={doneActionLoading}
+                onClick={async () => {
+                  await handleAutoDelete(doneModalTask);
+                  setDoneModalTask(null);
+                }}
+                className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+              >
+                <CalendarCheck className="h-4 w-4 shrink-0" />
+                <div className="text-left">
+                  <p className="font-medium">Auto delete after 24hr</p>
+                  <p className="text-[11px] text-amber-400/70">Task will be removed automatically in 24 hours</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                disabled={doneActionLoading}
+                onClick={async () => {
+                  await handleDeleteNow(doneModalTask);
+                  setDoneModalTask(null);
+                }}
+                className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4 shrink-0" />
+                <div className="text-left">
+                  <p className="font-medium">Delete manually now</p>
+                  <p className="text-[11px] text-red-400/70">Permanently remove this task immediately</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDoneModalTask(null)}
+                className="mt-1 rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {accountId && user && (
         <DailyTaskForm
