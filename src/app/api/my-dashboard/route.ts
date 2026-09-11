@@ -14,12 +14,11 @@ export async function GET(request: Request) {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
 
-    // Tasks assigned to targetUserId (project_tasks)
+    // All project tasks for the account (My Work shows everything relevant to the user)
     const { data: tasks } = await ctx.supabase
       .from('project_tasks')
-      .select('id, title, priority, due_date, project_id, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
+      .select('id, title, priority, due_date, project_id, assignee_user_id, assignee_user_ids, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
       .eq('account_id', ctx.accountId)
-      .or(`assignee_user_id.eq.${targetUserId},assignee_user_ids.cs.{"${targetUserId}"}`)
       .order('due_date', { ascending: true, nullsFirst: false })
 
     // Enquiry tasks assigned to targetUserId
