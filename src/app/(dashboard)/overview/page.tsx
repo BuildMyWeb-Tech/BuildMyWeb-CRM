@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Folder, LayoutGrid, Search, Package, Trello, ClipboardList, ExternalLink } from "lucide-react";
+import { Folder, LayoutGrid, Search, Package, Kanban, ClipboardList, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
@@ -156,7 +156,7 @@ export default function OverviewPage() {
           {activeTab === "kanban" && (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
               <div className="rounded-full bg-[#1a1f2e] p-6">
-                <Trello className="h-10 w-10 text-purple-400" />
+                <Kanban className="h-10 w-10 text-purple-400" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">Kanban Board</h2>
