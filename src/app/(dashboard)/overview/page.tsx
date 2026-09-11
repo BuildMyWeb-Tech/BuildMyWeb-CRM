@@ -138,7 +138,7 @@ export default function OverviewPage() {
         .eq("account_id", accountId)
         .order("created_at", { ascending: false })
         .limit(50);
-      setChatMessages((data as ProjectChatMessage[]) ?? []);
+      setChatMessages((data as unknown as ProjectChatMessage[]) ?? []);
     } finally {
       setLoadingChats(false);
     }
