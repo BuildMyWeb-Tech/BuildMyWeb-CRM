@@ -2,36 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus } from "lucide-react";
-import {
-  Folder,
-  File as FileIcon,
-  FolderPlus,
-  Upload,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  Link2,
-  Globe,
-  Lock,
-  Download,
-  Eye,
-  ChevronRight,
-  Home,
-  Loader2,
-  List as ListIcon,
-  LayoutGrid,
-} from "lucide-react";
+import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -45,27 +20,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import type { Project, ProjectStatus } from "@/types";
 import { toast } from "sonner";
-
-// Same 3 values and the same styling as Client Directory's own
-// STATUS_STYLE (src/app/(dashboard)/clients/page.tsx) — the two are
-// interlinked (065_unify_project_client_status.sql), so they should
-// look interlinked too, not just share a data model.
-const STATUSES: ProjectStatus[] = ["active", "inactive", "archived"];
-const STATUS_STYLE: Record<ProjectStatus, string> = {
-  active: "bg-primary/10 text-primary",
-  inactive: "bg-amber-500/15 text-amber-500",
-  archived: "bg-muted text-muted-foreground",
-};
 
 // Projects list — client projects each get their own task board
 // (see [id]/page.tsx). New-project dialog creates the project and
