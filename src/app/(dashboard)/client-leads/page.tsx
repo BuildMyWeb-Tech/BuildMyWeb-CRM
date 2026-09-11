@@ -750,7 +750,7 @@ function LeadCard({
   return (
     <div
       className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] overflow-hidden"
-      style={{ borderLeftColor: lead.priority === "urgent" ? "#ef4444" : lead.priority === "high" ? "#f97316" : lead.priority === "medium" ? "#eab308" : "#94a3b8", borderLeftWidth: 3 }}
+      style={{ borderLeftColor: (lead.priority as string) === "urgent" ? "#ef4444" : lead.priority === "high" ? "#f97316" : lead.priority === "medium" ? "#eab308" : "#94a3b8", borderLeftWidth: 3 }}
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
