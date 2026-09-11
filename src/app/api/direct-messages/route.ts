@@ -75,7 +75,10 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('[direct-messages] send failed:', error)
-      return NextResponse.json({ error: 'Could not send message' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Could not send message', detail: error.message, code: error.code },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({ message: data }, { status: 201 })

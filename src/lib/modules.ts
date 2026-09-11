@@ -19,6 +19,7 @@
 import type { AccountRole } from "@/lib/auth/roles";
 import { hasMinRole } from "@/lib/auth/roles";
 import {
+  BarChart3,
   Bot,
   Building2,
   Clock,
@@ -76,11 +77,8 @@ export interface CrmModule {
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, minRole: "viewer" },
-  // No pageKey, same as Dashboard — it only aggregates data other
-  // pages already gate their own way (project tasks, enquiry tasks,
-  // active projects), nothing new to grant/deny here.
   { href: "/overview", labelKey: "overview", icon: Rows3, minRole: "viewer" },
-  { href: "/messages", labelKey: "messages", icon: MessageSquare, minRole: "viewer" },
+  { href: "/my-work", labelKey: "myWork", icon: BarChart3, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,

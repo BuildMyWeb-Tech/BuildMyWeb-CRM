@@ -137,7 +137,8 @@ export default function MessagesPage() {
         body: JSON.stringify({ recipient_id: selectedUserId, body }),
       });
       if (!r.ok) {
-        toast.error("Could not send message");
+        const errData = await r.json().catch(() => ({}));
+        toast.error(errData?.detail ? `Send failed: ${errData.detail}` : "Could not send message");
         setMessages((prev) => prev?.filter((m) => m.id !== optimistic.id) ?? null);
       }
     } finally {

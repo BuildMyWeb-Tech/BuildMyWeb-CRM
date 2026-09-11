@@ -115,6 +115,7 @@ function NavLink({
   onClose,
   totalUnread,
   unreadNotifications,
+  siblingHrefs,
 }: {
   item: ModuleNavItem;
   pathname: string;
@@ -122,10 +123,15 @@ function NavLink({
   onClose?: () => void;
   totalUnread: number;
   unreadNotifications: number;
+  siblingHrefs?: string[];
 }) {
   const isActive =
     pathname === item.href ||
-    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    (item.href !== "/dashboard" &&
+      pathname.startsWith(item.href) &&
+      !(siblingHrefs ?? []).some(
+        (h) => h !== item.href && pathname.startsWith(h),
+      ));
 
   const showUnreadDot = item.href === "/inbox" && totalUnread > 0 && !isActive;
 
@@ -377,6 +383,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                         onClose={onClose}
                         totalUnread={totalUnread}
                         unreadNotifications={unreadNotifications}
+                        siblingHrefs={mod.items.map((i) => i.href)}
                       />
                     ))}
                   </ul>

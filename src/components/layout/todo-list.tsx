@@ -119,6 +119,22 @@ export function TodoList() {
     const title = newTitle.trim();
     if (!title || !accountId || !user) return;
     setAdding(true);
+    const optimisticId = crypto.randomUUID();
+    const optimistic: Todo = {
+      id: optimisticId,
+      account_id: accountId,
+      user_id: user.id,
+      title,
+      notes: null,
+      priority: "medium",
+      is_done: false,
+      is_public: false,
+      due_date: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setTodos((prev) => [optimistic, ...(prev ?? [])]);
+    setNewTitle("");
     try {
       const supabase = createClient();
       const { error } = await supabase.from("todos").insert({
@@ -129,9 +145,9 @@ export function TodoList() {
       });
       if (error) {
         toast.error("Could not add to-do.");
-        return;
+        setTodos((prev) => prev?.filter((t) => t.id !== optimisticId) ?? null);
+        setNewTitle(title);
       }
-      setNewTitle("");
     } finally {
       setAdding(false);
     }

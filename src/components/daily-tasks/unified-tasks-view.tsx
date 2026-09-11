@@ -122,8 +122,11 @@ export function UnifiedTasksView() {
     const saved = window.localStorage.getItem("daily-tasks-date-filter");
     return DATE_PRESETS.some((d) => d.id === saved) ? (saved as DatePreset) : "all";
   });
-  const [dateSort, setDateSort] = useState<"asc" | "desc" | null>(null);
-  const [stageSort, setStageSort] = useState<"asc" | "desc" | null>(null);
+  const [sortKey, setSortKey] = useState<"title" | "stage" | "priority" | "client" | "assignee" | "date" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Shims so template references to dateSort/stageSort still compile.
+  const dateSort = sortKey === "date" ? sortDir : null;
+  const stageSort = sortKey === "stage" ? sortDir : null;
   // "Schedule for later" — a task with a future show_date is hidden
   // from the normal view; this toggle flips to showing ONLY those
   // scheduled-future tasks instead of everything else.
@@ -322,32 +325,53 @@ export function UnifiedTasksView() {
       return true;
     })
     .sort((a, b) => {
-      if (stageSort) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "title") {
+        return dir * a.title.localeCompare(b.title);
+      }
+      if (sortKey === "stage") {
         const aName = (a.kind === "daily" ? stages.find((s) => s.id === a.stageId)?.name : a.stageName) ?? "";
         const bName = (b.kind === "daily" ? stages.find((s) => s.id === b.stageId)?.name : b.stageName) ?? "";
-        const cmp = aName.localeCompare(bName);
-        return stageSort === "asc" ? cmp : -cmp;
+        return dir * aName.localeCompare(bName);
       }
-      if (dateSort) {
+      if (sortKey === "priority") {
+        const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, normal: 2, low: 3 };
+        return dir * ((order[a.priority ?? ""] ?? 4) - (order[b.priority ?? ""] ?? 4));
+      }
+      if (sortKey === "client") {
+        const aName = clients.find((c) => c.id === a.clientId)?.name ?? "";
+        const bName = clients.find((c) => c.id === b.clientId)?.name ?? "";
+        return dir * aName.localeCompare(bName);
+      }
+      if (sortKey === "assignee") {
+        const aName = members.find((m) => a.assigneeUserIds.includes(m.user_id))?.full_name ?? "";
+        const bName = members.find((m) => b.assigneeUserIds.includes(m.user_id))?.full_name ?? "";
+        return dir * aName.localeCompare(bName);
+      }
+      if (sortKey === "date") {
         if (!a.dateValue && !b.dateValue) return 0;
         if (!a.dateValue) return 1;
         if (!b.dateValue) return -1;
-        return dateSort === "asc" ? a.dateValue.localeCompare(b.dateValue) : b.dateValue.localeCompare(a.dateValue);
+        return dir * a.dateValue.localeCompare(b.dateValue);
       }
+      // default: sort by date ascending, nulls last
       if (!a.dateValue && !b.dateValue) return 0;
       if (!a.dateValue) return 1;
       if (!b.dateValue) return -1;
       return a.dateValue.localeCompare(b.dateValue);
     });
 
-  function toggleDateSort() {
-    setStageSort(null);
-    setDateSort((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
+  function toggleSort(col: typeof sortKey) {
+    if (sortKey === col) {
+      if (sortDir === "asc") setSortDir("desc");
+      else setSortKey(null);
+    } else {
+      setSortKey(col);
+      setSortDir("asc");
+    }
   }
-  function toggleStageSort() {
-    setDateSort(null);
-    setStageSort((prev) => (prev === "asc" ? "desc" : prev === "desc" ? null : "asc"));
-  }
+  function toggleDateSort() { toggleSort("date"); }
+  function toggleStageSort() { toggleSort("stage"); }
 
   function quickSetAssignees(ids: string[]) {
     const next = new Set(ids);
@@ -513,20 +537,40 @@ export function UnifiedTasksView() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Task</th>
                   <th className="px-3 py-2 font-medium">
-                    <button type="button" onClick={toggleStageSort} className="flex items-center gap-1 hover:text-foreground">
-                      Stage
-                      {stageSort === "asc" ? <ArrowUp className="h-3 w-3" /> : stageSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    <button type="button" onClick={() => toggleSort("title")} className="flex items-center gap-1 hover:text-foreground">
+                      Task
+                      {sortKey === "title" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "title" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
                     </button>
                   </th>
-                  <th className="px-3 py-2 font-medium">Client / Project</th>
-                  <th className="px-3 py-2 font-medium">Priority</th>
-                  <th className="px-3 py-2 font-medium">Assignee</th>
                   <th className="px-3 py-2 font-medium">
-                    <button type="button" onClick={toggleDateSort} className="flex items-center gap-1 hover:text-foreground">
+                    <button type="button" onClick={() => toggleSort("stage")} className="flex items-center gap-1 hover:text-foreground">
+                      Stage
+                      {sortKey === "stage" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "stage" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={() => toggleSort("client")} className="flex items-center gap-1 hover:text-foreground">
+                      Client / Project
+                      {sortKey === "client" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "client" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={() => toggleSort("priority")} className="flex items-center gap-1 hover:text-foreground">
+                      Priority
+                      {sortKey === "priority" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "priority" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={() => toggleSort("assignee")} className="flex items-center gap-1 hover:text-foreground">
+                      Assignee
+                      {sortKey === "assignee" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "assignee" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <button type="button" onClick={() => toggleSort("date")} className="flex items-center gap-1 hover:text-foreground">
                       Target date
-                      {dateSort === "asc" ? <ArrowUp className="h-3 w-3" /> : dateSort === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
+                      {sortKey === "date" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "date" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
                     </button>
                   </th>
                 </tr>
