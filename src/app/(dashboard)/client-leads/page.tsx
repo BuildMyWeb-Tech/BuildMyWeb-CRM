@@ -20,7 +20,6 @@ import {
   ChevronUp,
   AlertTriangle,
   FolderOpen,
-  ListTodo,
   Info,
   Sparkles,
 } from "lucide-react";
@@ -44,7 +43,6 @@ import { FileManager } from "@/components/files/file-manager";
 import {
   LeadFormDialog,
   TaskChecklist,
-  AllTasksTab,
   FollowUpDialog,
   PRIORITIES,
   PRIORITY_STYLE,
@@ -83,7 +81,6 @@ export default function ClientLeadsPage() {
     fetchLeads,
   );
   const { members } = useAccountMembers();
-  const [tab, setTab] = useState<"enquiries" | "tasks">("enquiries");
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
     return window.localStorage.getItem("client-leads-view") === "list" ? "list" : "grid";
@@ -134,15 +131,7 @@ export default function ClientLeadsPage() {
     // matches the same grouping used on the Enquiry Tasks tab.
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 
-  // Grouped by lead — the "All Tasks" tab. Grouping (instead of one
-  // flat list with no context) is what makes a shared title like
-  // "Follow up" understandable at a glance; still no other enquiry
-  // metadata per the original ask, just the group header.
-  const taskGroups = (leads ?? [])
-    .filter((l) => l.status !== "rejected" && (l.tasks ?? []).length > 0)
-    .map((lead) => ({ leadId: lead.id, leadTitle: lead.title, tasks: lead.tasks ?? [] }));
-
-  async function handleConfirm(lead: ClientLead) {
+async function handleConfirm(lead: ClientLead) {
     if (!window.confirm(`Confirm "${lead.title}" as a client? This moves it into Client Directory.`)) return;
     const res = await fetch(`/api/client-leads/${lead.id}/confirm`, { method: "POST" });
     if (!res.ok) {
@@ -246,33 +235,8 @@ export default function ClientLeadsPage() {
         Still in discussion — confirm to move a lead into Client Directory, reject to remove it, or hold while it waits.
       </p>
 
-      <div className="mt-4 flex items-center gap-1 border-b border-border">
-        <button
-          type="button"
-          onClick={() => setTab("enquiries")}
-          className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            tab === "enquiries" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Enquiries
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("tasks")}
-          className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-            tab === "tasks" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <ListTodo className="h-3.5 w-3.5" />
-          All Tasks
-        </button>
-      </div>
 
-      {tab === "tasks" ? (
-        <AllTasksTab groups={taskGroups} canEdit={canUpdate} onChanged={load} />
-      ) : (
-        <>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
             <div className="relative w-full max-w-xs">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -381,8 +345,7 @@ export default function ClientLeadsPage() {
               ))}
             </div>
           )}
-        </>
-      )}
+      </div>
 
       <LeadFormDialog
         open={formOpen}

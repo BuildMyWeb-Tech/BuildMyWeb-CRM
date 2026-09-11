@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
+import { supabaseAdmin } from '@/lib/automations/admin-client'
 
 // GET /api/direct-messages — list conversation partners (threads) for the current user,
 //   with the last message + unread count per thread.
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
     if (!recipientId) return NextResponse.json({ error: 'recipient_id required' }, { status: 400 })
     if (!msgBody) return NextResponse.json({ error: 'body required' }, { status: 400 })
 
-    const { data, error } = await ctx.supabase
+    const { data, error } = await supabaseAdmin()
       .from('direct_messages')
       .insert({
         account_id: ctx.accountId,
