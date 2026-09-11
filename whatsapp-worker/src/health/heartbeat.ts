@@ -1,4 +1,5 @@
 import type { WhatsAppRepository } from '../repository/index.js'
+import type { ConnectionManager } from '../connection/manager.js'
 import { logger } from '../logger.js'
 
 export class Heartbeat {
@@ -6,6 +7,7 @@ export class Heartbeat {
 
   constructor(
     private readonly repo: WhatsAppRepository,
+    private readonly connectionManager: ConnectionManager,
     private readonly whatsappAccountId: string,
     private readonly workerId: string,
     private readonly intervalMs: number,
@@ -13,7 +15,6 @@ export class Heartbeat {
 
   start(): void {
     if (this.timer) return
-    // Fire immediately, then on interval.
     this.beat()
     this.timer = setInterval(() => this.beat(), this.intervalMs)
   }
@@ -31,6 +32,13 @@ export class Heartbeat {
       logger.debug('heartbeat', { whatsappAccountId: this.whatsappAccountId })
     } catch (err) {
       logger.warn('error', { op: 'heartbeat', message: String(err) })
+    }
+
+    // Check for a CRM-initiated disconnect request on every heartbeat.
+    try {
+      await this.connectionManager.checkDisconnectCommand()
+    } catch (err) {
+      logger.warn('error', { op: 'disconnect_check', message: String(err) })
     }
   }
 }

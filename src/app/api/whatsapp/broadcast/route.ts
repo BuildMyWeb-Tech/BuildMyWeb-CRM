@@ -15,6 +15,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit'
+import { randomUUID } from 'crypto'
 
 interface BroadcastResult {
   phone: string
@@ -118,6 +119,22 @@ export async function POST(request: Request) {
         { error: 'template_name is required' },
         { status: 400 }
       )
+    }
+
+    // Check for a QR/Baileys connection first.  QR broadcast sends text
+    // messages through the outbox (no template required — QR supports text
+    // only, not Meta templates).  If the QR account is not CONNECTED we
+    // fall through to the Meta path so a mixed-provider account can still
+    // broadcast via Meta.
+    const { data: qrAccount } = await supabase
+      .from('whatsapp_accounts')
+      .select('id, connection_state')
+      .eq('account_id', accountId)
+      .eq('provider', 'qr')
+      .maybeSingle()
+
+    if (qrAccount?.connection_state === 'CONNECTED') {
+      return handleQrBroadcast(supabase, accountId, qrAccount.id, recipients)
     }
 
     const { data: config, error: configError } = await supabase
@@ -244,4 +261,73 @@ export async function POST(request: Request) {
     console.error('Error in WhatsApp broadcast POST:', error)
     return toErrorResponse(error)
   }
+}
+
+/**
+ * QR/Baileys broadcast path.
+ *
+ * Queues one outbox row per recipient (text message only — QR does not
+ * support Meta templates).  Each row is processed by the worker at the
+ * existing outbox poll rate, naturally rate-limiting the broadcast.
+ *
+ * The `template_name` field from the request is ignored for QR: callers
+ * must supply the message text in `recipients[n].params[0]` or the
+ * broadcast body text.  This matches what the existing broadcast UI sends.
+ */
+async function handleQrBroadcast(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  accountId: string,
+  waAccountId: string,
+  recipients: NewRecipient[],
+): Promise<NextResponse> {
+  const results: BroadcastResult[] = []
+  let sentCount = 0
+  let failedCount = 0
+
+  for (const recipient of recipients) {
+    const sanitized = sanitizePhoneForMeta(recipient.phone)
+    if (!isValidE164(sanitized)) {
+      results.push({ phone: recipient.phone, status: 'failed', error: 'Invalid phone' })
+      failedCount++
+      continue
+    }
+
+    // Text content: first param is the message body for QR broadcasts.
+    const text = recipient.params?.[0] ?? ''
+    if (!text.trim()) {
+      results.push({ phone: recipient.phone, status: 'failed', error: 'No message text for QR broadcast' })
+      failedCount++
+      continue
+    }
+
+    const idempotencyKey = randomUUID()
+    const { error } = await supabase
+      .from('whatsapp_message_outbox')
+      .insert({
+        account_id: accountId,
+        whatsapp_account_id: waAccountId,
+        recipient: sanitized,
+        message_type: 'text',
+        payload: { text },
+        idempotency_key: idempotencyKey,
+      })
+
+    if (error) {
+      results.push({ phone: recipient.phone, status: 'failed', error: error.message })
+      failedCount++
+    } else {
+      results.push({ phone: recipient.phone, status: 'sent', whatsapp_message_id: idempotencyKey })
+      sentCount++
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    provider: 'qr',
+    total: recipients.length,
+    sent: sentCount,
+    failed: failedCount,
+    results,
+  })
 }

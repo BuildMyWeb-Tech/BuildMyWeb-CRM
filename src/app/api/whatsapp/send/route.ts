@@ -11,6 +11,7 @@ import {
   validateSendMessageParams,
   SendMessageError,
 } from '@/lib/whatsapp/send-message'
+import { sendViaQrOutbox } from '@/lib/whatsapp/send-via-qr'
 
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
@@ -148,13 +149,47 @@ export async function POST(request: Request) {
       )
     }
 
-    // Delegate to the shared send core (validates, sends to Meta with
-    // phone-variant retry, persists, pauses active flow runs). Its
-    // `SendMessageError` carries a machine code + HTTP status; the
-    // dashboard maps it to the internal `{ error }` shape.
+    // Check whether this account uses a QR (Baileys) WhatsApp connection.
+    // If so, route through the outbox instead of Meta Cloud API.
+    const { data: qrAccount } = await supabase
+      .from('whatsapp_accounts')
+      .select('id, status, connection_state')
+      .eq('account_id', accountId)
+      .eq('provider', 'qr')
+      .maybeSingle()
+
+    if (qrAccount) {
+      if (qrAccount.connection_state !== 'CONNECTED') {
+        return NextResponse.json(
+          { error: 'WhatsApp is not connected. Please check the WhatsApp Connect screen.' },
+          { status: 400 }
+        )
+      }
+      try {
+        const result = await sendViaQrOutbox(supabase, accountId, qrAccount.id, {
+          conversationId: conversationId!,
+          messageType: message_type,
+          contentText: content_text,
+          mediaUrl: media_url,
+          filename,
+        })
+        return NextResponse.json({
+          success: true,
+          message_id: result.messageId,
+          whatsapp_message_id: result.whatsappMessageId,
+        })
+      } catch (err) {
+        if (err instanceof SendMessageError) {
+          return NextResponse.json({ error: err.message }, { status: err.status })
+        }
+        throw err
+      }
+    }
+
+    // Meta Cloud API path (existing behaviour).
     try {
       const result = await sendMessageToConversation(supabase, accountId, {
-        conversationId,
+        conversationId: conversationId!,
         messageType: message_type,
         contentText: content_text,
         mediaUrl: media_url,

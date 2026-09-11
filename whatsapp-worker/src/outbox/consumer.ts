@@ -27,17 +27,30 @@ export class OutboxConsumer {
     }
   }
 
+  private pollCount = 0
+
   private async poll(): Promise<void> {
     if (this.running) return
     if (this.provider.getConnectionState() !== 'CONNECTED') return
     this.running = true
     try {
+      // Recover stale locks every ~5 minutes (every 150 polls at 2s interval).
+      this.pollCount++
+      if (this.pollCount % 150 === 1) {
+        await this.repo.recoverStaleOutboxJobs().catch(() => {})
+      }
+
       const jobs = await this.repo.claimOutboxJobs(
         this.whatsappAccountId,
         this.workerId,
       )
       for (const job of jobs) {
         await this.process(job)
+        // Conservative inter-message delay for broadcasts — avoids flooding
+        // WhatsApp and respects their rate limits (approx 80 msg/min on linked device).
+        if (jobs.length > 1) {
+          await new Promise<void>((r) => setTimeout(r, 800))
+        }
       }
     } finally {
       this.running = false
@@ -65,7 +78,8 @@ export class OutboxConsumer {
       }
 
       if (result.status === 'sent') {
-        await this.repo.markOutboxSent(job.id)
+        // Update outbox + linked CRM message row (status → sent, store wamid).
+        await this.repo.markOutboxSentWithMessageUpdate(job.id, job.message_id, result.messageId)
         logger.info('outbox_job_completed', { jobId: job.id, messageId: result.messageId })
       } else {
         const exhausted = job.attempts >= job.max_attempts

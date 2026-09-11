@@ -15,6 +15,7 @@ import {
   resolveTemplateRow,
   templateContentText,
 } from '@/lib/whatsapp/template-body'
+import { resolveQrAccount, engineSendViaQrOutbox } from '@/lib/whatsapp/send-engine'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -111,6 +112,24 @@ type SendInput =
 
 async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+
+  // Provider check: if this account has an active QR connection, route through
+  // the outbox instead of calling Meta Cloud API.  Templates are Meta-only —
+  // fall through to the Meta path if kind='template'.
+  if (input.kind === 'text') {
+    const waAccountId = await resolveQrAccount(db, input.accountId)
+    if (waAccountId) {
+      return engineSendViaQrOutbox({
+        db,
+        accountId: input.accountId,
+        conversationId: input.conversationId,
+        contactId: input.contactId,
+        waAccountId,
+        messageType: 'text',
+        text: input.text,
+      })
+    }
+  }
 
   // Scope the contact + config lookups by account_id, not user_id.
   // The engine uses the service-role client (bypassing RLS); without

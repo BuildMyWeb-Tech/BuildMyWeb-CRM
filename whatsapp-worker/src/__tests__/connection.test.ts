@@ -1,11 +1,3 @@
-/**
- * ConnectionManager state-machine tests.
- *
- * Tests:
- *  A. Temporary failure → RECONNECTING → reconnect fires
- *  B. Logout → LOGGED_OUT → no reconnect + session cleared
- *  C. Lock rejection → throws (another worker is active)
- */
 process.env.SUPABASE_URL = 'https://test.supabase.co'
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
 process.env.WHATSAPP_WORKER_ID = 'test-worker'
@@ -14,9 +6,17 @@ process.env.WHATSAPP_SESSION_ENCRYPTION_KEY = 'a'.repeat(64)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ConnectionManager } from '../connection/manager.js'
-import type { WhatsAppProvider, ProviderEvent, ProviderEventHandler, AuthState, MediaPayload, SendResult } from '../provider/adapter.js'
+import type {
+  WhatsAppProvider,
+  ProviderEvent,
+  ProviderEventHandler,
+  AuthState,
+  MediaPayload,
+  SendResult,
+} from '../provider/adapter.js'
 import type { WhatsAppSessionStore } from '../session/store.js'
 import type { ConnectionState } from '../connection/states.js'
+import type { InboxRepository } from '../inbox/repository.js'
 
 // ── Test doubles ─────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ function makeProvider(): WhatsAppProvider & { _emit: (e: ProviderEvent) => void;
     getConnectionState: () => state,
     getQRCode: () => null,
     sendText: vi.fn(async () => ({ messageId: '', status: 'sent' as const })),
-    sendMedia: vi.fn(async () => ({ messageId: '', status: 'sent' as const })),
+    sendMedia: vi.fn(async (_jid: string, _m: MediaPayload): Promise<SendResult> => ({ messageId: '', status: 'sent' as const })),
     markRead: vi.fn(async () => {}),
   }
 }
@@ -58,16 +58,36 @@ function makeRepo(lockResult = true) {
     getAccountId: vi.fn(async () => 'account-id'),
     claimOutboxJobs: vi.fn(async () => []),
     markOutboxSent: vi.fn(async () => {}),
+    markOutboxSentWithMessageUpdate: vi.fn(async () => {}),
     markOutboxFailed: vi.fn(async () => {}),
+    checkDisconnectRequested: vi.fn(async () => false),
+    clearDisconnectRequest: vi.fn(async () => {}),
   }
 }
 
-function makeManager(provider: WhatsAppProvider, sessionStore: WhatsAppSessionStore, repo: ReturnType<typeof makeRepo>) {
+function makeInboxRepo(): InboxRepository {
+  return {
+    resolveContact: vi.fn(async () => 'contact-id'),
+    resolveConversation: vi.fn(async () => 'conv-id'),
+    insertInboundMessage: vi.fn(async () => 'msg-id'),
+    updateMessageStatus: vi.fn(async () => {}),
+    markMessageSent: vi.fn(async () => {}),
+  } as unknown as InboxRepository
+}
+
+function makeManager(
+  provider: WhatsAppProvider,
+  sessionStore: WhatsAppSessionStore,
+  repo: ReturnType<typeof makeRepo>,
+  inboxRepo?: InboxRepository,
+) {
   return new ConnectionManager({
     provider,
     sessionStore,
     repo: repo as never,
+    inboxRepo: inboxRepo ?? makeInboxRepo(),
     whatsappAccountId: 'wa-account-id',
+    accountId: 'account-id',
     workerId: 'worker-1',
   })
 }
@@ -86,14 +106,14 @@ describe('ConnectionManager', () => {
     await mgr.start()
 
     expect(repo.claimLock).toHaveBeenCalledWith('wa-account-id', 'worker-1')
-    expect(provider.initialize).toHaveBeenCalledWith(null) // no saved session
+    expect(provider.initialize).toHaveBeenCalledWith(null)
     expect(provider.connect).toHaveBeenCalled()
   })
 
   it('throws when lock is already held by another worker', async () => {
     const provider = makeProvider()
     const store = makeSessionStore()
-    const repo = makeRepo(false) // lock denied
+    const repo = makeRepo(false)
     const mgr = makeManager(provider, store, repo)
 
     await expect(mgr.start()).rejects.toThrow('lock')
@@ -119,16 +139,13 @@ describe('ConnectionManager', () => {
     const mgr = makeManager(provider, store, repo)
     await mgr.start()
 
-    // Simulate CONNECTED then RECONNECTING (temporary failure).
     provider._emit({ type: 'state_changed', state: 'CONNECTED' })
     await Promise.resolve()
     provider._emit({ type: 'state_changed', state: 'RECONNECTING' })
     await Promise.resolve()
 
     expect(mgr.getState()).toBe('RECONNECTING')
-    // Advance past backoff delay.
     await vi.advanceTimersByTimeAsync(1_500)
-    // Provider.connect should have been called again.
     expect(provider.connect).toHaveBeenCalledTimes(2)
   })
 
@@ -146,9 +163,8 @@ describe('ConnectionManager', () => {
     expect(store.clear).toHaveBeenCalled()
     expect(mgr.getState()).toBe('LOGGED_OUT')
 
-    // Advance timers — no reconnect should fire.
     await vi.advanceTimersByTimeAsync(65_000)
-    expect(provider.connect).toHaveBeenCalledTimes(1) // only the initial connect
+    expect(provider.connect).toHaveBeenCalledTimes(1)
   })
 
   it('persists session immediately on auth_state_updated', async () => {
@@ -158,7 +174,7 @@ describe('ConnectionManager', () => {
     const mgr = makeManager(provider, store, repo)
     await mgr.start()
 
-    const newAuth: AuthState = { creds: { registered: true, me: { id: 'test' } }, keys: {} }
+    const newAuth: AuthState = { creds: { registered: true, me: { id: 'test' } }, keys: { 'pre-key': { '0': {} } } }
     provider._emit({ type: 'auth_state_updated', authState: newAuth })
     await Promise.resolve()
 
@@ -174,5 +190,77 @@ describe('ConnectionManager', () => {
     await mgr.stop()
 
     expect(repo.releaseLock).toHaveBeenCalledWith('wa-account-id', 'worker-1')
+  })
+
+  it('routes message_received to inboxRepo', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({
+      type: 'message_received',
+      message: {
+        messageId: 'wamid-abc',
+        from: '919999999999@s.whatsapp.net',
+        body: 'Hello',
+        contentType: 'text',
+        timestamp: 1700000000,
+      },
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(inboxRepo.resolveContact).toHaveBeenCalledWith('account-id', '919999999999@s.whatsapp.net', null)
+    expect(inboxRepo.resolveConversation).toHaveBeenCalledWith('account-id', 'contact-id')
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalled()
+  })
+
+  it('routes message_status to inboxRepo.updateMessageStatus', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({ type: 'message_status', messageId: 'wamid-abc', status: 'read' })
+    await Promise.resolve()
+
+    expect(inboxRepo.updateMessageStatus).toHaveBeenCalledWith('wamid-abc', 'read')
+  })
+
+  it('checkDisconnectCommand calls provider.logout when requested', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    ;(store.load as ReturnType<typeof vi.fn>).mockResolvedValue({ creds: {}, keys: {} })
+    const repo = makeRepo()
+    ;(repo.checkDisconnectRequested as ReturnType<typeof vi.fn>).mockResolvedValue(true)
+    const mgr = makeManager(provider, store, repo)
+    await mgr.start()
+
+    await mgr.checkDisconnectCommand()
+
+    expect(repo.clearDisconnectRequest).toHaveBeenCalledWith('wa-account-id')
+    expect(provider.logout).toHaveBeenCalled()
+  })
+
+  it('temporary disconnect does NOT clear session', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    ;(store.load as ReturnType<typeof vi.fn>).mockResolvedValue({ creds: { registered: true }, keys: {} })
+    const repo = makeRepo()
+    const mgr = makeManager(provider, store, repo)
+    await mgr.start()
+
+    // Temporary disconnect (not logout)
+    provider._emit({ type: 'state_changed', state: 'RECONNECTING' })
+    await Promise.resolve()
+
+    expect(store.clear).not.toHaveBeenCalled()
+    expect(mgr.getState()).toBe('RECONNECTING')
   })
 })

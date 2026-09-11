@@ -34,6 +34,13 @@ function buildConfig() {
     log: {
       level: optional('LOG_LEVEL', 'info') as 'debug' | 'info' | 'warn' | 'error',
     },
+    // Optional: Next.js CRM base URL + shared secret for automation dispatch.
+    // When set, the worker calls /api/internal/whatsapp/dispatch after each
+    // inbound message so automations + flows fire for QR-originated messages.
+    dispatch: {
+      baseUrl: process.env['NEXTJS_BASE_URL'] ?? '',
+      secret: process.env['NEXTJS_INTERNAL_SECRET'] ?? '',
+    },
   } as const
 }
 

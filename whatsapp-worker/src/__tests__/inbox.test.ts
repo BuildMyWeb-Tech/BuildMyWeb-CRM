@@ -23,10 +23,13 @@ function makeFakeDb(tables: Record<string, Row[]> = {}) {
     let _limit: number | null = null
     let _order: { col: string; asc: boolean } | null = null
 
+    let _upsert: Row | null = null
+
     const chain: Record<string, unknown> = {
       select: (_cols: string) => { _rows = [...(store[table] ?? [])]; return chain },
       insert: (data: Row) => { _insert = data; return chain },
       update: (data: Row) => { _update = data; return chain },
+      upsert: (data: Row, _opts?: unknown) => { _upsert = data; return chain },
       eq: (col: string, val: unknown) => {
         _filters.push((r) => r[col] === val)
         return chain
@@ -46,8 +49,8 @@ function makeFakeDb(tables: Record<string, Row[]> = {}) {
         return Promise.resolve({ data: filtered[0] ?? null, error: null })
       },
       single: () => {
-        if (_insert) {
-          const row = { id: `new-${Math.random().toString(36).slice(2)}`, ..._insert }
+        if (_insert || _upsert) {
+          const row = { id: `new-${Math.random().toString(36).slice(2)}`, ...(_insert ?? _upsert!) }
           store[table] = [...(store[table] ?? []), row]
           return Promise.resolve({ data: row, error: null })
         }
@@ -55,6 +58,11 @@ function makeFakeDb(tables: Record<string, Row[]> = {}) {
         return Promise.resolve({ data: filtered[0] ?? null, error: filtered[0] ? null : { message: 'not found' } })
       },
       then: (resolve: (v: { data: unknown; error: null }) => void) => {
+        if (_upsert) {
+          const row = { id: `new-${Math.random().toString(36).slice(2)}`, ..._upsert }
+          store[table] = [...(store[table] ?? []), row]
+          return Promise.resolve({ data: [row], error: null }).then(resolve)
+        }
         if (_insert) {
           const row = { id: `new-${Math.random().toString(36).slice(2)}`, ..._insert }
           store[table] = [...(store[table] ?? []), row]

@@ -302,6 +302,38 @@ export interface WhatsAppConfig {
   mirror_inbound_media?: boolean;
 }
 
+/** QR/Baileys WhatsApp account — one row per connected WA number. */
+export type WaConnectionState =
+  | 'DISCONNECTED'
+  | 'STARTING'
+  | 'AUTHENTICATING'
+  | 'QR_REQUIRED'
+  | 'PAIRING'
+  | 'CONNECTED'
+  | 'RECONNECTING'
+  | 'LOGGED_OUT'
+  | 'ERROR'
+
+export interface WhatsAppAccount {
+  id: string
+  account_id: string
+  phone_number: string | null
+  display_name: string | null
+  provider: 'qr' | 'meta'
+  status: 'connected' | 'disconnected' | 'error'
+  connection_state: WaConnectionState
+  qr_data_uri: string | null
+  qr_generated_at: string | null
+  worker_instance_id: string | null
+  last_connected_at: string | null
+  last_disconnected_at: string | null
+  reconnect_attempts: number
+  last_error: string | null
+  disconnect_requested_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Raw Meta status enum. We persist this verbatim from Meta (sync + webhook)
 // rather than collapsing to a local TitleCase set — distinctions like
 // PAUSED vs DISABLED vs IN_APPEAL drive the edit/resubmit/delete flows.

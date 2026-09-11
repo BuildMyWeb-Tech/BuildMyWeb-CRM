@@ -6,12 +6,15 @@
  *  - initialize the provider with the persisted session (or null = QR needed)
  *  - drive reconnect with exponential backoff
  *  - persist session on every auth_state_updated event
- *  - write connection state to DB for the future status UI
+ *  - write connection state to DB for the QR/status UI
  *  - clear session on logout
+ *  - route inbound messages to InboxRepository
+ *  - route delivery/read receipts to message status updates
  */
 import type { WhatsAppProvider, ProviderEvent } from '../provider/adapter.js'
 import type { WhatsAppSessionStore } from '../session/store.js'
 import type { WhatsAppRepository } from '../repository/index.js'
+import type { InboxRepository } from '../inbox/repository.js'
 import {
   type ConnectionState,
   RECONNECTABLE_STATES,
@@ -24,7 +27,9 @@ export interface ConnectionManagerOptions {
   provider: WhatsAppProvider
   sessionStore: WhatsAppSessionStore
   repo: WhatsAppRepository
+  inboxRepo: InboxRepository
   whatsappAccountId: string
+  accountId: string
   workerId: string
 }
 
@@ -37,14 +42,18 @@ export class ConnectionManager {
   private readonly provider: WhatsAppProvider
   private readonly sessionStore: WhatsAppSessionStore
   private readonly repo: WhatsAppRepository
+  private readonly inboxRepo: InboxRepository
   private readonly whatsappAccountId: string
+  private readonly accountId: string
   private readonly workerId: string
 
   constructor(opts: ConnectionManagerOptions) {
     this.provider = opts.provider
     this.sessionStore = opts.sessionStore
     this.repo = opts.repo
+    this.inboxRepo = opts.inboxRepo
     this.whatsappAccountId = opts.whatsappAccountId
+    this.accountId = opts.accountId
     this.workerId = opts.workerId
   }
 
@@ -70,14 +79,26 @@ export class ConnectionManager {
     logger.info('lock_released', { whatsappAccountId: this.whatsappAccountId })
   }
 
+  /** Called by Heartbeat on each beat to handle disconnect commands from CRM. */
+  async checkDisconnectCommand(): Promise<void> {
+    const requested = await this.repo.checkDisconnectRequested(this.whatsappAccountId)
+    if (!requested) return
+
+    logger.info('connection_state_changed', {
+      state: 'LOGGED_OUT',
+      reason: 'disconnect_requested_by_crm',
+    })
+    await this.repo.clearDisconnectRequest(this.whatsappAccountId)
+    await this.provider.logout()
+    // provider.logout() emits logged_out which triggers sessionStore.clear via handleProviderEvent
+  }
+
   getState(): ConnectionState {
     return this.state
   }
 
   private async connect(): Promise<void> {
     if (this.stopped) return
-
-    // Load persisted session — null means QR will be emitted.
     const authState = await this.sessionStore.load(this.whatsappAccountId)
     await this.provider.initialize(authState)
     await this.provider.connect()
@@ -90,12 +111,10 @@ export class ConnectionManager {
         break
 
       case 'auth_state_updated':
-        // Persist immediately — ensures no credentials are lost between restarts.
         await this.sessionStore.save(this.whatsappAccountId, event.authState)
         break
 
       case 'qr':
-        // Store QR in DB so the future UI can pick it up.
         await this.repo.setConnectionState(this.whatsappAccountId, 'QR_REQUIRED', {
           qrDataUri: event.dataUri,
           qrGeneratedAt: new Date().toISOString(),
@@ -112,8 +131,28 @@ export class ConnectionManager {
         })
         break
 
-      case 'message_received':
-        // Phase 5 will wire incoming messages to conversations/messages tables.
+      case 'message_received': {
+        const msg = event.message
+        const contactId = await this.inboxRepo.resolveContact(
+          this.accountId,
+          msg.from,
+          null,
+        )
+        if (!contactId) break
+        const conversationId = await this.inboxRepo.resolveConversation(
+          this.accountId,
+          contactId,
+        )
+        if (!conversationId) break
+        await this.inboxRepo.insertInboundMessage(conversationId, msg, {
+          accountId: this.accountId,
+          contactId,
+        })
+        break
+      }
+
+      case 'message_status':
+        await this.inboxRepo.updateMessageStatus(event.messageId, event.status)
         break
     }
   }
@@ -143,7 +182,6 @@ export class ConnectionManager {
     }
 
     if (SESSION_INVALID_STATES.has(next)) {
-      // Don't reconnect — need fresh QR.
       this.clearReconnectTimer()
     }
   }

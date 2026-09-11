@@ -174,4 +174,54 @@ export class WhatsAppRepository {
       })
       .eq('id', jobId)
   }
+
+  /** Mark outbox job sent AND update the linked CRM message to status='sent'. */
+  async markOutboxSentWithMessageUpdate(
+    jobId: string,
+    crmMessageId: string | null,
+    wamid: string,
+  ): Promise<void> {
+    await this.markOutboxSent(jobId)
+    if (!crmMessageId) return
+    await this.supabase
+      .from('messages')
+      .update({
+        status: 'sent',
+        message_id: wamid,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', crmMessageId)
+  }
+
+  /** Check whether the CRM has requested a disconnect for this account. */
+  async checkDisconnectRequested(whatsappAccountId: string): Promise<boolean> {
+    const { data } = await this.supabase
+      .from('whatsapp_accounts')
+      .select('disconnect_requested_at')
+      .eq('id', whatsappAccountId)
+      .maybeSingle()
+    return !!(data?.disconnect_requested_at)
+  }
+
+  /** Clear the disconnect request after the worker has acted on it. */
+  async clearDisconnectRequest(whatsappAccountId: string): Promise<void> {
+    await this.supabase
+      .from('whatsapp_accounts')
+      .update({
+        disconnect_requested_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', whatsappAccountId)
+  }
+
+  /**
+   * Return stuck 'processing' outbox jobs back to 'pending' so any healthy
+   * worker can retry them.  Calls the SQL RPC added in migration 075.
+   */
+  async recoverStaleOutboxJobs(staleMinutes = 5): Promise<number> {
+    const { data, error } = await this.supabase
+      .rpc('recover_stale_outbox_jobs', { stale_minutes: staleMinutes })
+    if (error) throw new Error(error.message)
+    return (data as number) ?? 0
+  }
 }

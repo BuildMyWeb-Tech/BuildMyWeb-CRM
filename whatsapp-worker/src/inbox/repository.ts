@@ -7,9 +7,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { InboundMessage } from '../provider/adapter.js'
 import { jidToPhone, normalizePhone, phonesMatch, isGroupJid } from './phone-utils.js'
 import { logger } from '../logger.js'
+import { getConfig } from '../config.js'
 
 export class InboxRepository {
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly dispatchBaseUrl: string = '',
+    private readonly dispatchSecret: string = '',
+  ) {}
 
   /**
    * Find-or-create a CRM contact for an inbound WhatsApp JID.
@@ -131,10 +136,14 @@ export class InboxRepository {
     return created?.id ?? null
   }
 
-  /** Insert an inbound message row and update the conversation summary. */
+  /**
+   * Insert an inbound message row and update the conversation summary.
+   * Returns the CRM message id on success, null on duplicate (idempotent).
+   */
   async insertInboundMessage(
     conversationId: string,
     msg: InboundMessage,
+    opts?: { accountId?: string; contactId?: string; userId?: string; wasContactCreated?: boolean },
   ): Promise<string | null> {
     const contentText =
       msg.body ??
@@ -142,48 +151,88 @@ export class InboxRepository {
         ? `[${msg.contentType}]`
         : null)
 
-    const { data, error } = await this.supabase
+    // Idempotent insert — message_id + conversation_id is unique (migration 037).
+    const { data: rows, error } = await this.supabase
       .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_type: 'customer',
-        content_type: msg.contentType === 'unknown' ? 'text' : msg.contentType,
-        content_text: contentText,
-        media_url: msg.mediaUrl ?? null,
-        message_id: msg.messageId,   // WhatsApp message ID (wamid)
-        status: 'delivered',
-      })
+      .upsert(
+        {
+          conversation_id: conversationId,
+          sender_type: 'customer',
+          content_type: msg.contentType === 'unknown' ? 'text' : msg.contentType,
+          content_text: contentText,
+          media_url: msg.mediaUrl ?? null,
+          message_id: msg.messageId,
+          status: 'delivered',
+          created_at: new Date(msg.timestamp * 1000).toISOString(),
+        },
+        { onConflict: 'conversation_id,message_id', ignoreDuplicates: true },
+      )
       .select('id')
-      .single()
 
     if (error) {
-      if (error.code === '23505') {
-        // Duplicate message (re-delivery) — idempotent, not an error.
-        logger.debug('outbox_job_completed', { op: 'insertInboundMessage', duplicate: true })
-        return null
-      }
       logger.warn('error', { op: 'insertInboundMessage', message: error.message })
       return null
     }
 
-    // Update conversation summary (unread_count++ and last message preview).
+    // Empty rows = duplicate (idempotent replay) — skip downstream work.
+    if (!rows || rows.length === 0) {
+      logger.debug('outbox_job_completed', { op: 'insertInboundMessage', duplicate: true, messageId: msg.messageId })
+      return null
+    }
+
+    const msgId = rows[0].id as string
+
+    // bump_conversation_on_inbound atomically increments unread_count +
+    // updates last_message_text/at/status in one UPDATE.
     await this.supabase
-      .from('conversations')
-      .update({
-        last_message_text: contentText ?? `[${msg.contentType}]`,
-        last_message_at: new Date(msg.timestamp * 1000).toISOString(),
-        // unread_count incremented via RPC below
-        updated_at: new Date().toISOString(),
-        status: 'open',
+      .rpc('bump_conversation_on_inbound', {
+        p_conversation_id: conversationId,
+        p_last_message_text: contentText ?? `[${msg.contentType}]`,
       })
-      .eq('id', conversationId)
+      .then(() => {}, (err: unknown) => {
+        // Fallback if RPC isn't available yet.
+        logger.warn('error', { op: 'bump_conversation_on_inbound', message: String(err) })
+        void this.supabase.from('conversations').update({
+          last_message_text: contentText ?? `[${msg.contentType}]`,
+          last_message_at: new Date(msg.timestamp * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+          status: 'open',
+        }).eq('id', conversationId)
+      })
 
-    // Increment unread_count separately (Supabase JS doesn't support col expressions in update).
-    await this.supabase.rpc('increment_conversation_unread', {
-      conversation_id: conversationId,
-    }).then(() => {}, () => {})
+    // Dispatch automations + flows via internal CRM endpoint (fire-and-forget).
+    if (opts?.accountId && opts?.contactId && this.dispatchBaseUrl && this.dispatchSecret) {
+      void this.callDispatch({
+        accountId: opts.accountId,
+        conversationId,
+        contactId: opts.contactId,
+        userId: opts.userId ?? '',
+        messageText: contentText,
+        contentType: msg.contentType,
+        messageId: msg.messageId,
+        isFirstInbound: false,   // resolved by the CRM endpoint via DB query
+        wasContactCreated: opts.wasContactCreated ?? false,
+      })
+    }
 
-    return data?.id ?? null
+    return msgId
+  }
+
+  /** Fire-and-forget POST to the internal automation dispatch endpoint. */
+  private callDispatch(payload: Record<string, unknown>): Promise<void> {
+    const url = `${this.dispatchBaseUrl}/api/internal/whatsapp/dispatch`
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-secret': this.dispatchSecret,
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(() => {})
+      .catch((err: unknown) => {
+        logger.warn('error', { op: 'callDispatch', message: String(err) })
+      })
   }
 
   /** Update the CRM message status from a delivery/read receipt. */

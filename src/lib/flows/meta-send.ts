@@ -15,6 +15,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { resolveQrAccount, engineSendViaQrOutbox } from '@/lib/whatsapp/send-engine'
 import { supabaseAdmin } from './admin-client'
 
 // ------------------------------------------------------------
@@ -66,6 +67,21 @@ export async function engineSendText(
   args: SendTextEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+
+  // QR provider check — route through outbox if connected via Baileys.
+  const waAccountId = await resolveQrAccount(db, args.accountId)
+  if (waAccountId) {
+    return engineSendViaQrOutbox({
+      db,
+      accountId: args.accountId,
+      conversationId: args.conversationId,
+      contactId: args.contactId,
+      waAccountId,
+      messageType: 'text',
+      text: args.text,
+      aiGenerated: args.aiGenerated,
+    })
+  }
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
@@ -176,6 +192,23 @@ export async function engineSendMedia(
   args: SendMediaEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+
+  // QR provider check — route through outbox if connected via Baileys.
+  const waAccountId = await resolveQrAccount(db, args.accountId)
+  if (waAccountId) {
+    return engineSendViaQrOutbox({
+      db,
+      accountId: args.accountId,
+      conversationId: args.conversationId,
+      contactId: args.contactId,
+      waAccountId,
+      messageType: args.kind as 'image' | 'video' | 'audio' | 'document',
+      mediaUrl: args.link,
+      mimetype: `${args.kind}/*`,
+      caption: args.caption,
+      filename: args.filename,
+    })
+  }
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
