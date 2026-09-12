@@ -673,7 +673,7 @@ export function UnifiedTasksView() {
                             onClick={(e) => { e.stopPropagation(); setDoneModalTask(task); }}
                             className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
                           >
-                            <Trash2 className="h-3 w-3" /> Remove
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         )}
                       </td>
