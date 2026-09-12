@@ -17,11 +17,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Bot, CheckCircle2, Copy, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -33,6 +33,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { RequireRole } from '@/components/auth/require-role';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -272,7 +279,345 @@ export function ApiKeysSettings() {
         onOpenChange={setCreateOpen}
         onCreated={load}
       />
+
+      {/* AI Assistant key section */}
+      <AiKeyCard />
     </section>
+  );
+}
+
+// ------------------------------------------------------------
+// AI Assistant key card — lets users configure OpenAI / Anthropic
+// key for the AI Assistant without going to the Agents page.
+// ------------------------------------------------------------
+
+type AiProvider = 'openai' | 'anthropic';
+
+interface AiStatus {
+  configured: boolean;
+  has_key: boolean;
+  provider?: AiProvider;
+  model?: string;
+  is_active?: boolean;
+}
+
+function AiKeyCard() {
+  const { canEditSettings: canEdit } = useAuth();
+  const [status, setStatus] = useState<AiStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    try {
+      const res = await fetch('/api/ai/config', { cache: 'no-store' });
+      if (res.ok) setStatus(await res.json() as AiStatus);
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
+
+  async function handleRemove() {
+    if (!confirm('Remove the AI API key? The AI Assistant will stop working.')) return;
+    setRemoving(true);
+    try {
+      const res = await fetch('/api/ai/config', { method: 'DELETE' });
+      if (!res.ok) { toast.error('Could not remove key.'); return; }
+      toast.success('AI key removed.');
+      await loadStatus();
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-semibold">AI Assistant Key</CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  OpenAI or Anthropic key used by the AI Assistant, Lead Finder, and reply drafting.
+                  {' '}You can also set <code className="text-[11px]">OPENAI_API_KEY</code> in your environment instead.
+                </CardDescription>
+              </div>
+            </div>
+            {canEdit && (
+              <div className="flex shrink-0 items-center gap-2">
+                {status?.has_key && (
+                  <Button variant="outline" size="sm"
+                    className="border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:text-red-200"
+                    onClick={handleRemove} disabled={removing}>
+                    {removing ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                    Remove
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  {status?.has_key ? <><Pencil className="size-3.5" /> Edit Key</> : <><Plus className="size-3.5" /> Add Key</>}
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingStatus ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Loading…
+            </div>
+          ) : status?.has_key ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="size-4 text-green-500" />
+                <span className="text-sm text-foreground font-medium">Key configured</span>
+              </div>
+              {status.provider && (
+                <Badge className="border-border bg-muted text-muted-foreground text-[10px] capitalize">
+                  {status.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
+                </Badge>
+              )}
+              {status.model && (
+                <Badge className="border-border bg-muted text-muted-foreground text-[10px]">
+                  {status.model}
+                </Badge>
+              )}
+              {status.is_active && (
+                <Badge className="border-green-500/40 bg-green-500/10 text-green-400 text-[10px]">Active</Badge>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Bot className="size-4" />
+              No AI key configured. Add your OpenAI or Anthropic key to enable the AI Assistant.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AiKeyDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        currentProvider={status?.provider}
+        currentModel={status?.model}
+        hasKey={status?.has_key ?? false}
+        onSaved={loadStatus}
+      />
+    </>
+  );
+}
+
+function AiKeyDialog({
+  open, onOpenChange, currentProvider, currentModel, hasKey, onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  currentProvider?: AiProvider;
+  currentModel?: string;
+  hasKey: boolean;
+  onSaved: () => void;
+}) {
+  const [provider, setProvider] = useState<AiProvider>(currentProvider ?? 'openai');
+  const [model, setModel] = useState(currentModel ?? 'gpt-4o-mini');
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  // Step 1 = form, Step 2 = confirm
+  const [step, setStep] = useState<'form' | 'confirm'>('form');
+  const [saving, setSaving] = useState(false);
+
+  function reset() {
+    setApiKey('');
+    setShowKey(false);
+    setStep('form');
+    setSaving(false);
+  }
+
+  function handleOpenChange(v: boolean) {
+    if (!v) reset();
+    onOpenChange(v);
+  }
+
+  function handleProviderChange(p: AiProvider) {
+    setProvider(p);
+    setModel(p === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001');
+  }
+
+  function handleNext() {
+    const trimmed = apiKey.trim();
+    if (!trimmed) { toast.error('Please enter an API key.'); return; }
+    if (provider === 'openai' && !trimmed.startsWith('sk-')) {
+      toast.error('OpenAI keys start with "sk-".');
+      return;
+    }
+    if (provider === 'anthropic' && !trimmed.startsWith('sk-ant-')) {
+      toast.error('Anthropic keys start with "sk-ant-".');
+      return;
+    }
+    setStep('confirm');
+  }
+
+  async function handleConfirm() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/ai/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, model, api_key: apiKey.trim(), is_active: true }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) { toast.error(data.error ?? 'Failed to save AI key.'); return; }
+      toast.success('AI key saved. The AI Assistant is now ready.');
+      onSaved();
+      handleOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const modelOptions: Record<AiProvider, { value: string; label: string }[]> = {
+    openai: [
+      { value: 'gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
+      { value: 'gpt-4o', label: 'GPT-4o (most capable)' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    ],
+    anthropic: [
+      { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku (fast, cheap)' },
+      { value: 'claude-sonnet-4-6', label: 'Claude Sonnet (balanced)' },
+    ],
+  };
+
+  const maskedKey = apiKey.trim()
+    ? apiKey.slice(0, 8) + '••••••••••••' + apiKey.slice(-4)
+    : '';
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="border-border bg-popover sm:max-w-md">
+        {step === 'form' ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-popover-foreground">
+                {hasKey ? 'Update AI Key' : 'Add AI Assistant Key'}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {hasKey
+                  ? 'Enter a new key to replace the existing one.'
+                  : 'Configure an OpenAI or Anthropic key to power the AI Assistant, Lead Finder, and reply drafting.'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground">Provider</Label>
+                <Select value={provider} onValueChange={(v) => handleProviderChange(v as AiProvider)}>
+                  <SelectTrigger className="border-border bg-muted">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground">Default Model</Label>
+                <Select value={model} onValueChange={(v) => { if (v) setModel(v); }}>
+                  <SelectTrigger className="border-border bg-muted">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelOptions[provider].map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground">
+                  API Key {provider === 'openai' ? '(starts with sk-)' : '(starts with sk-ant-)'}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <Button type="button" variant="outline" size="icon"
+                    onClick={() => setShowKey((v) => !v)}
+                    className="shrink-0 border-border">
+                    {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Alternatively, set <code className="text-[11px]">OPENAI_API_KEY</code> (or <code className="text-[11px]">ANTHROPIC_API_KEY</code>) in your <code className="text-[11px]">.env</code> file — the server will pick it up automatically.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleOpenChange(false)}
+                className="border-border text-muted-foreground hover:bg-muted">
+                Cancel
+              </Button>
+              <Button onClick={handleNext} disabled={!apiKey.trim()}>
+                Review & Confirm →
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-popover-foreground">Confirm AI Key</DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Review the details below before saving. Click Edit to make changes.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Provider</span>
+                <span className="font-medium text-foreground capitalize">
+                  {provider === 'openai' ? 'OpenAI' : 'Anthropic (Claude)'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Model</span>
+                <span className="font-mono text-xs text-foreground">{model}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">API Key</span>
+                <span className="font-mono text-xs text-foreground">{maskedKey}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Status</span>
+                <Badge className="border-green-500/40 bg-green-500/10 text-green-400 text-[10px]">Active</Badge>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setStep('form')}
+                className="border-border text-muted-foreground hover:bg-muted">
+                <Pencil className="size-3.5" /> Edit
+              </Button>
+              <Button onClick={handleConfirm} disabled={saving}>
+                {saving ? <><Loader2 className="size-4 animate-spin" /> Saving…</> : <><CheckCircle2 className="size-4" /> Confirm & Save</>}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
