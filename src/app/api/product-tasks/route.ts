@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
     let query = ctx.supabase
       .from('product_tasks')
-      .select('id, title, description, priority, due_date, assignee_user_id, assignee_user_ids, position, created_at, product_id, stage_id, product:products(id, name), stage:pipeline_stages(id, name)')
+      .select('id, title, description, priority, due_date, show_date, assignee_user_id, assignee_user_ids, position, created_at, product_id, stage_id, product:products(id, project_name), stage:pipeline_stages(id, name)')
       .eq('account_id', ctx.accountId)
       .order('created_at', { ascending: false })
 

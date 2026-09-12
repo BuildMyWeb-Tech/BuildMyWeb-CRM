@@ -477,13 +477,7 @@ export default function ClientLeadsPage() {
                       Client Name
                     </th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Enquiry Title
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       Priority
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Mode
                     </th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                       Assigned To
@@ -533,18 +527,8 @@ export default function ClientLeadsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="max-w-[180px] truncate text-slate-300">
-                            {lead.notes ? lead.notes.slice(0, 60) : lead.title}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${PRIORITY_BADGE[lead.priority] ?? "text-slate-400"}`}>
                             {lead.priority}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${MODE_BADGE[lead.status] ?? "text-slate-400"}`}>
-                            {STATUS_DISPLAY[lead.status] ?? lead.status}
                           </span>
                         </td>
                         <td className="px-4 py-3">

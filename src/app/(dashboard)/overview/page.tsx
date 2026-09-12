@@ -5,7 +5,7 @@ import {
   Folder, Search, ClipboardList,
   ExternalLink, ListChecks, Package,
   ChevronUp, ChevronDown, ChevronsUpDown,
-  UserCheck, XCircle, Clock, MessageSquare,
+  UserCheck, XCircle, Clock,
   Users, ChevronDown as ChevronDownIcon, AlertCircle, Briefcase,
   Plus, Loader2, Zap, ArrowRight, CheckCircle2,
 } from "lucide-react";
@@ -56,6 +56,7 @@ interface MyWorkTask {
   title: string;
   priority: string | null;
   due_date: string | null;
+  show_date?: string | null;
   assignee_user_id?: string | null;
   assignee_user_ids?: string[];
   project?: { id: string; name: string } | null;
@@ -278,10 +279,210 @@ function ProjectsSidebar({
   );
 }
 
+// ── Followups section (My Work) ───────────────────────────────────────────────
+function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
+  const [showHold, setShowHold] = useState(false);
+  const discussion = followups.filter((f) => f.status === "in_discussion");
+  const hold = followups.filter((f) => f.status === "hold");
+  const other = followups.filter((f) => f.status !== "in_discussion" && f.status !== "hold");
+  const visible = [...discussion, ...other, ...(showHold ? hold : [])];
+
+  function FollowupRow({ f }: { f: MyWorkFollowUp }) {
+    const fDate = new Date(f.next_follow_up_at);
+    const isOverdueF = fDate < new Date();
+    const isTodayF = fDate.toDateString() === new Date().toDateString();
+    return (
+      <tr className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+        <td className="px-4 py-3 font-medium text-white">{f.title}</td>
+        <td className="px-4 py-3">
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${ENQUIRY_STATUS_STYLE[f.status] ?? "bg-slate-500/20 text-slate-400"}`}>
+            {f.status.replace("_", " ")}
+          </span>
+        </td>
+        <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
+          {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Enquiry Follow-ups</h3>
+      <div className="overflow-hidden rounded-xl border border-[#2a3045]">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+              <th className="px-4 py-2.5 font-medium">Title</th>
+              <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 font-medium">Follow-up</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((f) => <FollowupRow key={f.id} f={f} />)}
+          </tbody>
+        </table>
+        {hold.length > 0 && (
+          <button type="button" onClick={() => setShowHold((v) => !v)}
+            className="w-full flex items-center justify-center gap-1 border-t border-[#2a3045] py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+            <ChevronDown className={`h-3 w-3 transition-transform ${showHold ? "rotate-180" : ""}`} />
+            {showHold ? "Hide" : `Show ${hold.length} hold`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Enquiry sidebar ───────────────────────────────────────────────────────────
+function EnquirySidebar({ enquiries, members, todayStr }: {
+  enquiries: ClientLead[];
+  members: AccountMember[];
+  todayStr: string;
+}) {
+  const total = enquiries.length;
+  const discussion = enquiries.filter((e) => e.status === "in_discussion").length;
+  const hold = enquiries.filter((e) => e.status === "hold").length;
+  const confirmed = enquiries.filter((e) => e.status === "confirmed").length;
+  const now = new Date();
+  const weekAhead = new Date(now.getTime() + 7 * 86400000);
+  const overdueEnq = enquiries.filter((e) => e.next_follow_up_at && new Date(e.next_follow_up_at) < now);
+  const upcomingEnq = enquiries.filter((e) => {
+    if (!e.next_follow_up_at) return false;
+    const d = new Date(e.next_follow_up_at);
+    return d >= now && d <= weekAhead;
+  }).slice(0, 6);
+
+  return (
+    <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {[
+          { label: "Total",      count: total,      color: "text-blue-400" },
+          { label: "Discussion", count: discussion, color: "text-teal-400" },
+          { label: "Hold",       count: hold,       color: "text-yellow-400" },
+          { label: "Converted",  count: confirmed,  color: "text-green-400" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg bg-[#0f1117] px-2 py-2 text-center">
+            <p className={`text-sm font-bold ${s.color}`}>{s.count}</p>
+            <p className="text-[9px] text-slate-600 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {/* Overdue follow-ups */}
+      {overdueEnq.length > 0 && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-red-500/20 px-3 py-2">
+            <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+            <span className="text-xs font-semibold text-red-300">Overdue Follow-ups</span>
+            <span className="ml-auto text-[10px] font-bold text-red-400">{overdueEnq.length}</span>
+          </div>
+          <div className="divide-y divide-red-500/10">
+            {overdueEnq.slice(0, 5).map((e) => (
+              <div key={e.id} className="px-3 py-2">
+                <p className="text-xs font-medium text-white truncate">{e.title}</p>
+                <p className="text-[10px] text-red-400 mt-0.5">
+                  {new Date(e.next_follow_up_at!).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                  {e.allocated_user_id && ` · ${members.find((m) => m.user_id === e.allocated_user_id)?.full_name ?? ""}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Upcoming follow-ups */}
+      <div className="rounded-xl border border-[#2a3045] overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2">
+          <Clock className="h-3.5 w-3.5 text-orange-400" />
+          <span className="text-xs font-semibold text-white">Upcoming (7 days)</span>
+        </div>
+        <div className="divide-y divide-[#2a3045]">
+          {upcomingEnq.map((e) => {
+            const d = new Date(e.next_follow_up_at!);
+            const isToday = d.toDateString() === now.toDateString();
+            return (
+              <div key={e.id} className="flex items-center gap-2 px-3 py-2">
+                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold ${isToday ? "bg-amber-500/20 text-amber-300" : "bg-blue-500/10 text-blue-400"}`}>
+                  {d.getDate()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-slate-200">{e.title}</p>
+                  <p className="text-[10px] text-slate-500">{e.status.replace("_", " ")}</p>
+                </div>
+              </div>
+            );
+          })}
+          {upcomingEnq.length === 0 && (
+            <p className="px-3 py-4 text-center text-xs text-slate-500">No upcoming follow-ups</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Product tasks sidebar ─────────────────────────────────────────────────────
+function ProductTasksSidebar({ productTasks }: { productTasks: ProductTask[] }) {
+  const total = productTasks.length;
+  const withDue = productTasks.filter((t) => t.due_date).length;
+  const overdue = productTasks.filter((t) => t.due_date && t.due_date < new Date().toISOString().slice(0, 10)).length;
+  const noDue = productTasks.filter((t) => !t.due_date).length;
+
+  // Group by product
+  const byProduct = productTasks.reduce<Record<string, { name: string; count: number }>>((acc, t) => {
+    const key = t.product_id ?? "__none__";
+    const name = (t.product as { project_name?: string } | null)?.project_name ?? "No Product";
+    if (!acc[key]) acc[key] = { name, count: 0 };
+    acc[key].count++;
+    return acc;
+  }, {});
+  const productRows = Object.values(byProduct).sort((a, b) => b.count - a.count);
+
+  return (
+    <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+      <div className="grid grid-cols-2 gap-1.5">
+        {[
+          { label: "Total",    count: total,   color: "text-teal-400" },
+          { label: "With Due", count: withDue, color: "text-blue-400" },
+          { label: "Overdue",  count: overdue, color: "text-red-400" },
+          { label: "No Date",  count: noDue,   color: "text-slate-400" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg bg-[#0f1117] px-2 py-2 text-center">
+            <p className={`text-sm font-bold ${s.color}`}>{s.count}</p>
+            <p className="text-[9px] text-slate-600 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      {productRows.length > 0 && (
+        <div className="rounded-xl border border-[#2a3045] overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2">
+            <Package className="h-3.5 w-3.5 text-teal-400" />
+            <span className="text-xs font-semibold text-white">By Product</span>
+          </div>
+          <div className="divide-y divide-[#2a3045]">
+            {productRows.map((p) => (
+              <div key={p.name} className="flex items-center justify-between px-3 py-2">
+                <p className="text-xs text-slate-300 truncate flex-1">{p.name}</p>
+                <span className="shrink-0 ml-2 text-[10px] font-bold text-teal-400">{p.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
   const { accountId, user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabKey>("my-work");
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    try { return (localStorage.getItem("ov-active-tab") as TabKey) ?? "my-work"; } catch { return "my-work"; }
+  });
+  function switchTab(t: TabKey) {
+    setActiveTab(t);
+    try { localStorage.setItem("ov-active-tab", t); } catch {}
+  }
 
   // Global people filter — shown on ALL tabs; each tab can override with its own sub-filter
   const [globalUserId, setGlobalUserId] = useState<string | null>(null);
@@ -394,6 +595,8 @@ export default function OverviewPage() {
     if (activeTab === "product-tasks") loadProductTasks();
   }, [activeTab, loadMyWork, loadEnquiries, loadProductTasks]);
   useEffect(() => { if (activeTab === "my-work") loadMyWork(); }, [myWorkUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (activeTab === "enquiry-tasks") loadEnquiries(); }, [enqEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (activeTab === "product-tasks") loadProductTasks(); }, [prodEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -402,10 +605,13 @@ export default function OverviewPage() {
     if (!userId) return true;
     return task.assignee_user_id === userId || (task.assignee_user_ids ?? []).includes(userId);
   }
-  const overdueProjectTasks = (myWorkData?.my_work.overdue ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
-  const dueTodayProjectTasks = (myWorkData?.my_work.due_today ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
-  const upcomingTaskList = (myWorkData?.my_work.upcoming ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
-  const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
+  function taskIsVisible(task: MyWorkTask): boolean {
+    return !task.show_date || task.show_date <= todayStr;
+  }
+  const overdueProjectTasks = (myWorkData?.my_work.overdue ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
+  const dueTodayProjectTasks = (myWorkData?.my_work.due_today ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
+  const upcomingTaskList = (myWorkData?.my_work.upcoming ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
+  const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
   const allProjectTasks = [...overdueProjectTasks, ...dueTodayProjectTasks, ...upcomingTaskList, ...waitingTaskList];
   const allFollowups = myWorkData?.followups ?? [];
   const myProductTasks = allProductTasks.filter((t) => {
@@ -503,7 +709,7 @@ export default function OverviewPage() {
         {/* Header + global filter */}
         <div className="shrink-0 px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Overview</h1>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
             <p className="mt-0.5 text-sm text-slate-400">Every task worth tracking — all in one place.</p>
           </div>
           {/* Global people picker — always visible on all tabs */}
@@ -523,7 +729,7 @@ export default function OverviewPage() {
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (
-                <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
+                <button key={tab.key} type="button" onClick={() => switchTab(tab.key)}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === tab.key
                       ? "border border-b-0 border-[#2a3045] bg-[#1a1f2e] text-white"
@@ -602,40 +808,7 @@ export default function OverviewPage() {
                   )}
 
                   {allFollowups.length > 0 && (
-                    <div>
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Enquiry Follow-ups</h3>
-                      <div className="overflow-hidden rounded-xl border border-[#2a3045]">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
-                              <th className="px-4 py-2.5 font-medium">Title</th>
-                              <th className="px-4 py-2.5 font-medium">Status</th>
-                              <th className="px-4 py-2.5 font-medium">Follow-up</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {allFollowups.map((f) => {
-                              const fDate = new Date(f.next_follow_up_at);
-                              const isOverdueF = fDate < new Date();
-                              const isTodayF = fDate.toDateString() === new Date().toDateString();
-                              return (
-                                <tr key={f.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
-                                  <td className="px-4 py-3 font-medium text-white">{f.title}</td>
-                                  <td className="px-4 py-3">
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${ENQUIRY_STATUS_STYLE[f.status] ?? "bg-slate-500/20 text-slate-400"}`}>
-                                      {f.status.replace("_", " ")}
-                                    </span>
-                                  </td>
-                                  <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
-                                    {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                    <FollowupsSection followups={allFollowups} />
                   )}
 
                   {myProductTasks.length > 0 && (
@@ -909,11 +1082,24 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Right sidebar */}
-      {activeTab === "my-work" ? (
-        // My Work sidebar: Overdue + Upcoming (scrollable via mouse, no visible bar)
-        <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] overflow-y-auto scrollbar-none" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-          <div className="p-4 space-y-4">
+      {/* Right sidebar — content varies per tab */}
+      <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+        {activeTab === "my-work" ? (
+          <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { label: "Tasks",     count: allProjectTasks.length,  color: "text-blue-400" },
+                { label: "Follow-ups", count: allFollowups.length,    color: "text-purple-400" },
+                { label: "Products",  count: myProductTasks.length,   color: "text-teal-400" },
+              ].map((s) => (
+                <div key={s.label} className="rounded-lg bg-[#0f1117] px-2 py-2 text-center">
+                  <p className={`text-sm font-bold ${s.color}`}>{s.count}</p>
+                  <p className="text-[9px] text-slate-600 leading-tight mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
             {/* Overdue */}
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
               <div className="flex items-center gap-2 border-b border-red-500/20 px-3 py-2.5">
@@ -927,25 +1113,19 @@ export default function OverviewPage() {
                 {overdueProjectTasks.map((t) => (
                   <div key={`op-${t.id}`} className="px-3 py-2">
                     <p className="text-xs font-medium text-white truncate">{t.title}</p>
-                    <p className="text-[10px] text-red-400 mt-0.5">
-                      Task · {t.due_date ? new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}
-                    </p>
+                    <p className="text-[10px] text-red-400 mt-0.5">Task · {t.due_date ? new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</p>
                   </div>
                 ))}
                 {overdueFollowups.map((f) => (
                   <div key={`of-${f.id}`} className="px-3 py-2">
                     <p className="text-xs font-medium text-white truncate">{f.title}</p>
-                    <p className="text-[10px] text-red-400 mt-0.5">
-                      Follow-up · {new Date(f.next_follow_up_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                    </p>
+                    <p className="text-[10px] text-red-400 mt-0.5">Follow-up · {new Date(f.next_follow_up_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</p>
                   </div>
                 ))}
                 {overdueProductTasks.map((t) => (
                   <div key={`opt-${t.id}`} className="px-3 py-2">
                     <p className="text-xs font-medium text-white truncate">{t.title}</p>
-                    <p className="text-[10px] text-red-400 mt-0.5">
-                      Product Task · {t.due_date ? new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}
-                    </p>
+                    <p className="text-[10px] text-red-400 mt-0.5">Product · {t.due_date ? new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</p>
                   </div>
                 ))}
                 {overdueProjectTasks.length === 0 && overdueFollowups.length === 0 && overdueProductTasks.length === 0 && (
@@ -970,7 +1150,7 @@ export default function OverviewPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-slate-200">{t.title}</p>
-                        <p className="text-[10px] text-slate-500">Task</p>
+                        <p className="text-[10px] text-slate-500">{t.project?.name ?? "Task"}</p>
                       </div>
                     </div>
                   );
@@ -996,18 +1176,19 @@ export default function OverviewPage() {
               </div>
             </div>
           </div>
-        </div>
-      ) : (
-        // Default sidebar: Projects
-        <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+        ) : activeTab === "enquiry-tasks" ? (
+          <EnquirySidebar enquiries={enquiries} members={members} todayStr={todayStr} />
+        ) : activeTab === "product-tasks" ? (
+          <ProductTasksSidebar productTasks={productTasks} />
+        ) : (
           <ProjectsSidebar
             projects={projects}
             loading={loadingProjects}
             search={projectSearch}
             setSearch={setProjectSearch}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

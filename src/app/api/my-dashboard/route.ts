@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     // All project tasks for the account (My Work shows everything relevant to the user)
     const { data: tasks } = await ctx.supabase
       .from('project_tasks')
-      .select('id, title, priority, due_date, project_id, assignee_user_id, assignee_user_ids, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
+      .select('id, title, priority, due_date, show_date, project_id, assignee_user_id, assignee_user_ids, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
       .eq('account_id', ctx.accountId)
       .order('due_date', { ascending: true, nullsFirst: false })
 

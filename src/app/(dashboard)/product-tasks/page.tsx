@@ -11,7 +11,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { AccountMember } from "@/types";
 
-interface Product { id: string; name: string }
+interface Product { id: string; project_name: string }
 interface Stage { id: string; name: string; position: number }
 
 interface ProductTask {
@@ -177,7 +177,7 @@ function ProductTaskModal({
                 className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none"
               >
                 <option value="__none__">None</option>
-                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {products.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
               </select>
             </div>
             <div>
@@ -345,13 +345,13 @@ export default function ProductTasksPage() {
   const loadSupporting = useCallback(async () => {
     if (!accountId) return;
     const supabase = createClient();
-    const [membersRes, productsData, stagesData] = await Promise.all([
+    const [membersRes, productsRes, stagesData] = await Promise.all([
       fetch("/api/account/members").then((r) => r.ok ? r.json() : null),
-      supabase.from("products").select("id, name").eq("account_id", accountId).order("name"),
+      fetch("/api/products").then((r) => r.ok ? r.json() : null),
       supabase.from("pipeline_stages").select("id, name, position").order("position"),
     ]);
     if (membersRes?.members) setMembers(membersRes.members);
-    if (productsData.data) setProducts(productsData.data);
+    if (productsRes?.products) setProducts(productsRes.products.map((p: { id: string; project_name: string }) => ({ id: p.id, project_name: p.project_name })));
     if (stagesData.data) setStages(stagesData.data);
   }, [accountId]);
 
@@ -500,7 +500,7 @@ export default function ProductTasksPage() {
                             </span>
                           ) : <span className="text-slate-600">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{task.product?.name ?? <span className="text-slate-600">—</span>}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{(task.product as { project_name?: string } | null)?.project_name ?? <span className="text-slate-600">—</span>}</td>
                         <td className="px-4 py-3 text-xs text-slate-500">{task.stage?.name ?? <span className="text-slate-600">—</span>}</td>
                         <td className="px-4 py-3">
                           {(task.assignee_user_ids ?? []).length > 0 ? (
