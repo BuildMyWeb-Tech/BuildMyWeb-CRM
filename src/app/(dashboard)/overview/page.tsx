@@ -280,8 +280,8 @@ export default function OverviewPage() {
         if (!a.next_follow_up_at) return 1; if (!b.next_follow_up_at) return -1;
         return dir * a.next_follow_up_at.localeCompare(b.next_follow_up_at);
       }
-      const va = (a as Record<string, unknown>)[enqSortField] as string ?? "";
-      const vb = (b as Record<string, unknown>)[enqSortField] as string ?? "";
+      const va = (a as unknown as Record<string, unknown>)[enqSortField] as string ?? "";
+      const vb = (b as unknown as Record<string, unknown>)[enqSortField] as string ?? "";
       return dir * va.localeCompare(vb);
     });
 
