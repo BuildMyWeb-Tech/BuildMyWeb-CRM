@@ -59,9 +59,7 @@ ALTER TABLE whatsapp_accounts ENABLE ROW LEVEL SECURITY;
 -- CRM users can read their account's WhatsApp status (for future UI).
 DROP POLICY IF EXISTS "wa_accounts_select" ON whatsapp_accounts;
 CREATE POLICY "wa_accounts_select" ON whatsapp_accounts
-  FOR SELECT USING (
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
-  );
+  FOR SELECT USING (is_account_member(account_id, 'viewer'));
 -- Writes are service-role only (worker bypasses RLS via service-role client).
 -- No INSERT/UPDATE/DELETE policies for normal users.
 
@@ -140,15 +138,8 @@ ALTER TABLE whatsapp_message_outbox ENABLE ROW LEVEL SECURITY;
 -- CRM agent+ can insert outbox jobs (for future send button wiring).
 DROP POLICY IF EXISTS "wa_outbox_select" ON whatsapp_message_outbox;
 CREATE POLICY "wa_outbox_select" ON whatsapp_message_outbox
-  FOR SELECT USING (
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
-  );
+  FOR SELECT USING (is_account_member(account_id, 'viewer'));
 DROP POLICY IF EXISTS "wa_outbox_insert" ON whatsapp_message_outbox;
 CREATE POLICY "wa_outbox_insert" ON whatsapp_message_outbox
-  FOR INSERT WITH CHECK (
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid()
-        AND role IN ('agent', 'admin', 'owner')
-    )
-  );
+  FOR INSERT WITH CHECK (is_account_member(account_id, 'agent'));
 -- UPDATE/DELETE for status tracking done by worker via service-role only.

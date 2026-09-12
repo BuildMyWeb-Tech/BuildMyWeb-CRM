@@ -32,33 +32,19 @@ ALTER TABLE crm_automations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "crm_automations_select" ON crm_automations;
 CREATE POLICY "crm_automations_select" ON crm_automations
-  FOR SELECT USING (
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
-  );
+  FOR SELECT USING (is_account_member(account_id, 'viewer'));
 
 DROP POLICY IF EXISTS "crm_automations_insert" ON crm_automations;
 CREATE POLICY "crm_automations_insert" ON crm_automations
-  FOR INSERT WITH CHECK (
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid() AND role IN ('agent', 'admin', 'owner')
-    )
-  );
+  FOR INSERT WITH CHECK (is_account_member(account_id, 'agent'));
 
 DROP POLICY IF EXISTS "crm_automations_update" ON crm_automations;
 CREATE POLICY "crm_automations_update" ON crm_automations
-  FOR UPDATE USING (
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid() AND role IN ('agent', 'admin', 'owner')
-    )
-  );
+  FOR UPDATE USING (is_account_member(account_id, 'agent'));
 
 DROP POLICY IF EXISTS "crm_automations_delete" ON crm_automations;
 CREATE POLICY "crm_automations_delete" ON crm_automations
-  FOR DELETE USING (
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
-    )
-  );
+  FOR DELETE USING (is_account_member(account_id, 'admin'));
 
 -- ── CRM Automation Logs ───────────────────────────────────────────────────
 
@@ -81,15 +67,11 @@ ALTER TABLE crm_automation_logs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "crm_automation_logs_select" ON crm_automation_logs;
 CREATE POLICY "crm_automation_logs_select" ON crm_automation_logs
-  FOR SELECT USING (
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
-  );
+  FOR SELECT USING (is_account_member(account_id, 'viewer'));
 
 DROP POLICY IF EXISTS "crm_automation_logs_insert" ON crm_automation_logs;
 CREATE POLICY "crm_automation_logs_insert" ON crm_automation_logs
-  FOR INSERT WITH CHECK (
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
-  );
+  FOR INSERT WITH CHECK (is_account_member(account_id, 'viewer'));
 
 -- ── Direct Messages ───────────────────────────────────────────────────────
 
@@ -121,8 +103,7 @@ CREATE POLICY "direct_messages_select" ON direct_messages
 DROP POLICY IF EXISTS "direct_messages_insert" ON direct_messages;
 CREATE POLICY "direct_messages_insert" ON direct_messages
   FOR INSERT WITH CHECK (
-    auth.uid() = sender_id AND
-    account_id IN (SELECT account_id FROM account_members WHERE user_id = auth.uid())
+    auth.uid() = sender_id AND is_account_member(account_id, 'viewer')
   );
 
 DROP POLICY IF EXISTS "direct_messages_delete" ON direct_messages;

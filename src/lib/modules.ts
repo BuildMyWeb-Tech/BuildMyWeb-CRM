@@ -74,7 +74,7 @@ export interface CrmModule {
 // Global links that sit above every module (not module-specific:
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
-  { href: "/overview", labelKey: "overview", icon: Rows3, minRole: "viewer" },
+  { href: "/overview", labelKey: "dashboard", icon: Rows3, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,

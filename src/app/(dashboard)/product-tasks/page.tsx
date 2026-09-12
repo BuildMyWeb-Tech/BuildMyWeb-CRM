@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, Pencil, ChevronUp, ChevronDown,
   ChevronsUpDown, Loader2, ExternalLink, X,
@@ -70,6 +70,17 @@ function ProductTaskModal({
   const [showDate, setShowDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const assigneeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) {
+        setShowAssigneePicker(false);
+      }
+    }
+    if (showAssigneePicker) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAssigneePicker]);
 
   useEffect(() => {
     if (!open) return;
@@ -216,7 +227,7 @@ function ProductTaskModal({
           </div>
 
           {/* Assignees */}
-          <div className="relative">
+          <div className="relative" ref={assigneeRef}>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Assignees</label>
             <button
               type="button"
@@ -337,7 +348,7 @@ export default function ProductTasksPage() {
     const [membersRes, productsData, stagesData] = await Promise.all([
       fetch("/api/account/members").then((r) => r.ok ? r.json() : null),
       supabase.from("products").select("id, name").eq("account_id", accountId).order("name"),
-      supabase.from("pipeline_stages").select("id, name, position").eq("account_id", accountId).order("position"),
+      supabase.from("pipeline_stages").select("id, name, position").order("position"),
     ]);
     if (membersRes?.members) setMembers(membersRes.members);
     if (productsData.data) setProducts(productsData.data);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Folder, Search, ClipboardList,
   ExternalLink, ListChecks, Package,
@@ -241,7 +241,7 @@ function ProjectsSidebar({
             className="w-full rounded-lg bg-[#0f1117] border border-[#2a3045] pl-8 pr-3 py-1.5 text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-blue-500" />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto scrollbar-none px-4 pb-4 space-y-3">
+      <div className="flex-1 overflow-y-auto scrollbar-none px-4 pb-4 space-y-3" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
@@ -398,22 +398,24 @@ export default function OverviewPage() {
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // ── My Work derived ────────────────────────────────────────────────────────
-  const allProjectTasks = myWorkData ? [
-    ...myWorkData.my_work.overdue,
-    ...myWorkData.my_work.due_today,
-    ...myWorkData.my_work.upcoming,
-    ...myWorkData.my_work.waiting,
-  ] : [];
+  function taskMatchesUser(task: MyWorkTask, userId: string | null): boolean {
+    if (!userId) return true;
+    return task.assignee_user_id === userId || (task.assignee_user_ids ?? []).includes(userId);
+  }
+  const overdueProjectTasks = (myWorkData?.my_work.overdue ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
+  const dueTodayProjectTasks = (myWorkData?.my_work.due_today ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
+  const upcomingTaskList = (myWorkData?.my_work.upcoming ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
+  const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId));
+  const allProjectTasks = [...overdueProjectTasks, ...dueTodayProjectTasks, ...upcomingTaskList, ...waitingTaskList];
   const allFollowups = myWorkData?.followups ?? [];
   const myProductTasks = allProductTasks.filter((t) => {
     if (!myWorkUserId) return true;
     return t.assignee_user_id === myWorkUserId || (t.assignee_user_ids ?? []).includes(myWorkUserId);
   });
 
-  const overdueProjectTasks = myWorkData?.my_work.overdue ?? [];
   const overdueFollowups = allFollowups.filter((f) => new Date(f.next_follow_up_at) < new Date());
   const overdueProductTasks = myProductTasks.filter((t) => t.due_date && t.due_date < todayStr);
-  const upcomingProjectTasks = [...(myWorkData?.my_work.due_today ?? []), ...(myWorkData?.my_work.upcoming ?? [])].slice(0, 6);
+  const upcomingProjectTasks = [...dueTodayProjectTasks, ...upcomingTaskList].slice(0, 6);
   const upcomingFollowups = allFollowups.filter((f) => {
     const d = new Date(f.next_follow_up_at);
     return d >= new Date() && d <= new Date(Date.now() + 7 * 86400000);
@@ -776,15 +778,15 @@ export default function OverviewPage() {
                               <div className="flex items-center gap-1 flex-wrap">
                                 <button type="button" disabled={isLoading} onClick={() => handleEnqAction(e.id, "hold")}
                                   className="flex items-center gap-1 rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50 transition-colors">
-                                  <Clock className="h-3 w-3" /> Hold
+                                  <Clock className="h-3 w-3" /> 
                                 </button>
                                 <Link href={`/client-leads/${e.id}`}
                                   className="flex items-center gap-1 rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400 hover:bg-green-500/20 transition-colors">
-                                  <UserCheck className="h-3 w-3" /> Client Dir
+                                  <UserCheck className="h-3 w-3" /> 
                                 </Link>
                                 <button type="button" disabled={isLoading} onClick={() => handleEnqAction(e.id, "rejected")}
                                   className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors">
-                                  <XCircle className="h-3 w-3" /> Reject
+                                  <XCircle className="h-3 w-3" /> 
                                 </button>
                               </div>
                             </td>
@@ -910,7 +912,7 @@ export default function OverviewPage() {
       {/* Right sidebar */}
       {activeTab === "my-work" ? (
         // My Work sidebar: Overdue + Upcoming (scrollable via mouse, no visible bar)
-        <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] overflow-y-auto scrollbar-none">
+        <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] overflow-y-auto scrollbar-none" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
           <div className="p-4 space-y-4">
             {/* Overdue */}
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">

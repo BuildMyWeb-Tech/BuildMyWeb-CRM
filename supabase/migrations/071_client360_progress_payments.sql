@@ -40,29 +40,18 @@ ALTER TABLE client_notes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "client_notes_viewer_select" ON client_notes;
 CREATE POLICY "client_notes_viewer_select" ON client_notes
-  FOR SELECT USING (
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid()
-    )
-  );
+  FOR SELECT USING (is_account_member(account_id, 'viewer'));
 
 DROP POLICY IF EXISTS "client_notes_employee_insert" ON client_notes;
 CREATE POLICY "client_notes_employee_insert" ON client_notes
   FOR INSERT WITH CHECK (
-    auth.uid() = user_id AND
-    account_id IN (
-      SELECT account_id FROM account_members WHERE user_id = auth.uid()
-    )
+    auth.uid() = user_id AND is_account_member(account_id, 'viewer')
   );
 
 DROP POLICY IF EXISTS "client_notes_owner_delete" ON client_notes;
 CREATE POLICY "client_notes_owner_delete" ON client_notes
   FOR DELETE USING (
-    auth.uid() = user_id OR
-    account_id IN (
-      SELECT account_id FROM account_members
-      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
-    )
+    auth.uid() = user_id OR is_account_member(account_id, 'admin')
   );
 
 -- ── client_payments: enhanced fields ─────────────────────────────────────
