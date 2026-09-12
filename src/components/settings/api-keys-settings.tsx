@@ -291,7 +291,7 @@ export function ApiKeysSettings() {
 // key for the AI Assistant without going to the Agents page.
 // ------------------------------------------------------------
 
-type AiProvider = 'openai' | 'anthropic';
+type AiProvider = 'openai' | 'anthropic' | 'gemini';
 
 interface AiStatus {
   configured: boolean;
@@ -380,7 +380,7 @@ function AiKeyCard() {
               </div>
               {status.provider && (
                 <Badge className="border-border bg-muted text-muted-foreground text-[10px] capitalize">
-                  {status.provider === 'openai' ? 'OpenAI' : 'Anthropic'}
+                  {status.provider === 'openai' ? 'OpenAI' : status.provider === 'anthropic' ? 'Anthropic' : 'Google Gemini'}
                 </Badge>
               )}
               {status.model && (
@@ -445,7 +445,9 @@ function AiKeyDialog({
 
   function handleProviderChange(p: AiProvider) {
     setProvider(p);
-    setModel(p === 'openai' ? 'gpt-4o-mini' : 'claude-haiku-4-5-20251001');
+    if (p === 'openai') setModel('gpt-4o-mini');
+    else if (p === 'anthropic') setModel('claude-haiku-4-5-20251001');
+    else setModel('gemini-1.5-flash');
   }
 
   function handleNext() {
@@ -457,6 +459,10 @@ function AiKeyDialog({
     }
     if (provider === 'anthropic' && !trimmed.startsWith('sk-ant-')) {
       toast.error('Anthropic keys start with "sk-ant-".');
+      return;
+    }
+    if (provider === 'gemini' && !trimmed.startsWith('AI')) {
+      toast.error('Google Gemini keys typically start with "AI".');
       return;
     }
     setStep('confirm');
@@ -490,6 +496,11 @@ function AiKeyDialog({
       { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku (fast, cheap)' },
       { value: 'claude-sonnet-4-6', label: 'Claude Sonnet (balanced)' },
     ],
+    gemini: [
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (fast, free tier)' },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (latest)' },
+    ],
   };
 
   const maskedKey = apiKey.trim()
@@ -522,6 +533,7 @@ function AiKeyDialog({
                   <SelectContent>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                    <SelectItem value="gemini">Google Gemini</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -542,14 +554,14 @@ function AiKeyDialog({
 
               <div className="space-y-1.5">
                 <Label className="text-muted-foreground">
-                  API Key {provider === 'openai' ? '(starts with sk-)' : '(starts with sk-ant-)'}
+                  API Key{provider === 'openai' ? ' (starts with sk-)' : provider === 'anthropic' ? ' (starts with sk-ant-)' : ' (Google AI Studio key)'}
                 </Label>
                 <div className="flex gap-2">
                   <Input
                     type={showKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                    placeholder={provider === 'openai' ? 'sk-...' : provider === 'anthropic' ? 'sk-ant-...' : 'AIza...'}
                     className="font-mono text-xs"
                     autoComplete="off"
                   />
@@ -560,7 +572,7 @@ function AiKeyDialog({
                   </Button>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Alternatively, set <code className="text-[11px]">OPENAI_API_KEY</code> (or <code className="text-[11px]">ANTHROPIC_API_KEY</code>) in your <code className="text-[11px]">.env</code> file — the server will pick it up automatically.
+                  Alternatively, set <code className="text-[11px]">OPENAI_API_KEY</code>, <code className="text-[11px]">ANTHROPIC_API_KEY</code>, or <code className="text-[11px]">GEMINI_API_KEY</code> in your <code className="text-[11px]">.env</code> file — the server will pick it up automatically.
                 </p>
               </div>
             </div>
@@ -588,7 +600,7 @@ function AiKeyDialog({
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Provider</span>
                 <span className="font-medium text-foreground capitalize">
-                  {provider === 'openai' ? 'OpenAI' : 'Anthropic (Claude)'}
+                  {provider === 'openai' ? 'OpenAI' : provider === 'anthropic' ? 'Anthropic (Claude)' : 'Google Gemini'}
                 </span>
               </div>
               <div className="flex justify-between text-sm">

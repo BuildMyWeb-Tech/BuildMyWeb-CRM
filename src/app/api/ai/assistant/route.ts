@@ -52,12 +52,9 @@ export async function POST(request: Request) {
     const systemPrompt = SYSTEM_PROMPT.replace('{{TODAY}}', today)
 
     // Call the configured AI provider
-    const OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
-    const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
-
     let rawText = ''
     if (config.provider === 'openai') {
-      const res = await fetch(OPENAI_URL, {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,8 +70,8 @@ export async function POST(request: Request) {
       if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
       const data = await res.json()
       rawText = data?.choices?.[0]?.message?.content ?? ''
-    } else {
-      const res = await fetch(ANTHROPIC_URL, {
+    } else if (config.provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': config.apiKey,
@@ -92,6 +89,23 @@ export async function POST(request: Request) {
       if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
       const data = await res.json()
       rawText = data?.content?.[0]?.text ?? ''
+    } else {
+      // Gemini
+      const model = config.model || 'gemini-1.5-flash'
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          generationConfig: { maxOutputTokens: 512 },
+        }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
+      const data = await res.json()
+      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
 
     // Parse JSON from response (strip markdown fences if any)

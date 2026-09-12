@@ -65,7 +65,7 @@ Return ONLY valid JSON array, no markdown, no other text.`
       if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
       const data = await res.json()
       rawText = data?.choices?.[0]?.message?.content ?? ''
-    } else {
+    } else if (config.provider === 'anthropic') {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -83,6 +83,22 @@ Return ONLY valid JSON array, no markdown, no other text.`
       if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
       const data = await res.json()
       rawText = data?.content?.[0]?.text ?? ''
+    } else {
+      // Gemini
+      const geminiModel = config.model || 'gemini-1.5-flash'
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${config.apiKey}`
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
+      const data = await res.json()
+      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
 
     const arrMatch = rawText.match(/\[[\s\S]*\]/)
