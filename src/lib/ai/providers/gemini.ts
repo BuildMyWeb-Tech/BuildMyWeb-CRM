@@ -29,6 +29,13 @@ interface GeminiResponse {
   error?: { message?: string; code?: number }
 }
 
+/** Normalize bare Gemini model names that lack a version suffix. */
+function normalizeGeminiModel(m: string): string {
+  // If the model already has a suffix (-latest, -001, -002, -exp, -8b, etc.) keep it.
+  if (/-(latest|\d{3}|exp|8b|lite)$/.test(m)) return m
+  return `${m}-latest`
+}
+
 export async function generateGemini(args: ProviderArgs): Promise<ProviderResult> {
   const { apiKey, model, systemPrompt, messages, timeoutMs } = args
 
@@ -38,7 +45,7 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
     parts: [{ text: m.content }],
   }))
 
-  const geminiModel = model || 'gemini-1.5-flash-latest'
+  const geminiModel = normalizeGeminiModel(model || 'gemini-1.5-flash-latest')
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`
 
   let res: Response

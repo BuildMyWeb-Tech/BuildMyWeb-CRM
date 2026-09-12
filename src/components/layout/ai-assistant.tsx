@@ -10,6 +10,7 @@ interface AiAction {
   action: string;
   data: Record<string, unknown>;
   summary: string;
+  follow_up?: { action: string; data: Record<string, unknown> } | null;
 }
 
 interface ResultMsg {
@@ -67,107 +68,94 @@ export function AiAssistant() {
     }
   }
 
+  async function runSingleAction(supabase: ReturnType<typeof createClient>, action: string, data: Record<string, unknown>): Promise<string> {
+    if (action === "create_product") {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_name: data.project_name, purpose: data.purpose ?? null, priority: data.priority ?? "medium" }),
+      });
+      const json = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Failed to create product");
+      return `Product "${data.project_name}" created.`;
+
+    } else if (action === "create_project") {
+      let clientId: string | null = null;
+      if (data.client_name) {
+        const { data: existing } = await supabase.from("clients").select("id").eq("account_id", accountId).ilike("name", `%${data.client_name}%`).limit(1).maybeSingle();
+        if (existing) { clientId = existing.id; }
+        else {
+          const { data: newClient } = await supabase.from("clients").insert({ account_id: accountId, name: data.client_name, created_by: user?.id }).select("id").single();
+          clientId = newClient?.id ?? null;
+        }
+      }
+      const { error } = await supabase.from("projects").insert({ account_id: accountId, name: data.name, status: data.status ?? "active", client_id: clientId, created_by: user?.id });
+      if (error) throw new Error(error.message);
+      return `Project "${data.name}" created successfully.`;
+
+    } else if (action === "create_task") {
+      let projectId: string | null = null;
+      if (data.project_name) {
+        const { data: proj } = await supabase.from("projects").select("id").eq("account_id", accountId).ilike("name", `%${data.project_name}%`).limit(1).maybeSingle();
+        projectId = proj?.id ?? null;
+      }
+      const { error } = await supabase.from("project_tasks").insert({ account_id: accountId, title: data.title, project_id: projectId, due_date: data.due_date ?? null, show_date: data.show_date ?? null, priority: data.priority ?? "medium", created_by: user?.id });
+      if (error) throw new Error(error.message);
+      return `Task "${data.title}" created${data.show_date ? ` (visible from ${data.show_date})` : ""}.`;
+
+    } else if (action === "create_enquiry") {
+      const { error } = await supabase.from("client_leads").insert({ account_id: accountId, title: data.title, phone: data.phone ?? null, status: data.status ?? "new", created_by: user?.id });
+      if (error) throw new Error(error.message);
+      return `Enquiry "${data.title}" created.`;
+
+    } else if (action === "create_product_task") {
+      let productId: string | null = null;
+      if (data.product_name) {
+        const { data: prod } = await supabase.from("products").select("id").eq("account_id", accountId).ilike("project_name", `%${data.product_name}%`).limit(1).maybeSingle();
+        productId = prod?.id ?? null;
+      }
+      const { error } = await supabase.from("product_tasks").insert({ account_id: accountId, title: data.title, product_id: productId, priority: data.priority ?? "medium", due_date: data.due_date ?? null, created_by: user?.id });
+      if (error) throw new Error(error.message);
+      return `Product task "${data.title}" created.`;
+
+    } else if (action === "update_task") {
+      const { data: tasks } = await supabase.from("project_tasks").select("id").eq("account_id", accountId).ilike("title", `%${data.title_query}%`).limit(1);
+      if (!tasks?.length) throw new Error(`No task found matching "${data.title_query}".`);
+      const { error } = await supabase.from("project_tasks").update(data.updates as Record<string, unknown>).eq("id", tasks[0].id);
+      if (error) throw new Error(error.message);
+      return `Task updated successfully.`;
+
+    } else if (action === "delete_task") {
+      const { data: tasks } = await supabase.from("project_tasks").select("id").eq("account_id", accountId).ilike("title", `%${data.title_query}%`).limit(1);
+      if (!tasks?.length) throw new Error(`No task found matching "${data.title_query}".`);
+      const { error } = await supabase.from("project_tasks").delete().eq("id", tasks[0].id);
+      if (error) throw new Error(error.message);
+      return `Task deleted.`;
+
+    } else {
+      throw new Error(`Unknown action: ${action}`);
+    }
+  }
+
   async function executeAction() {
     if (!pending || !accountId) return;
     setLoading(true);
     try {
       const supabase = createClient();
-      const { action, data } = pending;
+      const { action, data, follow_up } = pending;
 
-      if (action === "create_project") {
-        // Find or create client
-        let clientId: string | null = null;
-        if (data.client_name) {
-          const { data: existing } = await supabase
-            .from("clients").select("id").eq("account_id", accountId)
-            .ilike("name", `%${data.client_name}%`).limit(1).maybeSingle();
-          if (existing) {
-            clientId = existing.id;
-          } else {
-            const { data: newClient } = await supabase.from("clients")
-              .insert({ account_id: accountId, name: data.client_name, created_by: user?.id }).select("id").single();
-            clientId = newClient?.id ?? null;
-          }
+      const msg = await runSingleAction(supabase, action, data);
+
+      // Execute follow-up action (e.g. task after creating a product)
+      if (follow_up) {
+        try {
+          const msg2 = await runSingleAction(supabase, follow_up.action, follow_up.data);
+          setResult({ ok: true, text: `${msg} ${msg2}` });
+        } catch {
+          setResult({ ok: true, text: `${msg} (follow-up task failed — try adding it manually.)` });
         }
-        const { error } = await supabase.from("projects").insert({
-          account_id: accountId,
-          name: data.name,
-          status: data.status ?? "active",
-          client_id: clientId,
-          created_by: user?.id,
-        });
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Project "${data.name}" created successfully.` });
-
-      } else if (action === "create_task") {
-        // Find project by name
-        let projectId: string | null = null;
-        if (data.project_name) {
-          const { data: proj } = await supabase.from("projects").select("id")
-            .eq("account_id", accountId).ilike("name", `%${data.project_name}%`).limit(1).maybeSingle();
-          projectId = proj?.id ?? null;
-        }
-        const { error } = await supabase.from("project_tasks").insert({
-          account_id: accountId,
-          title: data.title,
-          project_id: projectId,
-          due_date: data.due_date ?? null,
-          show_date: data.show_date ?? null,
-          priority: data.priority ?? "medium",
-          created_by: user?.id,
-        });
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Task "${data.title}" created${data.show_date ? ` (visible from ${data.show_date})` : ""}.` });
-
-      } else if (action === "create_enquiry") {
-        const { error } = await supabase.from("client_leads").insert({
-          account_id: accountId,
-          title: data.title,
-          phone: data.phone ?? null,
-          status: data.status ?? "new",
-          created_by: user?.id,
-        });
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Enquiry "${data.title}" created.` });
-
-      } else if (action === "create_product_task") {
-        // Find product by name
-        let productId: string | null = null;
-        if (data.product_name) {
-          const { data: prod } = await supabase.from("products").select("id")
-            .eq("account_id", accountId).ilike("project_name", `%${data.product_name}%`).limit(1).maybeSingle();
-          productId = prod?.id ?? null;
-        }
-        const { error } = await supabase.from("product_tasks").insert({
-          account_id: accountId,
-          title: data.title,
-          product_id: productId,
-          priority: data.priority ?? "medium",
-          due_date: data.due_date ?? null,
-          created_by: user?.id,
-        });
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Product task "${data.title}" created.` });
-
-      } else if (action === "update_task") {
-        const { data: tasks } = await supabase.from("project_tasks").select("id")
-          .eq("account_id", accountId).ilike("title", `%${data.title_query}%`).limit(1);
-        if (!tasks?.length) throw new Error(`No task found matching "${data.title_query}".`);
-        const updates = data.updates as Record<string, unknown>;
-        const { error } = await supabase.from("project_tasks").update(updates).eq("id", tasks[0].id);
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Task updated successfully.` });
-
-      } else if (action === "delete_task") {
-        const { data: tasks } = await supabase.from("project_tasks").select("id")
-          .eq("account_id", accountId).ilike("title", `%${data.title_query}%`).limit(1);
-        if (!tasks?.length) throw new Error(`No task found matching "${data.title_query}".`);
-        const { error } = await supabase.from("project_tasks").delete().eq("id", tasks[0].id);
-        if (error) throw new Error(error.message);
-        setResult({ ok: true, text: `Task deleted.` });
-
       } else {
-        setResult({ ok: false, text: `Unknown action: ${action}` });
+        setResult({ ok: true, text: msg });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Action failed";

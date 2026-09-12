@@ -12,11 +12,20 @@ Today's date: {{TODAY}}
 
 Supported actions:
 - create_project: Create a new project. Fields: name (required), status ("active"|"inactive", default "active"), client_name (optional string to match or create client)
+- create_product: Create a new product. Fields: project_name (required — the product/app name), purpose (optional description), priority ("low"|"medium"|"high"|"urgent", default "medium")
 - create_task: Create a project task. Fields: title (required), project_name (optional, to find the project), due_date (ISO date YYYY-MM-DD, optional), show_date (ISO date YYYY-MM-DD — when the task becomes visible in UI; use for "show from X date"), priority ("low"|"medium"|"high"|"urgent", default "medium"), status (optional)
 - create_enquiry: Create a new client enquiry/lead. Fields: title (required), phone (optional), status ("new"|"in_discussion"|"hold", default "new")
-- create_product_task: Create a product task. Fields: title (required), product_name (optional), priority ("low"|"medium"|"high"|"urgent", default "medium"), due_date (optional ISO date)
+- create_product_task: Create a product task. Fields: title (required), product_name (optional — name of the product to link), priority ("low"|"medium"|"high"|"urgent", default "medium"), due_date (optional ISO date)
 - update_task: Update an existing task. Fields: title_query (text to search for), updates (object with fields to change: title, due_date, priority, status)
 - delete_task: Delete a task by title. Fields: title_query (text to match)
+
+Multi-step commands: If the user says "create a product X with a task Y" or "create product X with to do Y", return ONE action for create_product and include a "follow_up" field:
+{
+  "action": "create_product",
+  "data": { "project_name": "X", ... },
+  "follow_up": { "action": "create_product_task", "data": { "title": "Y", "product_name": "X" } },
+  "summary": "Create product X and add task Y"
+}
 
 Date parsing rules:
 - "15th sept 2026" → "2026-09-15"
@@ -91,7 +100,8 @@ export async function POST(request: Request) {
       rawText = data?.content?.[0]?.text ?? ''
     } else {
       // Gemini
-      const model = config.model || 'gemini-1.5-flash-latest'
+      const rawModel = config.model || 'gemini-1.5-flash-latest'
+      const model = /-(latest|\d{3}|exp|8b|lite)$/.test(rawModel) ? rawModel : `${rawModel}-latest`
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`
       const res = await fetch(geminiUrl, {
         method: 'POST',
@@ -112,14 +122,14 @@ export async function POST(request: Request) {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return NextResponse.json({ error: 'AI returned unexpected format', raw: rawText }, { status: 422 })
 
-    let parsed: { action: string; data: Record<string, unknown>; summary: string }
+    let parsed: { action: string; data: Record<string, unknown>; summary: string; follow_up?: { action: string; data: Record<string, unknown> } }
     try {
       parsed = JSON.parse(jsonMatch[0])
     } catch {
       return NextResponse.json({ error: 'Could not parse AI response as JSON', raw: rawText }, { status: 422 })
     }
 
-    return NextResponse.json({ action: parsed.action, data: parsed.data, summary: parsed.summary })
+    return NextResponse.json({ action: parsed.action, data: parsed.data, summary: parsed.summary, follow_up: parsed.follow_up ?? null })
   } catch (err) {
     return toErrorResponse(err)
   }
