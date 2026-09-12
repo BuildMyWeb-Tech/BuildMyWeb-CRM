@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import type { AiConfig } from './types'
+import type { AiConfig, AiProvider } from './types'
+import { AI_PROVIDER_DEFAULT_MODEL } from './defaults'
 
 interface AiConfigRow {
   provider: 'openai' | 'anthropic'
@@ -41,16 +42,15 @@ export async function loadAiConfig(
     .maybeSingle()
 
   if (error) throw error
-  if (!data) return null
+  if (!data) return envAiConfig()
 
   const row = data as AiConfigRow
   // The Playground passes requireActive:false so an admin can test the
   // agent before flipping the master switch on.
   if (requireActive && !row.is_active) return null
   // Defensive: the column is NOT NULL, but a partial write / manual DB
-  // edit could leave it empty. Treat a missing key as "not configured"
-  // rather than letting decrypt() throw on null.
-  if (!row.api_key) return null
+  // edit could leave it empty. Fall back to env rather than returning null.
+  if (!row.api_key) return envAiConfig()
 
   // The embeddings key is optional and independent of the chat key —
   // a corrupt/undecryptable one should downgrade to lexical KB, not
@@ -80,6 +80,36 @@ export async function loadAiConfig(
     handoffAgentId: row.handoff_agent_id,
     embeddingsApiKey,
   }
+}
+
+/**
+ * Build an AiConfig from environment variables, checked in priority order:
+ * GEMINI_API_KEY → OPENAI_API_KEY → ANTHROPIC_API_KEY.
+ * Returns null when none are set.
+ * This is a server-only path — env vars are never sent to the browser.
+ */
+function envAiConfig(): AiConfig | null {
+  const candidates: { key: string | undefined; provider: AiProvider }[] = [
+    { key: process.env.GEMINI_API_KEY, provider: 'gemini' },
+    { key: process.env.OPENAI_API_KEY, provider: 'openai' },
+    { key: process.env.ANTHROPIC_API_KEY, provider: 'anthropic' },
+  ]
+  for (const { key, provider } of candidates) {
+    if (key && key.trim()) {
+      return {
+        provider,
+        model: AI_PROVIDER_DEFAULT_MODEL[provider],
+        apiKey: key.trim(),
+        systemPrompt: null,
+        isActive: true,
+        autoReplyEnabled: false,
+        autoReplyMaxPerConversation: 3,
+        handoffAgentId: null,
+        embeddingsApiKey: null,
+      }
+    }
+  }
+  return null
 }
 
 /**
