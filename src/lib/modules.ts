@@ -112,6 +112,7 @@ export const CRM_MODULES: CrmModule[] = [
     minRole: "viewer",
     items: [
       { href: "/products", labelKey: "products", icon: Package, minRole: "viewer", pageKey: "products" },
+      { href: "/product-tasks", labelKey: "productTasks", icon: ListTodo, minRole: "viewer", pageKey: "product_tasks" },
     ],
   },
   {

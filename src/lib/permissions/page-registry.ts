@@ -38,6 +38,7 @@ export const PAGE_REGISTRY: PageRegistryEntry[] = [
   { key: "daily_tasks", label: "Project Tasks", category: "Projects" },
   // Product
   { key: "products", label: "Products", category: "Product" },
+  { key: "product_tasks", label: "Product Tasks", category: "Product" },
   // Marketing
   { key: "marketing_tele_calling", label: "Tele Calling", category: "Marketing" },
   { key: "marketing_content_creation", label: "Content Creation", category: "Marketing" },

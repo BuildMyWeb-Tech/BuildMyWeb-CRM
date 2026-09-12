@@ -143,14 +143,13 @@ function DonutChart({ segments }: { segments: { label: string; count: number; co
   );
 }
 
-type WorkTab = "all" | "tasks" | "followups" | "enquiries" | "messages";
+type WorkTab = "all" | "project-tasks" | "enquiry-tasks" | "product-tasks";
 
 const WORK_TABS: { key: WorkTab; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "tasks", label: "Tasks" },
-  { key: "followups", label: "Follow-ups" },
-  { key: "enquiries", label: "Enquiries" },
-  { key: "messages", label: "Messages" },
+  { key: "all", label: "All Works" },
+  { key: "project-tasks", label: "Project Tasks" },
+  { key: "enquiry-tasks", label: "Enquiry Tasks" },
+  { key: "product-tasks", label: "Product Tasks" },
 ];
 
 const PIPELINE_STAGES = [
@@ -210,25 +209,25 @@ export default function MyWorkPage() {
   });
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  const allTasks = data ? [
+  const allTasksRaw = data ? [
     ...data.my_work.overdue,
     ...data.my_work.due_today,
     ...data.my_work.upcoming,
     ...data.my_work.waiting,
   ] : [];
 
-  // Build work items for each tab
-  const taskItems = allTasks;
+  // Filter tasks by selected user (assignee) when not viewing own dashboard
+  const isOwnDashboard = !selectedUserId || selectedUserId === user?.id;
+  const taskItems = isOwnDashboard ? allTasksRaw : allTasksRaw.filter((t) => {
+    const ids = (t as { assignee_user_ids?: string[] }).assignee_user_ids ?? [];
+    return t.assignee_user_id === selectedUserId || ids.includes(selectedUserId ?? "");
+  });
+
   const followupItems = data?.followups ?? [];
   const enquiryTotal = Object.values(data?.enquiry_pipeline ?? {}).reduce((a, b) => a + b, 0);
 
-  const activeTab_tasks = workTab === "all" ? taskItems
-    : workTab === "tasks" ? taskItems
-    : workTab === "followups" ? []
-    : workTab === "enquiries" ? []
-    : [];
-
-  const activeTab_followups = workTab === "all" || workTab === "followups" ? followupItems : [];
+  const activeTab_tasks = workTab === "all" || workTab === "project-tasks" ? taskItems : [];
+  const activeTab_followups = workTab === "all" || workTab === "enquiry-tasks" ? followupItems : [];
 
   const healthSegments = (() => {
     if (!data) return [];
@@ -263,11 +262,10 @@ export default function MyWorkPage() {
 
   // Tab counts
   const tabCounts: Record<WorkTab, number> = {
-    all: allTasks.length + followupItems.length,
-    tasks: taskItems.length,
-    followups: followupItems.length,
-    enquiries: enquiryTotal,
-    messages: data?.stats.unread_messages ?? 0,
+    all: taskItems.length + followupItems.length,
+    "project-tasks": taskItems.length,
+    "enquiry-tasks": followupItems.length,
+    "product-tasks": 0,
   };
 
   return (
@@ -421,7 +419,7 @@ export default function MyWorkPage() {
                       {tab.label}
                       {tabCounts[tab.key] > 0 && (
                         <span className={`rounded-full px-1.5 text-[10px] font-bold ${
-                          tab.key === "tasks" && overdueTasks.length > 0 ? "bg-red-500/20 text-red-400"
+                          tab.key === "project-tasks" && overdueTasks.length > 0 ? "bg-red-500/20 text-red-400"
                           : "bg-[#2a3045] text-slate-400"
                         }`}>{tabCounts[tab.key]}</span>
                       )}
@@ -431,11 +429,11 @@ export default function MyWorkPage() {
 
                 <div className="divide-y divide-[#2a3045] max-h-80 overflow-y-auto">
                   {/* Tasks section */}
-                  {(workTab === "all" || workTab === "tasks") && taskItems.length > 0 && (
+                  {(workTab === "all" || workTab === "project-tasks") && taskItems.length > 0 && (
                     <>
                       {workTab === "all" && (
                         <div className="px-4 py-1.5 bg-[#161b27]">
-                          <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Tasks</p>
+                          <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Project Tasks</p>
                         </div>
                       )}
                       {taskItems.map((task) => {
@@ -467,11 +465,11 @@ export default function MyWorkPage() {
                   )}
 
                   {/* Follow-ups section */}
-                  {(workTab === "all" || workTab === "followups") && activeTab_followups.length > 0 && (
+                  {(workTab === "all" || workTab === "enquiry-tasks") && activeTab_followups.length > 0 && (
                     <>
                       {workTab === "all" && (
                         <div className="px-4 py-1.5 bg-[#161b27]">
-                          <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Follow-ups</p>
+                          <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Enquiry Follow-ups</p>
                         </div>
                       )}
                       {activeTab_followups.slice(0, workTab === "all" ? 3 : undefined).map((f) => {
@@ -498,44 +496,17 @@ export default function MyWorkPage() {
                     </>
                   )}
 
-                  {/* Enquiries section */}
-                  {workTab === "enquiries" && (
-                    <div className="p-4 space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        {PIPELINE_STAGES.map((stage) => {
-                          const count = data.enquiry_pipeline[stage.key] ?? 0;
-                          return (
-                            <div key={stage.key} className={`flex items-center gap-2 rounded-lg px-3 py-2 ${stage.color}/20`}>
-                              <span className={`h-2 w-2 rounded-full ${stage.color}`} />
-                              <span className="text-xs text-slate-300">{stage.label}</span>
-                              <span className="text-sm font-bold text-white">{count}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <Link href="/client-leads" className="flex items-center gap-2 text-xs text-blue-400 hover:underline mt-2">
-                        <ExternalLink className="h-3 w-3" /> View all enquiries
+                  {/* Product Tasks section */}
+                  {workTab === "product-tasks" && (
+                    <div className="flex flex-col items-center gap-3 py-10 text-center">
+                      <Link href="/product-tasks" className="flex items-center gap-2 text-sm text-teal-400 hover:underline">
+                        <ExternalLink className="h-4 w-4" /> View Product Tasks
                       </Link>
                     </div>
                   )}
 
-                  {/* Messages section */}
-                  {workTab === "messages" && (
-                    <div className="flex flex-col items-center gap-3 py-10 text-center">
-                      <MessageSquare className="h-8 w-8 text-slate-600" />
-                      {data.stats.unread_messages > 0 ? (
-                        <>
-                          <p className="text-sm text-slate-400">{data.stats.unread_messages} unread message{data.stats.unread_messages !== 1 ? "s" : ""}</p>
-                          <Link href="/messages" className="text-xs text-blue-400 hover:underline">Open Messages →</Link>
-                        </>
-                      ) : (
-                        <p className="text-sm text-slate-500">No unread messages</p>
-                      )}
-                    </div>
-                  )}
-
                   {/* Empty state */}
-                  {workTab !== "enquiries" && workTab !== "messages"
+                  {workTab !== "product-tasks"
                     && taskItems.length === 0 && activeTab_followups.length === 0 && (
                     <div className="flex flex-col items-center gap-2 py-10 text-center">
                       <CheckCircle2 className="h-8 w-8 text-green-500/50" />

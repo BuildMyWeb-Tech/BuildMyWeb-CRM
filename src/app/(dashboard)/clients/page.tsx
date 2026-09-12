@@ -473,51 +473,6 @@ export default function ClientsPage() {
         )}
       </div>
 
-      {/* Right sidebar */}
-      <aside className="w-80 shrink-0 p-4 pt-6 border-l border-[#2a3045] flex flex-col gap-6">
-        {/* Quick Stats */}
-        <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-white mb-4">Quick Stats</h2>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                <span className="text-xs text-slate-400">Total Clients</span>
-              </div>
-              <span className="text-sm font-semibold text-white">
-                {clients === null ? "—" : totalCount}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-green-400" />
-                <span className="text-xs text-slate-400">Active Clients</span>
-              </div>
-              <span className="text-sm font-semibold text-white">
-                {clients === null ? "—" : activeCount}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-yellow-400" />
-                <span className="text-xs text-slate-400">At Risk Clients</span>
-              </div>
-              <span className="text-sm font-semibold text-white">
-                {clients === null ? "—" : atRiskCount}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-slate-600" />
-                <span className="text-xs text-slate-400">Archived Clients</span>
-              </div>
-              <span className="text-sm font-semibold text-white">
-                {clients === null ? "—" : archivedCount}
-              </span>
-            </div>
-          </div>
-        </div>
-      </aside>
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
