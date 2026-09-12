@@ -38,7 +38,8 @@ export async function generateGemini(args: ProviderArgs): Promise<ProviderResult
     parts: [{ text: m.content }],
   }))
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+  const geminiModel = model || 'gemini-1.5-flash-latest'
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`
 
   let res: Response
   try {

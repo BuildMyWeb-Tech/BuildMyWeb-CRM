@@ -447,7 +447,7 @@ function AiKeyDialog({
     setProvider(p);
     if (p === 'openai') setModel('gpt-4o-mini');
     else if (p === 'anthropic') setModel('claude-haiku-4-5-20251001');
-    else setModel('gemini-1.5-flash');
+    else setModel('gemini-1.5-flash-latest');
   }
 
   function handleNext() {
@@ -497,9 +497,9 @@ function AiKeyDialog({
       { value: 'claude-sonnet-4-6', label: 'Claude Sonnet (balanced)' },
     ],
     gemini: [
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (fast, free tier)' },
-      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (latest)' },
+      { value: 'gemini-1.5-flash-latest', label: 'Gemini 1.5 Flash (fast, free tier)' },
+      { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro (most capable)' },
+      { value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash (experimental)' },
     ],
   };
 

@@ -85,7 +85,7 @@ Return ONLY valid JSON array, no markdown, no other text.`
       rawText = data?.content?.[0]?.text ?? ''
     } else {
       // Gemini
-      const geminiModel = config.model || 'gemini-1.5-flash'
+      const geminiModel = config.model || 'gemini-1.5-flash-latest'
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${config.apiKey}`
       const res = await fetch(geminiUrl, {
         method: 'POST',
