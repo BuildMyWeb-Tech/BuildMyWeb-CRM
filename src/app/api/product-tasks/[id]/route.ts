@@ -1,45 +1,45 @@
 import { NextResponse } from 'next/server'
 import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
 
-// PATCH /api/product-tasks/[id] — update a product task
-// DELETE /api/product-tasks/[id] — delete a product task
-
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params
     const ctx = await getCurrentAccount()
+    const { id } = await params
     const body = await request.json().catch(() => null)
     if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
-    const allowed = ['title', 'description', 'priority', 'due_date', 'assignee_user_id', 'assignee_user_ids', 'stage_id', 'product_id', 'position']
-    const patch: Record<string, unknown> = {}
-    for (const k of allowed) if (k in body) patch[k] = body[k]
+    const allowed = ['title', 'description', 'priority', 'due_date', 'show_date', 'product_id', 'stage_id', 'assignee_user_id', 'assignee_user_ids', 'position']
+    const update: Record<string, unknown> = {}
+    for (const key of allowed) {
+      if (key in body) update[key] = body[key]
+    }
 
     const { data, error } = await ctx.supabase
       .from('product_tasks')
-      .update(patch)
+      .update(update)
       .eq('id', id)
       .eq('account_id', ctx.accountId)
-      .select('id')
+      .select('id, title, priority, due_date, product_id, stage_id')
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ task: data })
   } catch (err) {
     return toErrorResponse(err)
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params
     const ctx = await getCurrentAccount()
+    const { id } = await params
+
     const { error } = await ctx.supabase
       .from('product_tasks')
       .delete()
       .eq('id', id)
       .eq('account_id', ctx.accountId)
+
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (err) {

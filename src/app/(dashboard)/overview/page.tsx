@@ -8,6 +8,7 @@ import {
   UserCheck, XCircle, Clock,
   Users, ChevronDown as ChevronDownIcon, AlertCircle, Briefcase,
   Plus, Loader2, Zap, ArrowRight, CheckCircle2,
+  Eye, EyeOff, Pencil, Trash2, X as XIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -46,9 +47,28 @@ interface ProductTask {
   priority: string;
   due_date: string | null;
   product_id: string | null;
+  stage_id?: string | null;
   assignee_user_id?: string | null;
   assignee_user_ids?: string[];
-  product?: { id: string; name: string } | null;
+  product?: { id: string; project_name?: string; name?: string } | null;
+}
+
+interface PtProduct { id: string; project_name: string }
+interface PtStage { id: string; name: string }
+
+interface PtModalState {
+  mode: "create" | "edit";
+  id?: string;
+  title: string;
+  priority: string;
+  due_date: string;
+  product_id: string;
+  stage_id: string;
+}
+
+interface EnqModalState {
+  title: string;
+  phone: string;
 }
 
 interface MyWorkTask {
@@ -527,6 +547,20 @@ export default function OverviewPage() {
   const [ptSortField, setPtSortField] = useState<PtSortField>("due_date");
   const [ptSortDir, setPtSortDir] = useState<SortDir>("asc");
 
+  // Supporting data for modals
+  const [ptProducts, setPtProducts] = useState<PtProduct[]>([]);
+  const [ptStages, setPtStages] = useState<PtStage[]>([]);
+
+  // Modals
+  const [ptModal, setPtModal] = useState<PtModalState | null>(null);
+  const [ptModalSaving, setPtModalSaving] = useState(false);
+  const [enqModal, setEnqModal] = useState<EnqModalState | null>(null);
+  const [enqModalSaving, setEnqModalSaving] = useState(false);
+
+  // Hidden rows (eye icon)
+  const [hiddenRowsEnq, setHiddenRowsEnq] = useState<Set<string>>(new Set());
+  const [hiddenRowsPt, setHiddenRowsPt] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const [ef, ed] = loadSort("enq", "next_follow_up_at");
     setEnqSortField(ef as EnqSortField); setEnqSortDir(ed);
@@ -588,12 +622,26 @@ export default function OverviewPage() {
     } finally { setLoadingProductTasks(false); }
   }, []);
 
+  const loadPtSupporting = useCallback(async () => {
+    if (!accountId) return;
+    const [prRes] = await Promise.all([
+      fetch("/api/products"),
+    ]);
+    if (prRes.ok) {
+      const d = await prRes.json();
+      setPtProducts((d.products ?? []).map((p: { id: string; project_name: string }) => ({ id: p.id, project_name: p.project_name })));
+    }
+    const supabase = createClient();
+    const { data: stagesData } = await supabase.from("pipeline_stages").select("id, name").eq("account_id", accountId);
+    if (stagesData) setPtStages(stagesData as PtStage[]);
+  }, [accountId]);
+
   useEffect(() => { loadProjects(); }, [loadProjects]);
   useEffect(() => {
     if (activeTab === "my-work") loadMyWork();
     if (activeTab === "enquiry-tasks") loadEnquiries();
-    if (activeTab === "product-tasks") loadProductTasks();
-  }, [activeTab, loadMyWork, loadEnquiries, loadProductTasks]);
+    if (activeTab === "product-tasks") { loadProductTasks(); loadPtSupporting(); }
+  }, [activeTab, loadMyWork, loadEnquiries, loadProductTasks, loadPtSupporting]);
   useEffect(() => { if (activeTab === "my-work") loadMyWork(); }, [myWorkUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeTab === "enquiry-tasks") loadEnquiries(); }, [enqEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeTab === "product-tasks") loadProductTasks(); }, [prodEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -700,9 +748,176 @@ export default function OverviewPage() {
     ? (profile?.full_name ?? "Me")
     : (members.find((m) => m.user_id === myWorkUserId)?.full_name ?? "Team Member");
 
+  // ── Product task CRUD ──────────────────────────────────────────────────────
+  async function savePtModal() {
+    if (!ptModal || !ptModal.title.trim()) return;
+    setPtModalSaving(true);
+    try {
+      const body = {
+        title: ptModal.title.trim(),
+        priority: ptModal.priority,
+        due_date: ptModal.due_date || null,
+        product_id: ptModal.product_id || null,
+        stage_id: ptModal.stage_id || null,
+      };
+      let res: Response;
+      if (ptModal.mode === "edit" && ptModal.id) {
+        res = await fetch(`/api/product-tasks/${ptModal.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch("/api/product-tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+      if (!res.ok) { toast.error("Could not save task"); return; }
+      toast.success(ptModal.mode === "edit" ? "Task updated" : "Task created");
+      setPtModal(null);
+      loadProductTasks();
+    } finally { setPtModalSaving(false); }
+  }
+
+  async function deletePt(id: string) {
+    if (!confirm("Delete this product task?")) return;
+    const res = await fetch(`/api/product-tasks/${id}`, { method: "DELETE" });
+    if (!res.ok) { toast.error("Could not delete task"); return; }
+    toast.success("Task deleted");
+    setProductTasks((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // ── Enquiry CRUD ───────────────────────────────────────────────────────────
+  async function saveEnqModal() {
+    if (!enqModal || !enqModal.title.trim() || !accountId) return;
+    setEnqModalSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("client_leads").insert({
+        account_id: accountId,
+        title: enqModal.title.trim(),
+        phone: enqModal.phone || null,
+        status: "new",
+        created_by: user?.id,
+      });
+      if (error) { toast.error("Could not create enquiry"); return; }
+      toast.success("Enquiry created");
+      setEnqModal(null);
+      loadEnquiries();
+    } finally { setEnqModalSaving(false); }
+  }
+
+  async function deleteEnq(id: string) {
+    if (!confirm("Delete this enquiry?")) return;
+    const res = await fetch(`/api/client-leads/${id}`, { method: "DELETE" });
+    if (!res.ok) { toast.error("Could not delete enquiry"); return; }
+    toast.success("Enquiry deleted");
+    setEnquiries((prev) => prev.filter((e) => e.id !== id));
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
+      {/* Product Task Modal */}
+      {ptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-white">{ptModal.mode === "edit" ? "Edit Task" : "New Product Task"}</h2>
+              <button type="button" onClick={() => setPtModal(null)} className="text-slate-500 hover:text-slate-300"><XIcon className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Title *</label>
+                <input autoFocus value={ptModal.title} onChange={(e) => setPtModal({ ...ptModal, title: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") savePtModal(); }}
+                  className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
+                  placeholder="Task title" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Priority</label>
+                  <select value={ptModal.priority} onChange={(e) => setPtModal({ ...ptModal, priority: e.target.value })}
+                    className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Due Date</label>
+                  <input type="date" value={ptModal.due_date} onChange={(e) => setPtModal({ ...ptModal, due_date: e.target.value })}
+                    className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Product</label>
+                <select value={ptModal.product_id} onChange={(e) => setPtModal({ ...ptModal, product_id: e.target.value })}
+                  className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none">
+                  <option value="">No product</option>
+                  {ptProducts.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                </select>
+              </div>
+              {ptStages.length > 0 && (
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Stage</label>
+                  <select value={ptModal.stage_id} onChange={(e) => setPtModal({ ...ptModal, stage_id: e.target.value })}
+                    className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none">
+                    <option value="">No stage</option>
+                    {ptStages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button type="button" onClick={() => setPtModal(null)} className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+              <button type="button" onClick={savePtModal} disabled={ptModalSaving || !ptModal.title.trim()}
+                className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50 transition-colors">
+                {ptModalSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {ptModal.mode === "edit" ? "Save Changes" : "Create Task"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enquiry Create Modal */}
+      {enqModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-white">New Enquiry</h2>
+              <button type="button" onClick={() => setEnqModal(null)} className="text-slate-500 hover:text-slate-300"><XIcon className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Title / Client Name *</label>
+                <input autoFocus value={enqModal.title} onChange={(e) => setEnqModal({ ...enqModal, title: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEnqModal(); }}
+                  className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g. John Doe – Website" />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Phone</label>
+                <input value={enqModal.phone} onChange={(e) => setEnqModal({ ...enqModal, phone: e.target.value })}
+                  className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+                  placeholder="+91 99999 00000" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button type="button" onClick={() => setEnqModal(null)} className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+              <button type="button" onClick={saveEnqModal} disabled={enqModalSaving || !enqModal.title.trim()}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition-colors">
+                {enqModalSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Create Enquiry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
 
@@ -882,10 +1097,10 @@ export default function OverviewPage() {
                   currentUserName={profile?.full_name ?? "Me"}
                   label={globalUserId && !enqSubUser ? "↑ Global filter" : "All People"}
                 />
-                <Link href="/client-leads?new=1"
+                <button type="button" onClick={() => setEnqModal({ title: "", phone: "" })}
                   className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
                   <Plus className="h-3.5 w-3.5" /> New Enquiry
-                </Link>
+                </button>
                 <Link href="/client-leads"
                   className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-400 hover:bg-blue-600/30 transition-colors">
                   <ExternalLink className="h-3.5 w-3.5" /> Open Client Leads
@@ -904,6 +1119,7 @@ export default function OverviewPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+                        <th className="px-2 py-2.5 font-medium w-8" />
                         <SortTh label="Title" field="title" sortField={enqSortField} sortDir={enqSortDir} onSort={toggleEnqSort} />
                         <SortTh label="Status" field="status" sortField={enqSortField} sortDir={enqSortDir} onSort={toggleEnqSort} />
                         <SortTh label="Priority" field="priority" sortField={enqSortField} sortDir={enqSortDir} onSort={toggleEnqSort} />
@@ -914,11 +1130,17 @@ export default function OverviewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredEnquiries.map((e) => {
+                      {filteredEnquiries.filter((e) => !hiddenRowsEnq.has(e.id)).map((e) => {
                         const isLoading = actionLoading === e.id;
                         const assignee = members.find((m) => m.user_id === e.allocated_user_id);
                         return (
                           <tr key={e.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                            <td className="px-2 py-3">
+                              <button type="button" onClick={() => setHiddenRowsEnq((prev) => { const n = new Set(prev); n.add(e.id); return n; })}
+                                className="text-slate-600 hover:text-slate-300 transition-colors" title="Hide row">
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
                             <td className="px-4 py-3 font-medium text-white">
                               <Link href={`/client-leads/${e.id}`} className="hover:text-blue-400 transition-colors">{e.title}</Link>
                             </td>
@@ -964,13 +1186,28 @@ export default function OverviewPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <Link href={`/client-leads/${e.id}`} className="text-slate-500 hover:text-blue-400 transition-colors">
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </Link>
+                              <div className="flex items-center gap-1.5">
+                                <Link href={`/client-leads/${e.id}`} className="text-slate-500 hover:text-blue-400 transition-colors" title="Open">
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </Link>
+                                <button type="button" onClick={() => deleteEnq(e.id)} className="text-slate-600 hover:text-red-400 transition-colors" title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
                       })}
+                      {hiddenRowsEnq.size > 0 && (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-2">
+                            <button type="button" onClick={() => setHiddenRowsEnq(new Set())}
+                              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                              <EyeOff className="h-3 w-3" /> {hiddenRowsEnq.size} hidden — click to show all
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -994,6 +1231,10 @@ export default function OverviewPage() {
                   currentUserName={profile?.full_name ?? "Me"}
                   label={globalUserId && !prodSubUser ? "↑ Global filter" : "All People"}
                 />
+                <button type="button" onClick={() => setPtModal({ mode: "create", title: "", priority: "medium", due_date: "", product_id: "", stage_id: "" })}
+                  className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-500 transition-colors">
+                  <Plus className="h-3.5 w-3.5" /> New Task
+                </button>
                 <Link href="/product-tasks"
                   className="ml-auto flex items-center gap-1.5 rounded-lg bg-teal-600/20 px-3 py-1.5 text-sm font-medium text-teal-400 hover:bg-teal-600/30 transition-colors">
                   <ExternalLink className="h-3.5 w-3.5" /> Manage Product Tasks
@@ -1012,6 +1253,7 @@ export default function OverviewPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+                        <th className="px-2 py-2.5 font-medium w-8" />
                         <SortTh label="Title" field="title" sortField={ptSortField} sortDir={ptSortDir} onSort={togglePtSort} />
                         <SortTh label="Priority" field="priority" sortField={ptSortField} sortDir={ptSortDir} onSort={togglePtSort} />
                         <SortTh label="Due Date" field="due_date" sortField={ptSortField} sortDir={ptSortDir} onSort={togglePtSort} />
@@ -1020,11 +1262,20 @@ export default function OverviewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredPt.map((t) => {
+                      {filteredPt.filter((t) => !hiddenRowsPt.has(t.id)).map((t) => {
                         const isOverdue = t.due_date && t.due_date < todayStr;
                         const isToday = t.due_date === todayStr;
+                        const ptName = (t.product as { project_name?: string; name?: string } | null)?.project_name
+                          ?? (t.product as { project_name?: string; name?: string } | null)?.name
+                          ?? "—";
                         return (
                           <tr key={t.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                            <td className="px-2 py-3">
+                              <button type="button" onClick={() => setHiddenRowsPt((prev) => { const n = new Set(prev); n.add(t.id); return n; })}
+                                className="text-slate-600 hover:text-slate-300 transition-colors" title="Hide row">
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
                             <td className="px-4 py-3 font-medium text-white">{t.title}</td>
                             <td className="px-4 py-3">
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[t.priority] ?? ""}`}>{t.priority}</span>
@@ -1036,15 +1287,33 @@ export default function OverviewPage() {
                                 </span>
                               ) : <span className="text-slate-600">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{t.product?.name ?? "—"}</td>
+                            <td className="px-4 py-3 text-xs text-slate-500">{ptName}</td>
                             <td className="px-4 py-3">
-                              <Link href="/product-tasks" className="text-slate-500 hover:text-teal-400 transition-colors">
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </Link>
+                              <div className="flex items-center gap-1.5">
+                                <button type="button" title="Edit"
+                                  onClick={() => setPtModal({ mode: "edit", id: t.id, title: t.title, priority: t.priority, due_date: t.due_date ?? "", product_id: t.product_id ?? "", stage_id: t.stage_id ?? "" })}
+                                  className="text-slate-500 hover:text-teal-400 transition-colors">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button type="button" title="Delete" onClick={() => deletePt(t.id)}
+                                  className="text-slate-600 hover:text-red-400 transition-colors">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
                       })}
+                      {hiddenRowsPt.size > 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-2">
+                            <button type="button" onClick={() => setHiddenRowsPt(new Set())}
+                              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                              <EyeOff className="h-3 w-3" /> {hiddenRowsPt.size} hidden — click to show all
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -76,7 +76,7 @@ export default function ProjectChatHubPage() {
                   {p.name}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {p.contact?.name || p.client_name || "No client"}
+                  {p.contact?.name || p.client_name}
                 </span>
               </button>
             ))

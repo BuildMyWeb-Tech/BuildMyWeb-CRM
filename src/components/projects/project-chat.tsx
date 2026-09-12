@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Pin, Send, Trash2 } from "lucide-react";
+import { Check, Loader2, Pencil, Pin, Send, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { AccountMember, ProjectChatMessage } from "@/types";
 import { toast } from "sonner";
@@ -21,7 +21,11 @@ export function ProjectChat({
   const [draft, setDraft] = useState("");
   const [isNote, setIsNote] = useState(false);
   const [sending, setSending] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const membersById = new Map(members.map((m) => [m.user_id, m]));
 
   useEffect(() => {
@@ -36,9 +40,7 @@ export function ProjectChat({
         if (cancelled) return;
         if (!error) setMessages((data ?? []) as ProjectChatMessage[]);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [projectId]);
 
   useEffect(() => {
@@ -59,6 +61,14 @@ export function ProjectChat({
       )
       .on(
         "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "project_chat_messages", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          const row = payload.new as ProjectChatMessage;
+          setMessages((prev) => prev?.map((m) => m.id === row.id ? row : m) ?? prev);
+        },
+      )
+      .on(
+        "postgres_changes",
         { event: "DELETE", schema: "public", table: "project_chat_messages", filter: `project_id=eq.${projectId}` },
         (payload) => {
           const oldRow = payload.old as Partial<ProjectChatMessage>;
@@ -66,9 +76,7 @@ export function ProjectChat({
         },
       )
       .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [projectId]);
 
   useEffect(() => {
@@ -79,21 +87,39 @@ export function ProjectChat({
     const body = draft.trim();
     if (!body) return;
     setSending(true);
+    const tempId = crypto.randomUUID();
+    const optimistic: ProjectChatMessage = {
+      id: tempId,
+      account_id: accountId,
+      project_id: projectId,
+      sender_user_id: currentUserId,
+      body,
+      is_note: isNote,
+      created_at: new Date().toISOString(),
+    } as ProjectChatMessage;
+    setMessages((prev) => [...(prev ?? []), optimistic]);
+    setDraft("");
+    setMentionQuery(null);
+    const noteVal = isNote;
+    setIsNote(false);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from("project_chat_messages").insert({
+      const { data, error } = await supabase.from("project_chat_messages").insert({
         account_id: accountId,
         project_id: projectId,
         sender_user_id: currentUserId,
         body,
-        is_note: isNote,
-      });
+        is_note: noteVal,
+      }).select("*").single();
       if (error) {
         toast.error("Could not send message.");
+        setMessages((prev) => prev?.filter((m) => m.id !== tempId) ?? null);
         return;
       }
-      setDraft("");
-      setIsNote(false);
+      // Replace optimistic with real row
+      if (data) {
+        setMessages((prev) => prev?.map((m) => m.id === tempId ? (data as ProjectChatMessage) : m) ?? prev);
+      }
     } finally {
       setSending(false);
     }
@@ -104,6 +130,41 @@ export function ProjectChat({
     const { error } = await supabase.from("project_chat_messages").delete().eq("id", id);
     if (error) toast.error("Could not delete message.");
   }
+
+  async function saveEdit(id: string) {
+    const body = editBody.trim();
+    if (!body) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("project_chat_messages")
+      .update({ body })
+      .eq("id", id);
+    if (error) { toast.error("Could not update message."); return; }
+    setMessages((prev) => prev?.map((m) => m.id === id ? { ...m, body } : m) ?? prev);
+    setEditingId(null);
+  }
+
+  function handleDraftChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setDraft(val);
+    const atIdx = val.lastIndexOf("@");
+    if (atIdx !== -1) {
+      const after = val.slice(atIdx + 1);
+      if (!after.includes(" ")) { setMentionQuery(after); return; }
+    }
+    setMentionQuery(null);
+  }
+
+  function insertMention(name: string) {
+    const atIdx = draft.lastIndexOf("@");
+    if (atIdx !== -1) setDraft(draft.slice(0, atIdx) + "@" + name + " ");
+    setMentionQuery(null);
+    inputRef.current?.focus();
+  }
+
+  const mentionMembers = mentionQuery !== null
+    ? members.filter((m) => (m.full_name ?? "").toLowerCase().includes(mentionQuery.toLowerCase()))
+    : [];
 
   return (
     <div className="flex h-[60vh] flex-col rounded-lg border border-border">
@@ -121,6 +182,7 @@ export function ProjectChat({
             {messages.map((m) => {
               const isMe = m.sender_user_id === currentUserId;
               const sender = m.sender_user_id ? membersById.get(m.sender_user_id) : null;
+              const isEditing = editingId === m.id;
 
               if (m.is_note) {
                 return (
@@ -136,17 +198,34 @@ export function ProjectChat({
                             {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                           </span>
                         </div>
-                        <p className="text-sm text-amber-900 dark:text-amber-100 break-words">{m.body}</p>
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 mt-1">
+                            <input
+                              autoFocus
+                              value={editBody}
+                              onChange={(e) => setEditBody(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { e.preventDefault(); saveEdit(m.id); }
+                                if (e.key === "Escape") setEditingId(null);
+                              }}
+                              className="flex-1 rounded border border-amber-400/50 bg-transparent px-2 py-0.5 text-sm text-amber-900 dark:text-amber-100 focus:outline-none"
+                            />
+                            <button type="button" onClick={() => saveEdit(m.id)} className="text-green-500 hover:text-green-400"><Check className="h-3.5 w-3.5" /></button>
+                            <button type="button" onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-amber-900 dark:text-amber-100 break-words">{m.body}</p>
+                        )}
                       </div>
-                      {isMe && (
-                        <button
-                          type="button"
-                          onClick={() => remove(m.id)}
-                          aria-label="Delete note"
-                          className="hidden text-muted-foreground hover:text-red-400 group-hover:block shrink-0"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                      {isMe && !isEditing && (
+                        <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                          <button type="button" onClick={() => { setEditingId(m.id); setEditBody(m.body); }} aria-label="Edit" className="text-muted-foreground hover:text-amber-400">
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button type="button" onClick={() => remove(m.id)} aria-label="Delete" className="text-muted-foreground hover:text-red-400">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -158,22 +237,35 @@ export function ProjectChat({
                   <div className={`max-w-[75%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
                     {!isMe && <span className="text-[10px] font-medium text-muted-foreground">{sender?.full_name ?? "Unknown"}</span>}
                     <div className="flex items-center gap-1">
-                      <div
-                        className={`rounded-lg px-3 py-1.5 text-sm ${
-                          isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                        }`}
-                      >
-                        {m.body}
-                      </div>
-                      {isMe && (
-                        <button
-                          type="button"
-                          onClick={() => remove(m.id)}
-                          aria-label="Delete message"
-                          className="hidden text-muted-foreground hover:text-red-400 group-hover:block"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                      {isMe && !isEditing && (
+                        <div className="hidden group-hover:flex items-center gap-1">
+                          <button type="button" onClick={() => { setEditingId(m.id); setEditBody(m.body); }} aria-label="Edit" className="text-muted-foreground hover:text-blue-400">
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button type="button" onClick={() => remove(m.id)} aria-label="Delete" className="text-muted-foreground hover:text-red-400">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
+                      {isEditing ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={editBody}
+                            onChange={(e) => setEditBody(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); saveEdit(m.id); }
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            className="rounded-lg border border-primary/50 bg-muted px-3 py-1.5 text-sm text-foreground focus:outline-none w-48"
+                          />
+                          <button type="button" onClick={() => saveEdit(m.id)} className="text-green-500 hover:text-green-400"><Check className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ) : (
+                        <div className={`rounded-lg px-3 py-1.5 text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                          {m.body}
+                        </div>
                       )}
                     </div>
                     <span className="text-[9px] text-muted-foreground">{new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
@@ -192,7 +284,7 @@ export function ProjectChat({
             Internal note — only visible to team members
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsNote((v) => !v)}
@@ -205,18 +297,40 @@ export function ProjectChat({
           >
             <Pin className="h-4 w-4" />
           </button>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            placeholder={isNote ? "Add an internal note…" : "Message the project team…"}
-            className="h-9 flex-1 rounded-md border border-border bg-muted px-3 text-sm text-foreground focus:outline-none"
-          />
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={handleDraftChange}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { setMentionQuery(null); return; }
+                if (e.key === "Enter" && !e.shiftKey && mentionQuery === null) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder={isNote ? "Add an internal note…" : "Message the project team… (@ to mention)"}
+              className="h-9 w-full rounded-md border border-border bg-muted px-3 text-sm text-foreground focus:outline-none"
+            />
+            {mentionMembers.length > 0 && (
+              <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border border-border bg-card shadow-xl z-50">
+                {mentionMembers.map((m) => (
+                  <button
+                    key={m.user_id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); insertMention(m.full_name ?? ""); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted transition-colors first:rounded-t-lg last:rounded-b-lg"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                      {(m.full_name ?? "?").charAt(0).toUpperCase()}
+                    </span>
+                    <span className="truncate text-foreground">{m.full_name}</span>
+                    <span className="ml-auto text-[9px] text-muted-foreground capitalize">{m.role}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={send}
