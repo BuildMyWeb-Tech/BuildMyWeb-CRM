@@ -9,6 +9,7 @@ import {
   Users, ChevronDown as ChevronDownIcon, AlertCircle, Briefcase,
   Plus, Loader2, Zap, ArrowRight, CheckCircle2,
   Eye, EyeOff, Pencil, Trash2, X as XIcon,
+  CalendarClock, MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -80,6 +81,7 @@ interface MyWorkTask {
   assignee_user_id?: string | null;
   assignee_user_ids?: string[];
   project?: { id: string; name: string } | null;
+  stage?: { name: string } | null;
 }
 interface MyWorkFollowUp {
   id: string;
@@ -319,6 +321,11 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
             {f.status.replace("_", " ")}
           </span>
         </td>
+        <td className="px-4 py-3">
+          {f.priority ? (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[f.priority] ?? ""}`}>{f.priority}</span>
+          ) : <span className="text-slate-600">—</span>}
+        </td>
         <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
           {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
         </td>
@@ -335,6 +342,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
               <th className="px-4 py-2.5 font-medium">Title</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 font-medium">Priority</th>
               <th className="px-4 py-2.5 font-medium">Follow-up</th>
             </tr>
           </thead>
@@ -988,6 +996,7 @@ export default function OverviewPage() {
                             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
                               <th className="px-4 py-2.5 font-medium">Task</th>
                               <th className="px-4 py-2.5 font-medium">Project</th>
+                              <th className="px-4 py-2.5 font-medium">Stage</th>
                               <th className="px-4 py-2.5 font-medium">Priority</th>
                               <th className="px-4 py-2.5 font-medium">Due</th>
                             </tr>
@@ -1005,6 +1014,7 @@ export default function OverviewPage() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-xs text-slate-400">{task.project?.name ?? "—"}</td>
+                                  <td className="px-4 py-3 text-xs text-slate-400">{task.stage?.name ?? "—"}</td>
                                   <td className="px-4 py-3">
                                     {task.priority ? (
                                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>{task.priority}</span>
@@ -1034,6 +1044,7 @@ export default function OverviewPage() {
                           <thead>
                             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
                               <th className="px-4 py-2.5 font-medium">Task</th>
+                              <th className="px-4 py-2.5 font-medium">Product</th>
                               <th className="px-4 py-2.5 font-medium">Priority</th>
                               <th className="px-4 py-2.5 font-medium">Due</th>
                             </tr>
@@ -1042,9 +1053,11 @@ export default function OverviewPage() {
                             {myProductTasks.map((t) => {
                               const isOverdueP = t.due_date && t.due_date < todayStr;
                               const isTodayP = t.due_date === todayStr;
+                              const prodName = (t.product as { project_name?: string; name?: string } | null)?.project_name ?? (t.product as { project_name?: string; name?: string } | null)?.name ?? "—";
                               return (
                                 <tr key={t.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                                   <td className="px-4 py-3 font-medium text-white">{t.title}</td>
+                                  <td className="px-4 py-3 text-xs text-slate-400">{prodName}</td>
                                   <td className="px-4 py-3">
                                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[t.priority] ?? ""}`}>{t.priority}</span>
                                   </td>
@@ -1172,17 +1185,27 @@ export default function OverviewPage() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1 flex-wrap">
                                 <button type="button" disabled={isLoading} onClick={() => handleEnqAction(e.id, "hold")}
-                                  className="flex items-center gap-1 rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50 transition-colors">
-                                  <Clock className="h-3 w-3" /> 
+                                  title="Hold" className="flex items-center gap-1 rounded border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50 transition-colors">
+                                  <Clock className="h-3 w-3" />
                                 </button>
-                                <Link href={`/client-leads/${e.id}`}
+                                <Link href={`/client-leads/${e.id}`} title="Move to Converted"
                                   className="flex items-center gap-1 rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400 hover:bg-green-500/20 transition-colors">
-                                  <UserCheck className="h-3 w-3" /> 
+                                  <UserCheck className="h-3 w-3" />
                                 </Link>
                                 <button type="button" disabled={isLoading} onClick={() => handleEnqAction(e.id, "rejected")}
-                                  className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors">
-                                  <XCircle className="h-3 w-3" /> 
+                                  title="Reject" className="flex items-center gap-1 rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors">
+                                  <XCircle className="h-3 w-3" />
                                 </button>
+                                <button type="button" disabled={isLoading} onClick={() => handleEnqAction(e.id, "future_client")}
+                                  title="Move to Future Task" className="flex items-center gap-1 rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-400 hover:bg-purple-500/20 disabled:opacity-50 transition-colors">
+                                  <CalendarClock className="h-3 w-3" />
+                                </button>
+                                {e.phone && (
+                                  <a href={`https://wa.me/${e.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer"
+                                    title="WhatsApp" className="flex items-center gap-1 rounded border border-green-600/30 bg-green-600/10 px-1.5 py-0.5 text-[10px] font-medium text-green-500 hover:bg-green-600/20 transition-colors">
+                                    <MessageCircle className="h-3 w-3" />
+                                  </a>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
@@ -1353,7 +1376,46 @@ export default function OverviewPage() {
 
       {/* Right sidebar — content varies per tab */}
       <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
-        {activeTab === "my-work" ? (
+        {activeTab === "project-tasks" ? (
+          <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { label: "Total", count: allProductTasks.length, color: "text-teal-400" },
+                { label: "Overdue", count: allProductTasks.filter((t) => t.due_date && t.due_date < todayStr).length, color: "text-red-400" },
+              ].map((s) => (
+                <div key={s.label} className="rounded-lg bg-[#0f1117] px-2 py-2 text-center">
+                  <p className={`text-sm font-bold ${s.color}`}>{s.count}</p>
+                  <p className="text-[9px] text-slate-600 mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-[#2a3045] overflow-hidden">
+              <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2">
+                <Package className="h-3.5 w-3.5 text-teal-400" />
+                <span className="text-xs font-semibold text-white">Product Task Breakdown</span>
+              </div>
+              <div className="divide-y divide-[#2a3045]">
+                {(() => {
+                  const byProduct = allProductTasks.reduce<Record<string, { name: string; count: number }>>((acc, t) => {
+                    const key = t.product_id ?? "__none__";
+                    const name = (t.product as { project_name?: string } | null)?.project_name ?? "No Product";
+                    if (!acc[key]) acc[key] = { name, count: 0 };
+                    acc[key].count++;
+                    return acc;
+                  }, {});
+                  const rows = Object.values(byProduct).sort((a, b) => b.count - a.count);
+                  if (rows.length === 0) return <p className="px-3 py-4 text-center text-xs text-slate-500">No product tasks</p>;
+                  return rows.map((p) => (
+                    <div key={p.name} className="flex items-center justify-between px-3 py-2">
+                      <p className="text-xs text-slate-300 truncate flex-1">{p.name}</p>
+                      <span className="shrink-0 ml-2 text-[10px] font-bold text-teal-400">{p.count}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+          </div>
+        ) : activeTab === "my-work" ? (
           <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-1.5">

@@ -36,6 +36,7 @@ import {
   Phone,
   Radio,
   Rows3,
+  Search,
   UserPlus,
   Users,
   Users2,
@@ -88,6 +89,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer", pageKey: "client_directory" },
       { href: "/client-leads", labelKey: "clientLeads", icon: UserPlus, minRole: "viewer", pageKey: "client_leads" },
       { href: "/future-clients", labelKey: "futureClients", icon: Sparkles, minRole: "viewer", pageKey: "future_clients" },
+      { href: "/lead-finder", labelKey: "leadFinder", icon: Search, minRole: "viewer" },
     ],
   },
   {

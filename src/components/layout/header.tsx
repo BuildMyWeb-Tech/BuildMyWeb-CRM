@@ -18,6 +18,7 @@ import {
 import { ModeToggle } from "@/components/layout/mode-toggle";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { TodoList } from "@/components/layout/todo-list";
+import { AiAssistant } from "@/components/layout/ai-assistant";
 
 interface HeaderProps {
   /** Wired to the shell's drawer state. Used only on mobile — the
@@ -50,7 +51,8 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </button>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="relative flex items-center gap-1 sm:gap-2">
+        <AiAssistant />
         <Link
           href="/messages"
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

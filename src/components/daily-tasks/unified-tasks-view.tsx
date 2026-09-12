@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Clock, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Clock, Eye, EyeOff, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,6 +79,7 @@ export function UnifiedTasksView() {
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
   const [doneActionLoading, setDoneActionLoading] = useState(false);
   const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
+  const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -568,6 +569,7 @@ export function UnifiedTasksView() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <th className="px-2 py-2 font-medium w-8" />
                   <th className="px-3 py-2 font-medium">
                     <button type="button" onClick={() => toggleSort("title")} className="flex items-center gap-1 hover:text-foreground">
                       Task
@@ -611,7 +613,7 @@ export function UnifiedTasksView() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.map((task) => {
+                {filteredTasks.filter((t) => !hiddenRows.has(t.id)).map((task) => {
                   const stage =
                     task.kind === "daily"
                       ? stages.find((s) => s.id === task.stageId)
@@ -630,6 +632,13 @@ export function UnifiedTasksView() {
                       }}
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" title="Hide row"
+                          onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); return n; }); }}
+                          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
                       <td className="px-3 py-2 text-foreground">
                         <span className={isDone ? "line-through text-muted-foreground" : ""}>{task.title}</span>
                       </td>
@@ -680,6 +689,16 @@ export function UnifiedTasksView() {
                     </tr>
                   );
                 })}
+                {hiddenRows.size > 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-2">
+                      <button type="button" onClick={() => setHiddenRows(new Set())}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                        <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — click to show all
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
