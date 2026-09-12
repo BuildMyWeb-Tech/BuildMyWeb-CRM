@@ -16,6 +16,8 @@ interface DashboardTask {
   title: string;
   priority: string | null;
   due_date: string | null;
+  assignee_user_id?: string | null;
+  assignee_user_ids?: string[];
   project?: { id: string; name: string; client?: { id: string; name: string } | null } | null;
 }
 
@@ -219,7 +221,7 @@ export default function MyWorkPage() {
   // Filter tasks by selected user (assignee) when not viewing own dashboard
   const isOwnDashboard = !selectedUserId || selectedUserId === user?.id;
   const taskItems = isOwnDashboard ? allTasksRaw : allTasksRaw.filter((t) => {
-    const ids = (t as { assignee_user_ids?: string[] }).assignee_user_ids ?? [];
+    const ids = t.assignee_user_ids ?? [];
     return t.assignee_user_id === selectedUserId || ids.includes(selectedUserId ?? "");
   });
 
