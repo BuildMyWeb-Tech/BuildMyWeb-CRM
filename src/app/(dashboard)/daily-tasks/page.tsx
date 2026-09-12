@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
-  Plus, LayoutGrid, Folder, ArrowRight,
+  Folder,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -22,11 +22,6 @@ interface ProjectWithTaskCount extends Project {
   task_count: number;
 }
 
-interface StatusCount {
-  name: string;
-  count: number;
-  color: string;
-}
 
 const PROJECT_COLORS = [
   "bg-blue-500", "bg-purple-500", "bg-teal-500", "bg-orange-500",
@@ -41,7 +36,6 @@ export default function DailyTasksPage() {
   const { accountId } = useAuth();
   const [stats, setStats] = useState<TaskStats>({ total: 0, inProgress: 0, pending: 0, overdue: 0 });
   const [projects, setProjects] = useState<ProjectWithTaskCount[]>([]);
-  const [statusCounts, setStatusCounts] = useState<StatusCount[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -73,14 +67,6 @@ export default function DailyTasksPage() {
       }
 
       setStats({ total: tasks.length, inProgress, pending, overdue });
-
-      const topStatuses: StatusCount[] = [
-        { name: "Total Tasks", count: tasks.length, color: "bg-blue-500" },
-        { name: "In Progress", count: inProgress, color: "bg-teal-500" },
-        { name: "Pending", count: pending, color: "bg-orange-500" },
-        { name: "Overdue", count: overdue, color: "bg-red-500" },
-      ];
-      setStatusCounts(topStatuses);
 
       const { data: projectsData } = await supabase
         .from("projects")
@@ -224,45 +210,6 @@ export default function DailyTasksPage() {
             </div>
           </div>
 
-          {/* Task Status section */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <LayoutGrid className="h-4 w-4 text-slate-400" />
-              <h2 className="text-sm font-semibold text-white">Task Status</h2>
-            </div>
-            <div className="space-y-2">
-              {statusCounts.map((s) => (
-                <div key={s.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${s.color}`} />
-                    <span className="text-xs text-slate-400">{s.name}</span>
-                  </div>
-                  <span className="text-xs font-medium text-white">
-                    {loading ? <span className="inline-block h-3 w-5 animate-pulse rounded bg-white/10" /> : s.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Actions section */}
-          <div>
-            <h2 className="text-sm font-semibold text-white mb-3">Quick Actions</h2>
-            <div className="space-y-2">
-              <Link
-                href="/daily-tasks?new=1"
-                className="flex items-center gap-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors justify-center"
-              >
-                <Plus className="h-4 w-4" /> New Task
-              </Link>
-              <Link
-                href="/kanban"
-                className="flex items-center gap-2 w-full rounded-lg border border-[#2a3045] px-3 py-2 text-sm font-medium text-slate-300 hover:bg-[#0f1117] hover:text-white transition-colors justify-center"
-              >
-                <ArrowRight className="h-4 w-4" /> View Kanban
-              </Link>
-            </div>
-          </div>
         </div>
       </div>
     </div>

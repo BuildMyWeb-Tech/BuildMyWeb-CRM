@@ -19,7 +19,6 @@
 import type { AccountRole } from "@/lib/auth/roles";
 import { hasMinRole } from "@/lib/auth/roles";
 import {
-  BarChart3,
   Bot,
   Building2,
   Clock,
@@ -76,9 +75,7 @@ export interface CrmModule {
 // Global links that sit above every module (not module-specific:
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
-  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, minRole: "viewer" },
   { href: "/overview", labelKey: "overview", icon: Rows3, minRole: "viewer" },
-  { href: "/my-work", labelKey: "myWork", icon: BarChart3, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,
