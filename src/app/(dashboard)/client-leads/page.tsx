@@ -23,8 +23,6 @@ import {
   Info,
   Sparkles,
   Eye,
-  TrendingUp,
-  TrendingDown,
   Filter,
   Calendar,
 } from "lucide-react";
@@ -313,58 +311,34 @@ export default function ClientLeadsPage() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20">
-                <UserPlus className="h-5 w-5 text-blue-400" />
-              </div>
-              <span className="flex items-center gap-1 text-xs text-green-400">
-                <TrendingUp className="h-3 w-3" /> +12%
-              </span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20 mb-3">
+              <UserPlus className="h-5 w-5 text-blue-400" />
             </div>
-            <p className="mt-3 text-2xl font-bold text-white">{stats.total}</p>
+            <p className="text-2xl font-bold text-white">{stats.total}</p>
             <p className="text-sm text-slate-400">Total Enquiries</p>
-            <p className="mt-0.5 text-xs text-slate-500">+12% this month</p>
           </div>
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20">
-                <AlertTriangle className="h-5 w-5 text-orange-400" />
-              </div>
-              <span className="flex items-center gap-1 text-xs text-green-400">
-                <TrendingUp className="h-3 w-3" /> +33%
-              </span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20 mb-3">
+              <AlertTriangle className="h-5 w-5 text-orange-400" />
             </div>
-            <p className="mt-3 text-2xl font-bold text-white">
+            <p className="text-2xl font-bold text-white">
               {allLeads.filter((l) => l.status === "in_discussion" && !l.next_follow_up_at).length}
             </p>
             <p className="text-sm text-slate-400">New Enquiries</p>
-            <p className="mt-0.5 text-xs text-slate-500">+33% this month</p>
           </div>
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/20">
-                <Info className="h-5 w-5 text-purple-400" />
-              </div>
-              <span className="flex items-center gap-1 text-xs text-red-400">
-                <TrendingDown className="h-3 w-3" /> -5%
-              </span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/20 mb-3">
+              <Info className="h-5 w-5 text-purple-400" />
             </div>
-            <p className="mt-3 text-2xl font-bold text-white">{stats.discussion}</p>
+            <p className="text-2xl font-bold text-white">{stats.discussion}</p>
             <p className="text-sm text-slate-400">In Discussion</p>
-            <p className="mt-0.5 text-xs text-slate-500">-5% this month</p>
           </div>
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20">
-                <CheckCircle2 className="h-5 w-5 text-green-400" />
-              </div>
-              <span className="flex items-center gap-1 text-xs text-green-400">
-                <TrendingUp className="h-3 w-3" /> +2%
-              </span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20 mb-3">
+              <CheckCircle2 className="h-5 w-5 text-green-400" />
             </div>
-            <p className="mt-3 text-2xl font-bold text-white">{stats.converted}</p>
+            <p className="text-2xl font-bold text-white">{stats.converted}</p>
             <p className="text-sm text-slate-400">Converted</p>
-            <p className="mt-0.5 text-xs text-slate-500">+2% this month</p>
           </div>
         </div>
 

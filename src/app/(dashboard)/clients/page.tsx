@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
   List as ListIcon, LayoutGrid, Search, AlertTriangle,
-  Archive, TrendingUp, TrendingDown, ChevronRight, Home,
+  Archive, ChevronRight, Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -271,10 +271,6 @@ export default function ClientsPage() {
             <div className="text-2xl font-bold text-white mb-1">
               {clients === null ? "—" : totalCount}
             </div>
-            <div className="flex items-center gap-1 text-xs text-green-400">
-              <TrendingUp className="h-3 w-3" />
-              <span>+12% vs last 30 days</span>
-            </div>
           </div>
 
           {/* Active */}
@@ -288,26 +284,18 @@ export default function ClientsPage() {
             <div className="text-2xl font-bold text-white mb-1">
               {clients === null ? "—" : activeCount}
             </div>
-            <div className="flex items-center gap-1 text-xs text-green-400">
-              <TrendingUp className="h-3 w-3" />
-              <span>+9% vs last 30 days</span>
-            </div>
           </div>
 
-          {/* At Risk */}
+          {/* Inactive */}
           <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">At Risk</span>
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Inactive</span>
               <div className="h-8 w-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
                 <AlertTriangle className="h-4 w-4 text-yellow-400" />
               </div>
             </div>
             <div className="text-2xl font-bold text-white mb-1">
               {clients === null ? "—" : atRiskCount}
-            </div>
-            <div className="flex items-center gap-1 text-xs text-red-400">
-              <TrendingDown className="h-3 w-3" />
-              <span>-25% vs last 30 days</span>
             </div>
           </div>
 

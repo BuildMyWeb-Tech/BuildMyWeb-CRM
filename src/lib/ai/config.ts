@@ -4,7 +4,7 @@ import type { AiConfig, AiProvider } from './types'
 import { AI_PROVIDER_DEFAULT_MODEL } from './defaults'
 
 interface AiConfigRow {
-  provider: 'openai' | 'anthropic'
+  provider: 'openai' | 'anthropic' | 'gemini'
   model: string
   api_key: string
   system_prompt: string | null

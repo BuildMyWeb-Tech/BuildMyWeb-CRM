@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2 } from "lucide-react";
+import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2, LayoutGrid, List as ListIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +37,10 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem("projects-view") === "list" ? "list" : "grid";
+  });
 
   async function loadProjects() {
     const res = await fetch("/api/projects");
@@ -99,13 +103,25 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold text-white">Projects</h1>
             <p className="mt-0.5 text-sm text-slate-400">Each project gets its own task board.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-          >
-            <Plus className="h-4 w-4" /> New Project
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5">
+              <button type="button" onClick={() => { setViewMode("grid"); localStorage.setItem("projects-view","grid"); }}
+                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "grid" ? "bg-[#2a3045] text-white" : "text-slate-400 hover:text-white"}`}>
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => { setViewMode("list"); localStorage.setItem("projects-view","list"); }}
+                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "list" ? "bg-[#2a3045] text-white" : "text-slate-400 hover:text-white"}`}>
+                <ListIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+            >
+              <Plus className="h-4 w-4" /> New Project
+            </button>
+          </div>
         </div>
 
         {/* Stat cards */}
@@ -140,6 +156,58 @@ export default function ProjectsPage() {
         ) : visibleProjects.length === 0 ? (
           <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-[#2a3045]">
             <p className="text-sm text-slate-500">No projects match this filter.</p>
+          </div>
+        ) : viewMode === "list" ? (
+          <div className="overflow-hidden rounded-xl border border-[#2a3045]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#2a3045] bg-[#1a1f2e]">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Project</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Client</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Progress</th>
+                  <th className="w-10 px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {visibleProjects.map((p) => (
+                  <tr key={p.id} className="border-b border-[#2a3045] bg-[#1a1f2e] hover:bg-[#1e2436] transition-colors last:border-0">
+                    <td className="px-4 py-3">
+                      <Link href={`/projects/${p.id}`} className="font-medium text-white hover:text-blue-300 transition-colors">{p.name}</Link>
+                      {p.description && <p className="text-xs text-slate-500 line-clamp-1">{p.description}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">{p.contact?.name || p.client_name || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                        p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
+                        : p.status === "inactive" ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
+                        : "border-[#2a3045] bg-[#2a3045] text-slate-500"
+                      }`}>{p.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {typeof p.progress_percentage === "number" ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#2a3045]">
+                            <div className={`h-full rounded-full ${p.progress_percentage >= 75 ? "bg-green-500" : p.progress_percentage >= 40 ? "bg-blue-500" : "bg-amber-500"}`} style={{ width: `${p.progress_percentage}%` }} />
+                          </div>
+                          <span className="text-xs text-slate-400">{p.progress_percentage}%</span>
+                        </div>
+                      ) : <span className="text-xs text-slate-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white">
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditingProject(p)}><Pencil className="h-3.5 w-3.5" /> Edit</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

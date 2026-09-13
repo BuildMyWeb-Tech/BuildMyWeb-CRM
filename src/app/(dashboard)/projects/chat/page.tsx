@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MessageSquare, Search, Loader2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { ProjectChat } from "@/components/projects/project-chat";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,6 +17,48 @@ export default function ProjectChatHubPage() {
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // lastMsgAt[projectId] = ISO timestamp of last message (from realtime inserts)
+  const [lastMsgAt, setLastMsgAt] = useState<Record<string, string>>({});
+  // lastSeenAt[projectId] = ISO timestamp when user last opened that chat
+  const lastSeenRef = useRef<Record<string, string>>({});
+
+  function getLastSeen(): Record<string, string> {
+    try { return JSON.parse(localStorage.getItem("chat-last-seen") ?? "{}"); } catch { return {}; }
+  }
+  function markSeen(id: string) {
+    const ts = new Date().toISOString();
+    const next = { ...getLastSeen(), [id]: ts };
+    localStorage.setItem("chat-last-seen", JSON.stringify(next));
+    lastSeenRef.current = next;
+    setLastMsgAt((prev) => ({ ...prev })); // trigger re-render
+  }
+  function hasUnread(id: string): boolean {
+    const seen = lastSeenRef.current[id] ?? getLastSeen()[id];
+    const last = lastMsgAt[id];
+    if (!last) return false;
+    if (!seen) return true;
+    return last > seen;
+  }
+
+  useEffect(() => {
+    lastSeenRef.current = getLastSeen();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Subscribe to all project chat inserts to track unread badges
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase.channel("chat-hub-inserts")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "project_chat_messages" }, (payload) => {
+        const row = payload.new as { project_id: string; created_at: string };
+        setLastMsgAt((prev) => {
+          const existing = prev[row.project_id];
+          if (existing && existing >= row.created_at) return prev;
+          return { ...prev, [row.project_id]: row.created_at };
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -29,6 +72,11 @@ export default function ProjectChatHubPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMembers(d?.members ?? []));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark current chat as seen whenever selectedId changes
+  useEffect(() => {
+    if (selectedId) markSeen(selectedId);
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = (projects ?? []).filter((p) =>
     search.trim() === "" ||
@@ -63,23 +111,31 @@ export default function ProjectChatHubPage() {
           ) : filtered.length === 0 ? (
             <p className="px-3 py-4 text-xs text-muted-foreground">No projects found.</p>
           ) : (
-            filtered.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelectedId(p.id)}
-                className={`flex w-full flex-col items-start gap-0.5 px-3 py-2.5 text-left transition-colors ${
-                  selectedId === p.id ? "bg-primary/10" : "hover:bg-muted"
-                }`}
-              >
-                <span className={`text-sm font-medium leading-snug ${selectedId === p.id ? "text-primary" : "text-foreground"}`}>
-                  {p.name}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {p.contact?.name || p.client_name}
-                </span>
-              </button>
-            ))
+            filtered.map((p) => {
+              const unread = selectedId !== p.id && hasUnread(p.id);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { setSelectedId(p.id); markSeen(p.id); }}
+                  className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors ${
+                    selectedId === p.id ? "bg-primary/10" : "hover:bg-muted"
+                  }`}
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className={`text-sm font-medium leading-snug ${selectedId === p.id ? "text-primary" : "text-foreground"}`}>
+                      {p.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {p.contact?.name || p.client_name}
+                    </span>
+                  </div>
+                  {unread && (
+                    <span className="flex h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread messages" />
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
       </div>

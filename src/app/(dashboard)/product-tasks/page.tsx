@@ -430,6 +430,42 @@ export default function ProductTasksPage() {
             </button>
           </div>
 
+          {/* Stat cards */}
+          {tasks !== null && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {(() => {
+                const allT = tasks ?? [];
+                const inProgress = allT.filter((t) => {
+                  const stageName = (t.stage as { name?: string } | null)?.name?.toLowerCase() ?? "";
+                  return stageName.includes("progress");
+                }).length;
+                const today = new Date().toISOString().slice(0, 10);
+                const dueToday = allT.filter((t) => t.due_date === today).length;
+                const overdue = allT.filter((t) => t.due_date && t.due_date < today).length;
+                return (
+                  <>
+                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                      <p className="text-2xl font-bold text-white">{allT.length}</p>
+                      <p className="text-sm text-slate-400">Total Tasks</p>
+                    </div>
+                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                      <p className="text-2xl font-bold text-blue-400">{inProgress}</p>
+                      <p className="text-sm text-slate-400">In Progress</p>
+                    </div>
+                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                      <p className="text-2xl font-bold text-yellow-400">{dueToday}</p>
+                      <p className="text-sm text-slate-400">Due Today</p>
+                    </div>
+                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                      <p className="text-2xl font-bold text-red-400">{overdue}</p>
+                      <p className="text-sm text-slate-400">Overdue</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-2">
             <input type="text" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)}

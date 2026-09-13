@@ -184,6 +184,20 @@ export default function ProjectDetailPage() {
         </button>
       </div>
 
+      {tab === "board" && stages.length > 0 && (
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {stages.map((s) => {
+            const count = tasks.filter((t) => t.stage_id === s.id).length;
+            return (
+              <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
+                <p className="text-xl font-bold text-foreground">{count}</p>
+                <p className="truncate text-[10px] text-muted-foreground">{s.name}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {tab === "board" && (
         <div className="mt-6">
           <TaskBoard

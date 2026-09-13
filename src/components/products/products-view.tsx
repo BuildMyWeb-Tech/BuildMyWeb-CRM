@@ -16,6 +16,8 @@ import {
   Eye,
   EyeOff,
   X,
+  LayoutGrid,
+  List as ListIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +85,10 @@ export function ProductsView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
   const [docsOpenId, setDocsOpenId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem("products-view") === "list" ? "list" : "grid";
+  });
 
   async function load() {
     const res = await fetch("/api/products");
@@ -131,21 +137,56 @@ export function ProductsView() {
     setFormOpen(true);
   }
 
+  const allProducts = products ?? [];
+  const activeProducts = allProducts.filter((p) => !p.stage_tags.includes("launch") && !p.stage_tags.includes("sales"));
+  const inDev = allProducts.filter((p) => p.stage_tags.includes("development"));
+  const launched = allProducts.filter((p) => p.stage_tags.includes("launch") || p.stage_tags.includes("sales"));
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Package className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">
-            {products ? `${products.length} product${products.length === 1 ? "" : "s"}` : "Products"}
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">Products</h2>
         </div>
-        {canCreate && (
-          <Button onClick={openCreate}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New product
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border border-border bg-muted p-0.5">
+            <button type="button" onClick={() => { setViewMode("grid"); localStorage.setItem("products-view","grid"); }}
+              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "grid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={() => { setViewMode("list"); localStorage.setItem("products-view","list"); }}
+              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <ListIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {canCreate && (
+            <Button onClick={openCreate}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New product
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-foreground">{products === null ? "—" : allProducts.length}</p>
+          <p className="text-sm text-muted-foreground">Total Products</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-foreground">{products === null ? "—" : inDev.length}</p>
+          <p className="text-sm text-muted-foreground">In Development</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-foreground">{products === null ? "—" : launched.length}</p>
+          <p className="text-sm text-muted-foreground">Launched</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-2xl font-bold text-foreground">{products === null ? "—" : activeProducts.length}</p>
+          <p className="text-sm text-muted-foreground">Active</p>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -189,6 +230,51 @@ export function ProductsView() {
               Add your first product
             </Button>
           )}
+        </div>
+      ) : viewMode === "list" ? (
+        <div className="mt-6 overflow-hidden rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-card">
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Stage</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Purpose</th>
+                <th className="w-10 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((p) => (
+                <tr key={p.id} className="border-b border-border bg-card hover:bg-muted/50 transition-colors last:border-0">
+                  <td className="px-4 py-3 font-medium text-foreground">{p.project_name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {p.stage_tags.map((tag) => (
+                        <span key={tag} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">{STAGE_TAG_LABEL[tag]}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${PRIORITY_STYLE[p.priority]}`}>{p.priority}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground line-clamp-1 max-w-xs">{p.purpose || "—"}</td>
+                  <td className="px-4 py-3">
+                    {(canUpdate || canDelete) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canUpdate && <DropdownMenuItem onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /> Edit</DropdownMenuItem>}
+                          {canDelete && <DropdownMenuItem onClick={() => handleDelete(p)} className="text-red-400 focus:text-red-400"><Trash2 className="h-3.5 w-3.5" /> Delete</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
