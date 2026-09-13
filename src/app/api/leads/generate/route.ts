@@ -171,6 +171,7 @@ export async function POST(request: Request) {
   let qualified     = 0
   let qualifyFailed = 0
   let aiNotConfigured = false
+  let firstInsertError: string | null = null
 
   for (const biz of businesses) {
     if (!biz.phone) { skippedNoPhone++; continue }
@@ -182,7 +183,6 @@ export async function POST(request: Request) {
         user_id:         ctx.userId,
         name:            biz.name,
         phone:           biz.phone,
-        website:         biz.website ? `https://${biz.website}` : null,
         company:         biz.address,
         lead_source:     'maps_scraper',
         search_category: niche,
@@ -195,6 +195,7 @@ export async function POST(request: Request) {
         duplicates++
       } else {
         console.error('[leads/generate] insert failed:', insertError)
+        if (!firstInsertError) firstInsertError = `${insertError.code}: ${insertError.message}`
       }
       continue
     }
@@ -215,5 +216,6 @@ export async function POST(request: Request) {
     qualified,
     qualifyFailed,
     aiConfigured: !aiNotConfigured,
+    ...(firstInsertError ? { insertError: firstInsertError } : {}),
   })
 }

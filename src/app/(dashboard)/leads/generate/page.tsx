@@ -21,6 +21,7 @@ interface GenerateResult {
   qualified: number;
   qualifyFailed: number;
   aiConfigured: boolean;
+  insertError?: string;
 }
 
 // Lead Sourcing — type a niche + location, pull matching businesses
@@ -149,6 +150,11 @@ export default function LeadSourcingPage() {
                   </li>
                 )}
               </ul>
+              {result.insertError && (
+                <p className="mt-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-red-400 font-mono text-xs break-all">
+                  Insert error: {result.insertError}
+                </p>
+              )}
               {!result.aiConfigured && result.inserted > 0 && (
                 <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-500">
                   Contacts were imported, but no AI is configured for this
