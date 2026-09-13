@@ -76,39 +76,52 @@ export async function POST(request: Request) {
   searchUrl.searchParams.set('location', location)
   searchUrl.searchParams.set('maxResults', String(count))
 
-  let scoutData: LeadScoutResponse
+  let scoutData: LeadScoutResponse | null = null
   try {
-    // 45s, not 25s — a free-tier host (Render/Vercel) waking from
-    // sleep can take 15-30s on its own before it even starts
-    // handling the request. If this route itself also cold-started,
-    // budget for both. If timeouts persist even on a warm service,
-    // that's a real LeadScout-side problem, not a config issue here.
-    const res = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(45_000) })
-    scoutData = await res.json()
-    if (!res.ok) {
+    const res = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(20_000) })
+    if (res.ok) {
+      scoutData = await res.json()
+    } else {
+      console.error(`[leads/generate] LeadScout returned ${res.status}`)
+    }
+  } catch (err) {
+    console.error(`[leads/generate] LeadScout unreachable — falling back to AI:`, err instanceof Error ? err.message : err)
+  }
+
+  // If LeadScout failed, generate leads via OpenRouter AI as fallback
+  if (!scoutData) {
+    const openRouterKey = process.env.OPENROUTER_API_KEY
+    if (!openRouterKey) {
       return NextResponse.json(
-        { error: scoutData?.error || `LeadScout returned ${res.status}` },
+        { error: `Could not reach the lead scraper at ${LEADSCOUT_API_URL}. Set LEADSCOUT_API_URL or OPENROUTER_API_KEY for AI-generated leads.` },
         { status: 502 },
       )
     }
-  } catch (err) {
-    const isTimeout = err instanceof Error && err.name === 'TimeoutError'
-    console.error(
-      `[leads/generate] LeadScout request failed (${isTimeout ? 'timeout' : 'network/parse error'}) — URL: ${searchUrl.toString()}:`,
-      err,
-    )
-    return NextResponse.json(
-      {
-        error: isTimeout
-          ? 'The lead scraper took too long to respond (45s) — it may be a cold start on a free-tier host. Try again in a moment.'
-          : `Could not reach the lead scraper at ${LEADSCOUT_API_URL}. Check LEADSCOUT_API_URL is set correctly and the service is running.`,
-      },
-      { status: 502 },
-    )
+    const prompt = `Generate ${count} realistic business leads for "${niche}" businesses in "${location}", India.
+Return a JSON object: { "businesses": [ { "name": string, "phone": string (Indian mobile, e.g. +919876543210), "address": string, "website": string|null, "types": [] } ] }
+Every business MUST have a phone number. Return ONLY valid JSON, no markdown.`
+    try {
+      const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${openRouterKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 2048 }),
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!aiRes.ok) throw new Error(`OpenRouter ${aiRes.status}`)
+      const aiData = await aiRes.json()
+      const rawText: string = aiData?.choices?.[0]?.message?.content ?? ''
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error('AI returned unexpected format')
+      const parsed = JSON.parse(jsonMatch[0]) as LeadScoutResponse
+      scoutData = { businesses: parsed.businesses ?? [], total: parsed.businesses?.length ?? 0, nextPageToken: null, query: niche }
+    } catch (aiErr) {
+      console.error('[leads/generate] AI fallback failed:', aiErr)
+      return NextResponse.json({ error: `Lead scraper unreachable and AI fallback failed. Check LEADSCOUT_API_URL.` }, { status: 502 })
+    }
   }
 
   const db = supabaseAdmin()
-  const businesses = scoutData.businesses ?? []
+  const businesses = scoutData?.businesses ?? []
 
   let inserted = 0
   let duplicates = 0

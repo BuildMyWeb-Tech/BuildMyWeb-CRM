@@ -101,9 +101,10 @@ export async function GET(request: Request) {
     })
     const allEnquiryTasks = enquiryTasks ?? []
 
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const overdueTasks = allTasks.filter((t) => t.due_date && t.due_date < todayStr)
     const dueTodayTasks = allTasks.filter((t) => t.due_date === todayStr)
-    const upcomingTasks = allTasks.filter((t) => t.due_date && t.due_date > todayStr)
+    const upcomingTasks = allTasks.filter((t) => t.due_date && t.due_date > todayStr && t.due_date <= in30Days)
     const waitingTasks = allTasks.filter((t) => !t.due_date)
 
     const enquiryStatusCounts: Record<string, number> = {}
@@ -113,7 +114,7 @@ export async function GET(request: Request) {
 
     const monthRevenue = (payments ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       stats: {
         task_count: allTasks.length + allEnquiryTasks.length,
         followup_count: (followUps ?? []).length,
@@ -134,6 +135,8 @@ export async function GET(request: Request) {
       unread_dm_count: unreadDMs ?? 0,
       recent_activity: activity ?? [],
     })
+    response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return response
   } catch (err) {
     return toErrorResponse(err)
   }

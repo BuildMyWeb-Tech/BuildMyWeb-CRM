@@ -20,7 +20,9 @@ export async function GET(request: Request) {
 
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ tasks: data ?? [] })
+    const res = NextResponse.json({ tasks: data ?? [] })
+    res.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return res
   } catch (err) {
     return toErrorResponse(err)
   }

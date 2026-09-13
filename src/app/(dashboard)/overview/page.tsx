@@ -10,6 +10,7 @@ import {
   Plus, Loader2, Zap, ArrowRight, CheckCircle2,
   Eye, EyeOff, Pencil, Trash2, X as XIcon,
   CalendarClock, MessageCircle,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -304,34 +305,11 @@ function ProjectsSidebar({
 // ── Followups section (My Work) ───────────────────────────────────────────────
 function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
   const [showHold, setShowHold] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const discussion = followups.filter((f) => f.status === "in_discussion");
   const hold = followups.filter((f) => f.status === "hold");
   const other = followups.filter((f) => f.status !== "in_discussion" && f.status !== "hold");
-  const visible = [...discussion, ...other, ...(showHold ? hold : [])];
-
-  function FollowupRow({ f }: { f: MyWorkFollowUp }) {
-    const fDate = new Date(f.next_follow_up_at);
-    const isOverdueF = fDate < new Date();
-    const isTodayF = fDate.toDateString() === new Date().toDateString();
-    return (
-      <tr className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
-        <td className="px-4 py-3 font-medium text-white">{f.title}</td>
-        <td className="px-4 py-3">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${ENQUIRY_STATUS_STYLE[f.status] ?? "bg-slate-500/20 text-slate-400"}`}>
-            {f.status.replace("_", " ")}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          {f.priority ? (
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[f.priority] ?? ""}`}>{f.priority}</span>
-          ) : <span className="text-slate-600">—</span>}
-        </td>
-        <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
-          {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-        </td>
-      </tr>
-    );
-  }
+  const visible = [...discussion, ...other, ...(showHold ? hold : [])].filter((f) => !hiddenIds.has(f.id));
 
   return (
     <div>
@@ -340,6 +318,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+              <th className="w-8 px-2 py-2.5" />
               <th className="px-4 py-2.5 font-medium">Title</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
               <th className="px-4 py-2.5 font-medium">Priority</th>
@@ -347,7 +326,40 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
             </tr>
           </thead>
           <tbody>
-            {visible.map((f) => <FollowupRow key={f.id} f={f} />)}
+            {visible.map((f) => {
+              const fDate = new Date(f.next_follow_up_at);
+              const isOverdueF = fDate < new Date();
+              const isTodayF = fDate.toDateString() === new Date().toDateString();
+              return (
+                <tr key={f.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                  <td className="px-2 py-2.5">
+                    <button type="button" title="Hide row" onClick={() => setHiddenIds((p) => { const n = new Set(p); n.add(f.id); return n; })}
+                      className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-white">{f.title}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${ENQUIRY_STATUS_STYLE[f.status] ?? "bg-slate-500/20 text-slate-400"}`}>
+                      {f.status.replace("_", " ")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {f.priority ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[f.priority] ?? ""}`}>{f.priority}</span>
+                    ) : <span className="text-slate-600">—</span>}
+                  </td>
+                  <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
+                    {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                  </td>
+                </tr>
+              );
+            })}
+            {hiddenIds.size > 0 && (
+              <tr><td colSpan={5} className="px-4 py-2">
+                <button type="button" onClick={() => setHiddenIds(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                  <EyeOff className="h-3 w-3" /> {hiddenIds.size} hidden — show all
+                </button>
+              </td></tr>
+            )}
           </tbody>
         </table>
         {hold.length > 0 && (
@@ -568,6 +580,18 @@ export default function OverviewPage() {
   // Hidden rows (eye icon)
   const [hiddenRowsEnq, setHiddenRowsEnq] = useState<Set<string>>(new Set());
   const [hiddenRowsPt, setHiddenRowsPt] = useState<Set<string>>(new Set());
+  const [hiddenRowsMw, setHiddenRowsMw] = useState<Set<string>>(new Set());
+  const [hiddenRowsMwFu, setHiddenRowsMwFu] = useState<Set<string>>(new Set());
+  const [hiddenRowsMwPt, setHiddenRowsMwPt] = useState<Set<string>>(new Set());
+
+  // My Work sort state
+  type MwSortField = "title" | "project" | "stage" | "priority" | "due_date";
+  const [mwSortField, setMwSortField] = useState<MwSortField>("due_date");
+  const [mwSortDir, setMwSortDir] = useState<SortDir>("asc");
+  function toggleMwSort(field: MwSortField) {
+    if (mwSortField === field) setMwSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setMwSortField(field); setMwSortDir("asc"); }
+  }
 
   useEffect(() => {
     const [ef, ed] = loadSort("enq", "next_follow_up_at");
@@ -668,7 +692,19 @@ export default function OverviewPage() {
   const dueTodayProjectTasks = (myWorkData?.my_work.due_today ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
   const upcomingTaskList = (myWorkData?.my_work.upcoming ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
   const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
-  const allProjectTasks = [...overdueProjectTasks, ...dueTodayProjectTasks, ...upcomingTaskList, ...waitingTaskList];
+  const allProjectTasksRaw = [...overdueProjectTasks, ...dueTodayProjectTasks, ...upcomingTaskList, ...waitingTaskList];
+  const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, normal: 2, low: 3 };
+  const allProjectTasks = [...allProjectTasksRaw].sort((a, b) => {
+    const dir = mwSortDir === "asc" ? 1 : -1;
+    if (mwSortField === "title") return dir * a.title.localeCompare(b.title);
+    if (mwSortField === "project") return dir * (a.project?.name ?? "").localeCompare(b.project?.name ?? "");
+    if (mwSortField === "stage") return dir * (a.stage?.name ?? "").localeCompare(b.stage?.name ?? "");
+    if (mwSortField === "priority") return dir * ((PRIORITY_RANK[a.priority ?? ""] ?? 9) - (PRIORITY_RANK[b.priority ?? ""] ?? 9));
+    // due_date default
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1; if (!b.due_date) return -1;
+    return dir * a.due_date.localeCompare(b.due_date);
+  });
   const allFollowups = myWorkData?.followups ?? [];
   const myProductTasks = allProductTasks.filter((t) => {
     if (!myWorkUserId) return true;
@@ -994,19 +1030,27 @@ export default function OverviewPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
-                              <th className="px-4 py-2.5 font-medium">Task</th>
-                              <th className="px-4 py-2.5 font-medium">Project</th>
-                              <th className="px-4 py-2.5 font-medium">Stage</th>
-                              <th className="px-4 py-2.5 font-medium">Priority</th>
-                              <th className="px-4 py-2.5 font-medium">Due</th>
+                              <th className="w-8 px-2 py-2.5" />
+                              {([ ["title","Task"], ["project","Project"], ["stage","Stage"], ["priority","Priority"], ["due_date","Due"] ] as [MwSortField, string][]).map(([f, label]) => (
+                                <th key={f} className="px-4 py-2.5 font-medium">
+                                  <button type="button" onClick={() => toggleMwSort(f)} className="flex items-center gap-1 hover:text-white">
+                                    {label}
+                                    {mwSortField === f ? (mwSortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3" />}
+                                  </button>
+                                </th>
+                              ))}
                             </tr>
                           </thead>
                           <tbody>
-                            {allProjectTasks.map((task) => {
+                            {allProjectTasks.filter((t) => !hiddenRowsMw.has(t.id)).map((task) => {
                               const isOverdue = overdueProjectTasks.some((t) => t.id === task.id);
                               const isToday = myWorkData?.my_work.due_today.some((t) => t.id === task.id);
                               return (
                                 <tr key={task.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                                  <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" title="Hide row" onClick={() => setHiddenRowsMw((p) => { const n = new Set(p); n.add(task.id); return n; })}
+                                      className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
+                                  </td>
                                   <td className="px-4 py-3 font-medium text-white">
                                     <div className="flex items-center gap-2">
                                       <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${isOverdue ? "bg-red-400" : isToday ? "bg-amber-400" : "bg-blue-400"}`} />
@@ -1026,6 +1070,13 @@ export default function OverviewPage() {
                                 </tr>
                               );
                             })}
+                            {hiddenRowsMw.size > 0 && (
+                              <tr><td colSpan={6} className="px-4 py-2">
+                                <button type="button" onClick={() => setHiddenRowsMw(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                                  <EyeOff className="h-3 w-3" /> {hiddenRowsMw.size} hidden — show all
+                                </button>
+                              </td></tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -1043,6 +1094,7 @@ export default function OverviewPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+                              <th className="w-8 px-2 py-2.5" />
                               <th className="px-4 py-2.5 font-medium">Task</th>
                               <th className="px-4 py-2.5 font-medium">Product</th>
                               <th className="px-4 py-2.5 font-medium">Priority</th>
@@ -1050,12 +1102,16 @@ export default function OverviewPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {myProductTasks.map((t) => {
+                            {myProductTasks.filter((t) => !hiddenRowsMwPt.has(t.id)).map((t) => {
                               const isOverdueP = t.due_date && t.due_date < todayStr;
                               const isTodayP = t.due_date === todayStr;
                               const prodName = (t.product as { project_name?: string; name?: string } | null)?.project_name ?? (t.product as { project_name?: string; name?: string } | null)?.name ?? "—";
                               return (
                                 <tr key={t.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                                  <td className="px-2 py-2.5">
+                                    <button type="button" title="Hide row" onClick={() => setHiddenRowsMwPt((p) => { const n = new Set(p); n.add(t.id); return n; })}
+                                      className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
+                                  </td>
                                   <td className="px-4 py-3 font-medium text-white">{t.title}</td>
                                   <td className="px-4 py-3 text-xs text-slate-400">{prodName}</td>
                                   <td className="px-4 py-3">
@@ -1067,6 +1123,13 @@ export default function OverviewPage() {
                                 </tr>
                               );
                             })}
+                            {hiddenRowsMwPt.size > 0 && (
+                              <tr><td colSpan={5} className="px-4 py-2">
+                                <button type="button" onClick={() => setHiddenRowsMwPt(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                                  <EyeOff className="h-3 w-3" /> {hiddenRowsMwPt.size} hidden — show all
+                                </button>
+                              </td></tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -1376,46 +1439,7 @@ export default function OverviewPage() {
 
       {/* Right sidebar — content varies per tab */}
       <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
-        {activeTab === "project-tasks" ? (
-          <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                { label: "Total", count: allProductTasks.length, color: "text-teal-400" },
-                { label: "Overdue", count: allProductTasks.filter((t) => t.due_date && t.due_date < todayStr).length, color: "text-red-400" },
-              ].map((s) => (
-                <div key={s.label} className="rounded-lg bg-[#0f1117] px-2 py-2 text-center">
-                  <p className={`text-sm font-bold ${s.color}`}>{s.count}</p>
-                  <p className="text-[9px] text-slate-600 mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-xl border border-[#2a3045] overflow-hidden">
-              <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2">
-                <Package className="h-3.5 w-3.5 text-teal-400" />
-                <span className="text-xs font-semibold text-white">Product Task Breakdown</span>
-              </div>
-              <div className="divide-y divide-[#2a3045]">
-                {(() => {
-                  const byProduct = allProductTasks.reduce<Record<string, { name: string; count: number }>>((acc, t) => {
-                    const key = t.product_id ?? "__none__";
-                    const name = (t.product as { project_name?: string } | null)?.project_name ?? "No Product";
-                    if (!acc[key]) acc[key] = { name, count: 0 };
-                    acc[key].count++;
-                    return acc;
-                  }, {});
-                  const rows = Object.values(byProduct).sort((a, b) => b.count - a.count);
-                  if (rows.length === 0) return <p className="px-3 py-4 text-center text-xs text-slate-500">No product tasks</p>;
-                  return rows.map((p) => (
-                    <div key={p.name} className="flex items-center justify-between px-3 py-2">
-                      <p className="text-xs text-slate-300 truncate flex-1">{p.name}</p>
-                      <span className="shrink-0 ml-2 text-[10px] font-bold text-teal-400">{p.count}</span>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </div>
-          </div>
-        ) : activeTab === "my-work" ? (
+        {activeTab === "my-work" ? (
           <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-1.5">

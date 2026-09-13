@@ -352,7 +352,16 @@ export default function ProductTasksPage() {
     ]);
     if (membersRes?.members) setMembers(membersRes.members);
     if (productsRes?.products) setProducts(productsRes.products.map((p: { id: string; project_name: string }) => ({ id: p.id, project_name: p.project_name })));
-    if (stagesData.data) setStages(stagesData.data);
+    if (stagesData.data) {
+      // Deduplicate by name — pipeline_stages has one row per stage per pipeline,
+      // so the same name (e.g. "To Do") appears multiple times across projects.
+      const seen = new Set<string>();
+      setStages(stagesData.data.filter((s) => {
+        if (seen.has(s.name)) return false;
+        seen.add(s.name);
+        return true;
+      }));
+    }
   }, [accountId]);
 
   useEffect(() => { load(); }, [load]);
