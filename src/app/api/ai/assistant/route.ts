@@ -14,7 +14,7 @@ Supported actions:
 - create_project: Create a new project. Fields: name (required), status ("active"|"inactive", default "active"), client_name (optional string to match or create client)
 - create_product: Create a new product. Fields: project_name (required — the product/app name), purpose (optional description), priority ("low"|"medium"|"high"|"urgent", default "medium")
 - create_task: Create a project task. Fields: title (required), project_name (optional, to find the project), due_date (ISO date YYYY-MM-DD, optional), show_date (ISO date YYYY-MM-DD — when the task becomes visible in UI; use for "show from X date"), priority ("low"|"medium"|"high"|"urgent", default "medium"), status (optional)
-- create_enquiry: Create a new client enquiry/lead. Fields: title (required), phone (optional), status ("new"|"in_discussion"|"hold", default "new")
+- create_enquiry: Create a new client enquiry/lead. Fields: title (required), phone (optional), status ("in_discussion"|"hold"|"confirmed"|"rejected", default "in_discussion")
 - create_product_task: Create a product task. Fields: title (required), product_name (optional — name of the product to link), priority ("low"|"medium"|"high"|"urgent", default "medium"), due_date (optional ISO date)
 - update_task: Update an existing task. Fields: title_query (text to search for), updates (object with fields to change: title, due_date, priority, status)
 - delete_task: Delete a task by title. Fields: title_query (text to match)

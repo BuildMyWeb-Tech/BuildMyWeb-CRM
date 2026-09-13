@@ -104,7 +104,7 @@ export function AiAssistant() {
       return `Task "${data.title}" created${data.show_date ? ` (visible from ${data.show_date})` : ""}.`;
 
     } else if (action === "create_enquiry") {
-      const { error } = await supabase.from("client_leads").insert({ account_id: accountId, title: data.title, phone: data.phone ?? null, status: data.status ?? "new", created_by: user?.id });
+      const { error } = await supabase.from("client_leads").insert({ account_id: accountId, title: data.title, phone: data.phone ?? null, status: data.status ?? "in_discussion", created_by: user?.id });
       if (error) throw new Error(error.message);
       return `Enquiry "${data.title}" created.`;
 
