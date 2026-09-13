@@ -100,8 +100,8 @@ export async function POST(request: Request) {
       rawText = data?.content?.[0]?.text ?? ''
     } else {
       // Gemini
-      const rawModel = config.model || 'gemini-1.5-flash-latest'
-      const model = /-(latest|\d{3}|exp|8b|lite)$/.test(rawModel) ? rawModel : `${rawModel}-latest`
+      const rawModel = config.model || 'gemini-flash-latest'
+      const model = rawModel.startsWith('models/') ? rawModel.slice('models/'.length) : rawModel
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`
       const res = await fetch(geminiUrl, {
         method: 'POST',
@@ -113,7 +113,12 @@ export async function POST(request: Request) {
         }),
         signal: AbortSignal.timeout(15000),
       })
-      if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        console.error('[ai/assistant] Gemini error', res.status, JSON.stringify(errBody))
+        const msg = errBody?.error?.message ?? `status ${res.status}`
+        return NextResponse.json({ error: `Gemini error: ${msg}` }, { status: 502 })
+      }
       const data = await res.json()
       rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
