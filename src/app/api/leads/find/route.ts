@@ -2,6 +2,34 @@ import { NextResponse } from 'next/server'
 import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account'
 import { loadAiConfig } from '@/lib/ai/config'
 
+async function openRouterFallback(prompt: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('OpenRouter not configured')
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'openai/gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: maxTokens,
+    }),
+    signal: AbortSignal.timeout(30000),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null)
+    throw new Error(errBody?.error?.message ?? `OpenRouter status ${res.status}`)
+  }
+  const data = await res.json()
+  return data?.choices?.[0]?.message?.content ?? ''
+}
+
+function isGeminiOverloaded(status: number, message: string): boolean {
+  return status === 503 || status === 429 ||
+    message.toLowerCase().includes('high demand') ||
+    message.toLowerCase().includes('overloaded') ||
+    message.toLowerCase().includes('try again later')
+}
+
 // POST /api/leads/find — use AI to find leads for a niche+location
 // and optionally fetch from a configured target URL.
 export async function POST(request: Request) {
@@ -97,9 +125,17 @@ Return ONLY valid JSON array, no markdown, no other text.`
         }),
         signal: AbortSignal.timeout(30000),
       })
-      if (!res.ok) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
-      const data = await res.json()
-      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg = errBody?.error?.message ?? `status ${res.status}`
+        if (isGeminiOverloaded(res.status, msg)) {
+          try { rawText = await openRouterFallback(prompt, 2048) } catch { /* fall through to empty */ }
+        }
+        if (!rawText) return NextResponse.json({ error: `AI provider error: ${res.status}` }, { status: 502 })
+      } else {
+        const data = await res.json()
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      }
     }
 
     const arrMatch = rawText.match(/\[[\s\S]*\]/)

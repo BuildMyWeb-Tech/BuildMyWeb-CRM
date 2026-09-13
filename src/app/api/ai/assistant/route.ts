@@ -5,6 +5,37 @@ import { loadAiConfig } from '@/lib/ai/config'
 // POST /api/ai/assistant — parse a natural-language CRM command and return a structured action.
 // The actual execution happens on the client side using the action data returned.
 
+async function openRouterFallback(systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('OpenRouter not configured')
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'openai/gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: maxTokens,
+    }),
+    signal: AbortSignal.timeout(20000),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null)
+    throw new Error(errBody?.error?.message ?? `OpenRouter status ${res.status}`)
+  }
+  const data = await res.json()
+  return data?.choices?.[0]?.message?.content ?? ''
+}
+
+function isGeminiOverloaded(status: number, message: string): boolean {
+  return status === 503 || status === 429 ||
+    message.toLowerCase().includes('high demand') ||
+    message.toLowerCase().includes('overloaded') ||
+    message.toLowerCase().includes('try again later')
+}
+
 const SYSTEM_PROMPT = `You are a CRM command parser. The user will type a natural language command.
 Parse it into a structured JSON action to execute in the CRM.
 
@@ -115,12 +146,22 @@ export async function POST(request: Request) {
       })
       if (!res.ok) {
         const errBody = await res.json().catch(() => null)
-        console.error('[ai/assistant] Gemini error', res.status, JSON.stringify(errBody))
         const msg = errBody?.error?.message ?? `status ${res.status}`
-        return NextResponse.json({ error: `Gemini error: ${msg}` }, { status: 502 })
+        if (isGeminiOverloaded(res.status, msg)) {
+          try {
+            rawText = await openRouterFallback(systemPrompt, message, 1024)
+          } catch (fallbackErr) {
+            const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : 'unknown'
+            return NextResponse.json({ error: `Gemini busy, OpenRouter fallback failed: ${fallbackMsg}` }, { status: 502 })
+          }
+        } else {
+          console.error('[ai/assistant] Gemini error', res.status, JSON.stringify(errBody))
+          return NextResponse.json({ error: `Gemini error: ${msg}` }, { status: 502 })
+        }
+      } else {
+        const data = await res.json()
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
       }
-      const data = await res.json()
-      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
 
     // Parse JSON from response (strip markdown fences if any)
