@@ -305,7 +305,16 @@ function ProjectsSidebar({
 // ── Followups section (My Work) ───────────────────────────────────────────────
 function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
   const [showHold, setShowHold] = useState(false);
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("mw-hidden-followups") ?? "[]")); } catch { return new Set(); }
+  });
+  function setHiddenIdsP(fn: (prev: Set<string>) => Set<string>) {
+    setHiddenIds((prev) => {
+      const next = fn(prev);
+      try { localStorage.setItem("mw-hidden-followups", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
   const discussion = followups.filter((f) => f.status === "in_discussion");
   const hold = followups.filter((f) => f.status === "hold");
   const other = followups.filter((f) => f.status !== "in_discussion" && f.status !== "hold");
@@ -333,7 +342,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
               return (
                 <tr key={f.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                   <td className="px-2 py-2.5">
-                    <button type="button" title="Hide row" onClick={() => setHiddenIds((p) => { const n = new Set(p); n.add(f.id); return n; })}
+                    <button type="button" title="Hide row" onClick={() => setHiddenIdsP((p) => { const n = new Set(p); n.add(f.id); return n; })}
                       className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
                   </td>
                   <td className="px-4 py-3 font-medium text-white">{f.title}</td>
@@ -355,7 +364,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
             })}
             {hiddenIds.size > 0 && (
               <tr><td colSpan={5} className="px-4 py-2">
-                <button type="button" onClick={() => setHiddenIds(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                <button type="button" onClick={() => setHiddenIdsP(() => new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
                   <EyeOff className="h-3 w-3" /> {hiddenIds.size} hidden — show all
                 </button>
               </td></tr>
@@ -476,7 +485,7 @@ function ProductTasksSidebar({ productTasks }: { productTasks: ProductTask[] }) 
     acc[key].count++;
     return acc;
   }, {});
-  const productRows = Object.values(byProduct).sort((a, b) => b.count - a.count);
+  const productRows = Object.values(byProduct).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
@@ -577,12 +586,30 @@ export default function OverviewPage() {
   const [enqModal, setEnqModal] = useState<EnqModalState | null>(null);
   const [enqModalSaving, setEnqModalSaving] = useState(false);
 
-  // Hidden rows (eye icon)
+  // Hidden rows (eye icon) — persisted in localStorage
   const [hiddenRowsEnq, setHiddenRowsEnq] = useState<Set<string>>(new Set());
   const [hiddenRowsPt, setHiddenRowsPt] = useState<Set<string>>(new Set());
-  const [hiddenRowsMw, setHiddenRowsMw] = useState<Set<string>>(new Set());
+  const [hiddenRowsMw, setHiddenRowsMw] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("mw-hidden-tasks") ?? "[]")); } catch { return new Set(); }
+  });
   const [hiddenRowsMwFu, setHiddenRowsMwFu] = useState<Set<string>>(new Set());
-  const [hiddenRowsMwPt, setHiddenRowsMwPt] = useState<Set<string>>(new Set());
+  const [hiddenRowsMwPt, setHiddenRowsMwPt] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("mw-hidden-product-tasks") ?? "[]")); } catch { return new Set(); }
+  });
+  function persistHiddenMw(fn: (prev: Set<string>) => Set<string>) {
+    setHiddenRowsMw((prev) => {
+      const next = fn(prev);
+      try { localStorage.setItem("mw-hidden-tasks", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+  function persistHiddenMwPt(fn: (prev: Set<string>) => Set<string>) {
+    setHiddenRowsMwPt((prev) => {
+      const next = fn(prev);
+      try { localStorage.setItem("mw-hidden-product-tasks", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
 
   // My Work sort state
   type MwSortField = "title" | "project" | "stage" | "priority" | "due_date";
@@ -1048,7 +1075,7 @@ export default function OverviewPage() {
                               return (
                                 <tr key={task.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                                   <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                                    <button type="button" title="Hide row" onClick={() => setHiddenRowsMw((p) => { const n = new Set(p); n.add(task.id); return n; })}
+                                    <button type="button" title="Hide row" onClick={() => persistHiddenMw((p) => { const n = new Set(p); n.add(task.id); return n; })}
                                       className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
                                   </td>
                                   <td className="px-4 py-3 font-medium text-white">
@@ -1072,7 +1099,7 @@ export default function OverviewPage() {
                             })}
                             {hiddenRowsMw.size > 0 && (
                               <tr><td colSpan={6} className="px-4 py-2">
-                                <button type="button" onClick={() => setHiddenRowsMw(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                                <button type="button" onClick={() => persistHiddenMw(() => new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
                                   <EyeOff className="h-3 w-3" /> {hiddenRowsMw.size} hidden — show all
                                 </button>
                               </td></tr>
@@ -1109,7 +1136,7 @@ export default function OverviewPage() {
                               return (
                                 <tr key={t.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                                   <td className="px-2 py-2.5">
-                                    <button type="button" title="Hide row" onClick={() => setHiddenRowsMwPt((p) => { const n = new Set(p); n.add(t.id); return n; })}
+                                    <button type="button" title="Hide row" onClick={() => persistHiddenMwPt((p) => { const n = new Set(p); n.add(t.id); return n; })}
                                       className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
                                   </td>
                                   <td className="px-4 py-3 font-medium text-white">{t.title}</td>
@@ -1125,7 +1152,7 @@ export default function OverviewPage() {
                             })}
                             {hiddenRowsMwPt.size > 0 && (
                               <tr><td colSpan={5} className="px-4 py-2">
-                                <button type="button" onClick={() => setHiddenRowsMwPt(new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                                <button type="button" onClick={() => persistHiddenMwPt(() => new Set())} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
                                   <EyeOff className="h-3 w-3" /> {hiddenRowsMwPt.size} hidden — show all
                                 </button>
                               </td></tr>

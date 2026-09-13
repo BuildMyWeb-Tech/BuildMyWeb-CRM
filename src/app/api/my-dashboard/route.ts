@@ -30,16 +30,15 @@ export async function GET(request: Request) {
       .neq('status', 'done')
       .order('due_date', { ascending: true })
 
-    // Follow-ups assigned to targetUserId (client leads)
+    // Follow-ups assigned to targetUserId (client leads) — match single field OR array field
     const { data: followUps } = await ctx.supabase
       .from('client_leads')
       .select('id, title, next_follow_up_at, status, priority')
       .eq('account_id', ctx.accountId)
-      .eq('allocated_user_id', targetUserId)
+      .or(`allocated_user_id.eq.${targetUserId},allocated_user_ids.cs.{${targetUserId}}`)
       .not('next_follow_up_at', 'is', null)
-      .lte('next_follow_up_at', new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString())
       .order('next_follow_up_at', { ascending: true })
-      .limit(20)
+      .limit(100)
 
     // Projects owned by or assigned to user
     const { data: projects } = await ctx.supabase

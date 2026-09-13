@@ -85,39 +85,14 @@ export async function POST(request: Request) {
       console.error(`[leads/generate] LeadScout returned ${res.status}`)
     }
   } catch (err) {
-    console.error(`[leads/generate] LeadScout unreachable — falling back to AI:`, err instanceof Error ? err.message : err)
+    console.error(`[leads/generate] LeadScout unreachable:`, err instanceof Error ? err.message : err)
   }
 
-  // If LeadScout failed, generate leads via OpenRouter AI as fallback
   if (!scoutData) {
-    const openRouterKey = process.env.OPENROUTER_API_KEY
-    if (!openRouterKey) {
-      return NextResponse.json(
-        { error: `Could not reach the lead scraper at ${LEADSCOUT_API_URL}. Set LEADSCOUT_API_URL or OPENROUTER_API_KEY for AI-generated leads.` },
-        { status: 502 },
-      )
-    }
-    const prompt = `Generate ${count} realistic business leads for "${niche}" businesses in "${location}", India.
-Return a JSON object: { "businesses": [ { "name": string, "phone": string (Indian mobile, e.g. +919876543210), "address": string, "website": string|null, "types": [] } ] }
-Every business MUST have a phone number. Return ONLY valid JSON, no markdown.`
-    try {
-      const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${openRouterKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 2048 }),
-        signal: AbortSignal.timeout(30_000),
-      })
-      if (!aiRes.ok) throw new Error(`OpenRouter ${aiRes.status}`)
-      const aiData = await aiRes.json()
-      const rawText: string = aiData?.choices?.[0]?.message?.content ?? ''
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('AI returned unexpected format')
-      const parsed = JSON.parse(jsonMatch[0]) as LeadScoutResponse
-      scoutData = { businesses: parsed.businesses ?? [], total: parsed.businesses?.length ?? 0, nextPageToken: null, query: niche }
-    } catch (aiErr) {
-      console.error('[leads/generate] AI fallback failed:', aiErr)
-      return NextResponse.json({ error: `Lead scraper unreachable and AI fallback failed. Check LEADSCOUT_API_URL.` }, { status: 502 })
-    }
+    return NextResponse.json(
+      { error: `Could not reach LeadScout at ${LEADSCOUT_API_URL}. Check that LEADSCOUT_API_URL is correct and the service is running.` },
+      { status: 502 },
+    )
   }
 
   const db = supabaseAdmin()
