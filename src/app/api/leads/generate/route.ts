@@ -187,7 +187,7 @@ export async function POST(request: Request) {
         lead_source:     'maps_scraper',
         search_category: niche,
       })
-      .select('id, account_id, name, company, search_category, website')
+      .select('id, account_id, name, company, search_category')
       .single()
 
     if (insertError) {
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
 
     inserted++
 
-    const outcome = await qualifyLead(db, contact)
+    const outcome = await qualifyLead(db, { ...contact, website: biz.website ?? null })
     if (outcome.status === 'qualified')         qualified++
     else if (outcome.status === 'ai_not_configured') aiNotConfigured = true
     else                                          qualifyFailed++
