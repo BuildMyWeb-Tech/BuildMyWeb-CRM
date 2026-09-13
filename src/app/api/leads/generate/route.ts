@@ -7,27 +7,43 @@ import { qualifyLead } from '@/lib/leads/qualify'
 // POST /api/leads/generate
 // Body: { niche: string, location: string, count?: number }
 //
-// 1. Calls your deployed LeadScout API (Google Places, New API)
-//    for businesses matching niche+location.
-// 2. Inserts each result with a phone number as a contact —
-//    results with no phone are skipped, since this CRM's contact
-//    model requires one (contacts.phone is NOT NULL) and a lead
-//    with no phone can't receive WhatsApp outreach anyway.
-// 3. Relies on the DB-level UNIQUE(account_id, phone_normalized)
-//    constraint from 022_contact_phone_dedup.sql for dedup — an
-//    insert that collides is treated as "already have this lead",
-//    not an error.
-// 4. Qualifies each newly-inserted contact synchronously via
-//    src/lib/leads/qualify.ts before returning.
-//
-// Runs synchronously in one request. Fine at the 20-60 leads/run
-// scale this is built for; if that grows meaningfully, move step 4
-// to a background job instead of extending this route's timeout.
+// Calls Google Places API (New) directly to search businesses,
+// then inserts each result with a phone number as a contact.
+// Results with no phone are skipped (contacts.phone is NOT NULL).
+// Uses UNIQUE(account_id, phone_normalized) for dedup.
 // ============================================================
 
-const LEADSCOUT_API_URL = process.env.LEADSCOUT_API_URL || 'https://lead-generater-web.vercel.app'
+const PLACES_BASE = 'https://places.googleapis.com/v1'
+const PLACES_FIELDS = [
+  'places.id',
+  'places.displayName',
+  'places.rating',
+  'places.userRatingCount',
+  'places.formattedAddress',
+  'places.internationalPhoneNumber',
+  'places.websiteUri',
+  'places.regularOpeningHours',
+  'places.location',
+  'places.types',
+  'places.priceLevel',
+  'nextPageToken',
+].join(',')
 
-interface LeadScoutBusiness {
+interface PlacesPlace {
+  id?: string
+  displayName?: { text: string; languageCode: string }
+  rating?: number
+  userRatingCount?: number
+  formattedAddress?: string
+  internationalPhoneNumber?: string
+  websiteUri?: string
+  regularOpeningHours?: { openNow: boolean }
+  location?: { latitude: number; longitude: number }
+  types?: string[]
+  priceLevel?: string
+}
+
+interface Business {
   placeId: string | null
   name: string
   rating: number | null
@@ -42,12 +58,77 @@ interface LeadScoutBusiness {
   lng: number | null
 }
 
-interface LeadScoutResponse {
-  businesses: LeadScoutBusiness[]
-  total: number
-  nextPageToken: string | null
-  query: string
-  error?: string
+function normalizeBusiness(place: PlacesPlace): Business {
+  const rawSite = place.websiteUri ?? null
+  const website = rawSite ? rawSite.replace(/^https?:\/\//, '').replace(/\/$/, '') : null
+  return {
+    placeId:    place.id ?? null,
+    name:       place.displayName?.text ?? 'Unknown',
+    rating:     place.rating ?? null,
+    reviews:    place.userRatingCount ?? 0,
+    address:    place.formattedAddress ?? null,
+    phone:      place.internationalPhoneNumber ?? null,
+    website,
+    isOpen:     place.regularOpeningHours?.openNow ?? null,
+    types:      (place.types ?? []).slice(0, 3),
+    priceLevel: place.priceLevel ?? null,
+    lat:        place.location?.latitude ?? null,
+    lng:        place.location?.longitude ?? null,
+  }
+}
+
+async function placesTextSearch(query: string, apiKey: string, pageToken?: string): Promise<{ places: PlacesPlace[]; nextPageToken?: string }> {
+  const body: Record<string, unknown> = { textQuery: query, maxResultCount: 20 }
+  if (pageToken) body.pageToken = pageToken
+
+  const res = await fetch(`${PLACES_BASE}/places:searchText`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': PLACES_FIELDS,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null)
+    const msg = err?.error?.message ?? `status ${res.status}`
+    if (res.status === 403 || msg.includes('API_KEY') || msg.includes('PERMISSION')) {
+      throw new Error(`Google Places API access denied: ${msg}. Enable "Places API (New)" in Google Cloud Console.`)
+    }
+    throw new Error(`Google Places API error: ${msg}`)
+  }
+
+  return res.json()
+}
+
+async function searchGooglePlaces(keyword: string, location: string, maxResults: number, apiKey: string): Promise<Business[]> {
+  const query = `${keyword} in ${location}`
+
+  const data1 = await placesTextSearch(query, apiKey)
+  let rawPlaces: PlacesPlace[] = data1.places ?? []
+  let nextToken = data1.nextPageToken
+
+  // Fetch page 2 if needed and available
+  if (rawPlaces.length < maxResults && nextToken) {
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      const data2 = await placesTextSearch(query, apiKey, nextToken)
+      rawPlaces = [...rawPlaces, ...(data2.places ?? [])]
+    } catch (err) {
+      console.warn('[leads/generate] page 2 failed:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  // Normalize, dedup by placeId, trim to maxResults, sort by rating
+  const seen = new Set<string>()
+  return rawPlaces
+    .map(normalizeBusiness)
+    .filter((b) => { if (!b.placeId || seen.has(b.placeId)) return false; seen.add(b.placeId); return true })
+    .slice(0, maxResults)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
 }
 
 export async function POST(request: Request) {
@@ -61,75 +142,55 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
-  const niche = typeof body.niche === 'string' ? body.niche.trim() : ''
+  const niche    = typeof body.niche    === 'string' ? body.niche.trim()    : ''
   const location = typeof body.location === 'string' ? body.location.trim() : ''
-  // LeadScout itself clamps to 60 server-side; clamp here too so the
-  // UI's expectations match what actually comes back.
-  const count = Math.min(Math.max(parseInt(body.count, 10) || 30, 1), 60)
+  const count    = Math.min(Math.max(parseInt(body.count, 10) || 30, 1), 60)
 
   if (!niche || !location) {
     return NextResponse.json({ error: 'niche and location are required' }, { status: 400 })
   }
 
-  const searchUrl = new URL('/api/search', LEADSCOUT_API_URL)
-  searchUrl.searchParams.set('q', niche)
-  searchUrl.searchParams.set('location', location)
-  searchUrl.searchParams.set('maxResults', String(count))
-
-  let scoutData: LeadScoutResponse | null = null
-  try {
-    const res = await fetch(searchUrl.toString(), { signal: AbortSignal.timeout(20_000) })
-    if (res.ok) {
-      scoutData = await res.json()
-    } else {
-      console.error(`[leads/generate] LeadScout returned ${res.status}`)
-    }
-  } catch (err) {
-    console.error(`[leads/generate] LeadScout unreachable:`, err instanceof Error ? err.message : err)
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY
+  if (!apiKey) {
+    return NextResponse.json({ error: 'GOOGLE_PLACES_API_KEY is not configured on the server.' }, { status: 500 })
   }
 
-  if (!scoutData) {
-    return NextResponse.json(
-      { error: `Could not reach LeadScout at ${LEADSCOUT_API_URL}. Check that LEADSCOUT_API_URL is correct and the service is running.` },
-      { status: 502 },
-    )
+  let businesses: Business[]
+  try {
+    businesses = await searchGooglePlaces(niche, location, count, apiKey)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[leads/generate] Google Places search failed:', msg)
+    return NextResponse.json({ error: msg }, { status: 502 })
   }
 
   const db = supabaseAdmin()
-  const businesses = scoutData?.businesses ?? []
-
-  let inserted = 0
-  let duplicates = 0
+  let inserted      = 0
+  let duplicates    = 0
   let skippedNoPhone = 0
-  let qualified = 0
+  let qualified     = 0
   let qualifyFailed = 0
   let aiNotConfigured = false
 
   for (const biz of businesses) {
-    if (!biz.phone) {
-      skippedNoPhone++
-      continue
-    }
+    if (!biz.phone) { skippedNoPhone++; continue }
 
     const { data: contact, error: insertError } = await db
       .from('contacts')
       .insert({
-        account_id: ctx.accountId,
-        user_id: ctx.userId,
-        name: biz.name,
-        phone: biz.phone,
-        website: biz.website ? `https://${biz.website}` : null,
-        company: biz.address,
-        lead_source: 'maps_scraper',
+        account_id:      ctx.accountId,
+        user_id:         ctx.userId,
+        name:            biz.name,
+        phone:           biz.phone,
+        website:         biz.website ? `https://${biz.website}` : null,
+        company:         biz.address,
+        lead_source:     'maps_scraper',
         search_category: niche,
       })
       .select('id, account_id, name, company, search_category, website')
       .single()
 
     if (insertError) {
-      // 23505 = unique_violation — the phone_normalized constraint
-      // from 022_contact_phone_dedup.sql caught an existing contact.
-      // Anything else is a real failure worth logging.
       if (insertError.code === '23505') {
         duplicates++
       } else {
@@ -141,13 +202,9 @@ export async function POST(request: Request) {
     inserted++
 
     const outcome = await qualifyLead(db, contact)
-    if (outcome.status === 'qualified') {
-      qualified++
-    } else if (outcome.status === 'ai_not_configured') {
-      aiNotConfigured = true
-    } else {
-      qualifyFailed++
-    }
+    if (outcome.status === 'qualified')         qualified++
+    else if (outcome.status === 'ai_not_configured') aiNotConfigured = true
+    else                                          qualifyFailed++
   }
 
   return NextResponse.json({
