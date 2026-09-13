@@ -72,7 +72,7 @@ export async function POST(request: Request) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: message },
           ],
-          max_completion_tokens: 512,
+          max_completion_tokens: 1024,
         }),
         signal: AbortSignal.timeout(15000),
       })
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
           model: config.model || 'claude-haiku-4-5-20251001',
           system: systemPrompt,
           messages: [{ role: 'user', content: message }],
-          max_tokens: 512,
+          max_tokens: 1024,
         }),
         signal: AbortSignal.timeout(15000),
       })
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: message }] }],
-          generationConfig: { maxOutputTokens: 512 },
+          generationConfig: { maxOutputTokens: 1024 },
         }),
         signal: AbortSignal.timeout(15000),
       })
