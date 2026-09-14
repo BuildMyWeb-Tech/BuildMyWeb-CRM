@@ -14,11 +14,13 @@ export async function GET(request: Request) {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
 
-    // All project tasks for the account (My Work shows everything relevant to the user)
+    // Project tasks assigned to targetUserId, visible today (show_date <= today or null)
     const { data: tasks } = await ctx.supabase
       .from('project_tasks')
       .select('id, title, priority, due_date, show_date, project_id, assignee_user_id, assignee_user_ids, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
       .eq('account_id', ctx.accountId)
+      .or(`assignee_user_id.eq.${targetUserId},assignee_user_ids.cs.{${targetUserId}}`)
+      .or(`show_date.is.null,show_date.lte.${todayStr}`)
       .order('due_date', { ascending: true, nullsFirst: false })
 
     // Enquiry tasks assigned to targetUserId
@@ -36,8 +38,7 @@ export async function GET(request: Request) {
       .select('id, title, next_follow_up_at, status, priority')
       .eq('account_id', ctx.accountId)
       .or(`allocated_user_id.eq.${targetUserId},allocated_user_ids.cs.{${targetUserId}}`)
-      .not('next_follow_up_at', 'is', null)
-      .order('next_follow_up_at', { ascending: true })
+      .order('next_follow_up_at', { ascending: true, nullsFirst: false })
       .limit(100)
 
     // Projects owned by or assigned to user

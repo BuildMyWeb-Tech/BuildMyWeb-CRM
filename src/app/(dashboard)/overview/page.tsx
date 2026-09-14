@@ -87,22 +87,22 @@ interface MyWorkTask {
 interface MyWorkFollowUp {
   id: string;
   title: string;
-  next_follow_up_at: string;
+  next_follow_up_at: string | null;
   status: string;
   priority: string | null;
 }
 
-type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks" | "task-automation";
+type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks" | "leads-captured";
 type SortDir = "asc" | "desc";
 type EnqSortField = "title" | "status" | "priority" | "next_follow_up_at";
 type PtSortField = "title" | "priority" | "due_date";
 
 const TABS: { key: TabKey; label: string; icon: typeof ListChecks }[] = [
-  { key: "my-work",         label: "My Work",         icon: Briefcase },
-  { key: "project-tasks",   label: "Project Tasks",   icon: ListChecks },
-  { key: "enquiry-tasks",   label: "Enquiry Tasks",   icon: ClipboardList },
-  { key: "product-tasks",   label: "Product Tasks",   icon: Package },
-  { key: "task-automation", label: "Task Automation", icon: Zap },
+  { key: "my-work",        label: "My Work",          icon: Briefcase },
+  { key: "project-tasks",  label: "Project Tasks",    icon: ListChecks },
+  { key: "enquiry-tasks",  label: "Enquiry Tasks",    icon: ClipboardList },
+  { key: "product-tasks",  label: "Product Tasks",    icon: Package },
+  { key: "leads-captured", label: "Leads Captured",   icon: Users },
 ];
 
 const ENQUIRY_STATUS_STYLE: Record<string, string> = {
@@ -305,6 +305,7 @@ function ProjectsSidebar({
 // ── Followups section (My Work) ───────────────────────────────────────────────
 function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
   const [showHold, setShowHold] = useState(false);
+  const [fuSortDir, setFuSortDir] = useState<SortDir>("asc");
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem("mw-hidden-followups") ?? "[]")); } catch { return new Set(); }
   });
@@ -318,7 +319,14 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
   const discussion = followups.filter((f) => f.status === "in_discussion");
   const hold = followups.filter((f) => f.status === "hold");
   const other = followups.filter((f) => f.status !== "in_discussion" && f.status !== "hold");
-  const visible = [...discussion, ...other, ...(showHold ? hold : [])].filter((f) => !hiddenIds.has(f.id));
+  const sorted = [...discussion, ...other, ...(showHold ? hold : [])].sort((a, b) => {
+    const dir = fuSortDir === "asc" ? 1 : -1;
+    if (!a.next_follow_up_at && !b.next_follow_up_at) return 0;
+    if (!a.next_follow_up_at) return 1;
+    if (!b.next_follow_up_at) return -1;
+    return dir * a.next_follow_up_at.localeCompare(b.next_follow_up_at);
+  });
+  const visible = sorted.filter((f) => !hiddenIds.has(f.id));
 
   return (
     <div>
@@ -331,14 +339,18 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
               <th className="px-4 py-2.5 font-medium">Title</th>
               <th className="px-4 py-2.5 font-medium">Status</th>
               <th className="px-4 py-2.5 font-medium">Priority</th>
-              <th className="px-4 py-2.5 font-medium">Follow-up</th>
+              <th className="px-4 py-2.5 font-medium cursor-pointer select-none hover:text-slate-300" onClick={() => setFuSortDir((d) => d === "asc" ? "desc" : "asc")}>
+                <span className="flex items-center gap-1">
+                  Follow-up {fuSortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {visible.map((f) => {
-              const fDate = new Date(f.next_follow_up_at);
-              const isOverdueF = fDate < new Date();
-              const isTodayF = fDate.toDateString() === new Date().toDateString();
+              const fDate = f.next_follow_up_at ? new Date(f.next_follow_up_at) : null;
+              const isOverdueF = fDate ? fDate < new Date() : false;
+              const isTodayF = fDate ? fDate.toDateString() === new Date().toDateString() : false;
               return (
                 <tr key={f.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                   <td className="px-2 py-2.5">
@@ -357,7 +369,10 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
                     ) : <span className="text-slate-600">—</span>}
                   </td>
                   <td className={`px-4 py-3 text-xs font-medium ${isOverdueF ? "text-red-400" : isTodayF ? "text-amber-400" : "text-slate-400"}`}>
-                    {isTodayF ? "Today" : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                    {!fDate ? <span className="text-slate-600">No date</span>
+                      : isTodayF ? "Today"
+                      : isOverdueF ? `Overdue · ${fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}`
+                      : fDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                   </td>
                 </tr>
               );
@@ -471,21 +486,26 @@ function EnquirySidebar({ enquiries, members, todayStr }: {
 }
 
 // ── Product tasks sidebar ─────────────────────────────────────────────────────
-function ProductTasksSidebar({ productTasks }: { productTasks: ProductTask[] }) {
+function ProductTasksSidebar({ productTasks, allProducts }: { productTasks: ProductTask[]; allProducts: PtProduct[] }) {
   const total = productTasks.length;
   const withDue = productTasks.filter((t) => t.due_date).length;
   const overdue = productTasks.filter((t) => t.due_date && t.due_date < new Date().toISOString().slice(0, 10)).length;
   const noDue = productTasks.filter((t) => !t.due_date).length;
 
-  // Group by product
-  const byProduct = productTasks.reduce<Record<string, { name: string; count: number }>>((acc, t) => {
+  // Count tasks per product from productTasks
+  const countMap = productTasks.reduce<Record<string, number>>((acc, t) => {
     const key = t.product_id ?? "__none__";
-    const name = (t.product as { project_name?: string } | null)?.project_name ?? "No Product";
-    if (!acc[key]) acc[key] = { name, count: 0 };
-    acc[key].count++;
+    acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
-  const productRows = Object.values(byProduct).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Build rows from ALL products (A-Z) + a "No Product" row if tasks exist without product
+  const productRows: { name: string; count: number }[] = [
+    ...allProducts
+      .map((p) => ({ name: p.project_name, count: countMap[p.id] ?? 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    ...(countMap["__none__"] ? [{ name: "No Product", count: countMap["__none__"] }] : []),
+  ];
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
@@ -522,6 +542,65 @@ function ProductTasksSidebar({ productTasks }: { productTasks: ProductTask[] }) 
   );
 }
 
+// ── Leads Captured tab ────────────────────────────────────────────────────────
+function LeadsCapturedTab({ accountId }: { accountId: string | null | undefined }) {
+  const [leads, setLeads] = useState<{ id: string; name: string; phone: string; company: string | null; search_category: string | null; lead_score: number | null; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!accountId) return;
+    const supabase = createClient();
+    supabase.from("contacts")
+      .select("id, name, phone, company, search_category, lead_score, created_at")
+      .eq("account_id", accountId)
+      .eq("lead_source", "maps_scraper")
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => { setLeads(data ?? []); setLoading(false); });
+  }, [accountId]);
+  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-slate-500" /></div>;
+  if (leads.length === 0) return (
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 gap-3 text-center">
+      <Users className="h-10 w-10 text-slate-600" />
+      <p className="text-sm text-slate-500">No leads captured yet.</p>
+      <Link href="/leads/generate" className="text-xs text-blue-400 hover:underline">Generate leads →</Link>
+    </div>
+  );
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#2a3045]">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
+            <th className="px-4 py-2.5 font-medium">Name</th>
+            <th className="px-4 py-2.5 font-medium">Phone</th>
+            <th className="px-4 py-2.5 font-medium">Company / Address</th>
+            <th className="px-4 py-2.5 font-medium">Category</th>
+            <th className="px-4 py-2.5 font-medium">Score</th>
+            <th className="px-4 py-2.5 font-medium">Added</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((l) => (
+            <tr key={l.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+              <td className="px-4 py-3 font-medium text-white">
+                <Link href="/contacts" className="hover:text-blue-400 transition-colors">{l.name}</Link>
+              </td>
+              <td className="px-4 py-3 text-xs text-slate-400">{l.phone}</td>
+              <td className="px-4 py-3 text-xs text-slate-400 max-w-[160px]"><p className="line-clamp-2 break-words">{l.company ?? "—"}</p></td>
+              <td className="px-4 py-3 text-xs text-slate-500 capitalize">{l.search_category ?? "—"}</td>
+              <td className="px-4 py-3">
+                {l.lead_score != null
+                  ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${l.lead_score >= 7 ? "bg-green-500/20 text-green-400" : l.lead_score >= 4 ? "bg-yellow-500/20 text-yellow-400" : "bg-slate-500/20 text-slate-400"}`}>{l.lead_score}/10</span>
+                  : <span className="text-slate-600">—</span>}
+              </td>
+              <td className="px-4 py-3 text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
   const { accountId, user, profile } = useAuth();
@@ -538,7 +617,9 @@ export default function OverviewPage() {
   const [members, setMembers] = useState<AccountMember[]>([]);
 
   // Per-tab sub-filters (override global when set)
-  const [enqSubUser, setEnqSubUser] = useState<string | null>(null);
+  const [enqSubUser, setEnqSubUser] = useState<string | null>(() => {
+    try { return localStorage.getItem("ov-enq-user") ?? null; } catch { return null; }
+  });
   const [prodSubUser, setProdSubUser] = useState<string | null>(null);
 
   // Effective user per tab: sub ?? global ?? null (null = show all)
@@ -563,7 +644,9 @@ export default function OverviewPage() {
   // Enquiry tasks
   const [enquiries, setEnquiries] = useState<ClientLead[]>([]);
   const [enquirySearch, setEnquirySearch] = useState("");
-  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>("all");
+  const [enquiryStatusFilter, setEnquiryStatusFilter] = useState<string>(() => {
+    try { return localStorage.getItem("ov-enq-status") ?? "all"; } catch { return "all"; }
+  });
   const [loadingEnquiries, setLoadingEnquiries] = useState(false);
   const [enqSortField, setEnqSortField] = useState<EnqSortField>("next_follow_up_at");
   const [enqSortDir, setEnqSortDir] = useState<SortDir>("asc");
@@ -618,6 +701,13 @@ export default function OverviewPage() {
   function toggleMwSort(field: MwSortField) {
     if (mwSortField === field) setMwSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setMwSortField(field); setMwSortDir("asc"); }
+  }
+  type MwPtSortField = "title" | "priority" | "due_date";
+  const [mwPtSortField, setMwPtSortField] = useState<MwPtSortField>("due_date");
+  const [mwPtSortDir, setMwPtSortDir] = useState<SortDir>("asc");
+  function toggleMwPtSort(field: MwPtSortField) {
+    if (mwPtSortField === field) setMwPtSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setMwPtSortField(field); setMwPtSortDir("asc"); }
   }
 
   useEffect(() => {
@@ -733,15 +823,27 @@ export default function OverviewPage() {
     return dir * a.due_date.localeCompare(b.due_date);
   });
   const allFollowups = myWorkData?.followups ?? [];
-  const myProductTasks = allProductTasks.filter((t) => {
-    if (!myWorkUserId) return true;
-    return t.assignee_user_id === myWorkUserId || (t.assignee_user_ids ?? []).includes(myWorkUserId);
-  });
+  const myProductTasks = allProductTasks
+    .filter((t) => {
+      if (!myWorkUserId) return true;
+      return t.assignee_user_id === myWorkUserId || (t.assignee_user_ids ?? []).includes(myWorkUserId);
+    })
+    .sort((a, b) => {
+      const dir = mwPtSortDir === "asc" ? 1 : -1;
+      if (mwPtSortField === "priority") return dir * ((PRIORITY_RANK[a.priority ?? ""] ?? 9) - (PRIORITY_RANK[b.priority ?? ""] ?? 9));
+      if (mwPtSortField === "due_date") {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1; if (!b.due_date) return -1;
+        return dir * a.due_date.localeCompare(b.due_date);
+      }
+      return dir * a.title.localeCompare(b.title);
+    });
 
-  const overdueFollowups = allFollowups.filter((f) => new Date(f.next_follow_up_at) < new Date());
+  const overdueFollowups = allFollowups.filter((f) => f.next_follow_up_at && new Date(f.next_follow_up_at) < new Date());
   const overdueProductTasks = myProductTasks.filter((t) => t.due_date && t.due_date < todayStr);
   const upcomingProjectTasks = [...dueTodayProjectTasks, ...upcomingTaskList].slice(0, 6);
   const upcomingFollowups = allFollowups.filter((f) => {
+    if (!f.next_follow_up_at) return false;
     const d = new Date(f.next_follow_up_at);
     return d >= new Date() && d <= new Date(Date.now() + 7 * 86400000);
   }).slice(0, 4);
@@ -1122,10 +1224,15 @@ export default function OverviewPage() {
                           <thead>
                             <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
                               <th className="w-8 px-2 py-2.5" />
-                              <th className="px-4 py-2.5 font-medium">Task</th>
+                              {([ ["title","Task"], ["priority","Priority"], ["due_date","Due"] ] as [MwPtSortField, string][]).map(([f, label]) => (
+                                <th key={f} className="px-4 py-2.5 font-medium">
+                                  <button type="button" onClick={() => toggleMwPtSort(f)} className="flex items-center gap-1 hover:text-white">
+                                    {label}
+                                    {mwPtSortField === f ? (mwPtSortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3" />}
+                                  </button>
+                                </th>
+                              ))}
                               <th className="px-4 py-2.5 font-medium">Product</th>
-                              <th className="px-4 py-2.5 font-medium">Priority</th>
-                              <th className="px-4 py-2.5 font-medium">Due</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1140,13 +1247,13 @@ export default function OverviewPage() {
                                       className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
                                   </td>
                                   <td className="px-4 py-3 font-medium text-white">{t.title}</td>
-                                  <td className="px-4 py-3 text-xs text-slate-400">{prodName}</td>
                                   <td className="px-4 py-3">
                                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[t.priority] ?? ""}`}>{t.priority}</span>
                                   </td>
                                   <td className={`px-4 py-3 text-xs font-medium ${isOverdueP ? "text-red-400" : isTodayP ? "text-amber-400" : "text-slate-400"}`}>
                                     {t.due_date ? (isTodayP ? "Today" : new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" })) : "—"}
                                   </td>
+                                  <td className="px-4 py-3 text-xs text-slate-400">{prodName}</td>
                                 </tr>
                               );
                             })}
@@ -1183,7 +1290,7 @@ export default function OverviewPage() {
                 <input type="text" placeholder="Search enquiries..." value={enquirySearch}
                   onChange={(e) => setEnquirySearch(e.target.value)}
                   className="flex-1 min-w-[160px] max-w-xs rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none" />
-                <select value={enquiryStatusFilter} onChange={(e) => setEnquiryStatusFilter(e.target.value)}
+                <select value={enquiryStatusFilter} onChange={(e) => { setEnquiryStatusFilter(e.target.value); try { localStorage.setItem("ov-enq-status", e.target.value); } catch {} }}
                   className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-blue-500 focus:outline-none">
                   <option value="all">All Status</option>
                   <option value="in_discussion">In Discussion</option>
@@ -1195,7 +1302,7 @@ export default function OverviewPage() {
                 <PeoplePicker
                   members={members}
                   value={enqSubUser}
-                  onChange={setEnqSubUser}
+                  onChange={(v) => { setEnqSubUser(v); try { if (v) localStorage.setItem("ov-enq-user", v); else localStorage.removeItem("ov-enq-user"); } catch {} }}
                   currentUserId={user?.id}
                   currentUserName={profile?.full_name ?? "Me"}
                   label={globalUserId && !enqSubUser ? "↑ Global filter" : "All People"}
@@ -1434,31 +1541,17 @@ export default function OverviewPage() {
             </div>
           )}
 
-          {/* Task Automation */}
-          {activeTab === "task-automation" && (
+          {/* Leads Captured */}
+          {activeTab === "leads-captured" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">Manage automated task rules for your projects</p>
-                <Link href="/projects/automations"
-                  className="flex items-center gap-1.5 rounded-lg bg-purple-600/20 px-3 py-1.5 text-sm font-medium text-purple-400 hover:bg-purple-600/30 transition-colors">
-                  <ExternalLink className="h-3.5 w-3.5" /> Open Automations
+                <p className="text-sm text-slate-400">Leads sourced via Google Places</p>
+                <Link href="/contacts"
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-400 hover:bg-blue-600/30 transition-colors">
+                  <ExternalLink className="h-3.5 w-3.5" /> Open Leads Captured
                 </Link>
               </div>
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 gap-4 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-500/10">
-                  <Zap className="h-8 w-8 text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-base font-medium text-white mb-1">Task Automation</p>
-                  <p className="text-sm text-slate-500 max-w-sm">
-                    Set up automation rules to automatically assign, move, or notify when tasks change state.
-                  </p>
-                </div>
-                <Link href="/projects/automations"
-                  className="flex items-center gap-2 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-purple-500 transition-colors">
-                  <Zap className="h-4 w-4" /> Manage Automations
-                </Link>
-              </div>
+              <LeadsCapturedTab accountId={accountId} />
             </div>
           )}
         </div>
@@ -1501,7 +1594,7 @@ export default function OverviewPage() {
                 {overdueFollowups.map((f) => (
                   <div key={`of-${f.id}`} className="px-3 py-2">
                     <p className="text-xs font-medium text-white truncate">{f.title}</p>
-                    <p className="text-[10px] text-red-400 mt-0.5">Follow-up · {new Date(f.next_follow_up_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</p>
+                    <p className="text-[10px] text-red-400 mt-0.5">Follow-up · {f.next_follow_up_at ? new Date(f.next_follow_up_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}</p>
                   </div>
                 ))}
                 {overdueProductTasks.map((t) => (
@@ -1538,7 +1631,8 @@ export default function OverviewPage() {
                   );
                 })}
                 {upcomingFollowups.map((f) => {
-                  const fDate = new Date(f.next_follow_up_at);
+                  const fDate = f.next_follow_up_at ? new Date(f.next_follow_up_at) : null;
+                  if (!fDate) return null;
                   const isTodayF = fDate.toDateString() === new Date().toDateString();
                   return (
                     <div key={`uf-${f.id}`} className="flex items-center gap-2.5 px-3 py-2">
@@ -1561,7 +1655,7 @@ export default function OverviewPage() {
         ) : activeTab === "enquiry-tasks" ? (
           <EnquirySidebar enquiries={enquiries} members={members} todayStr={todayStr} />
         ) : activeTab === "product-tasks" ? (
-          <ProductTasksSidebar productTasks={productTasks} />
+          <ProductTasksSidebar productTasks={productTasks} allProducts={ptProducts} />
         ) : (
           <ProjectsSidebar
             projects={projects}
