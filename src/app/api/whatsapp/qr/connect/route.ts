@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { supabaseAdmin } from '@/lib/flows/admin-client'
 
 /**
  * POST /api/whatsapp/qr/connect
@@ -27,9 +28,9 @@ export async function POST() {
       return NextResponse.json({ account: existing, created: false })
     }
 
-    // Create a new QR account row. The worker reads this via its
-    // WHATSAPP_ACCOUNT_ID env var and updates it with live state.
-    const { data: created, error } = await supabase
+    // Create a new QR account row using service-role client (bypasses RLS).
+    // The worker reads this via its WHATSAPP_ACCOUNT_ID env var.
+    const { data: created, error } = await supabaseAdmin()
       .from('whatsapp_accounts')
       .insert({
         account_id: accountId,
