@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, MessageSquare, Settings as SettingsIcon, User } from "lucide-react";
+import { CalendarCheck, LogOut, Menu, MessageSquare, Settings as SettingsIcon, User } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -19,6 +19,7 @@ import { ModeToggle } from "@/components/layout/mode-toggle";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { TodoList } from "@/components/layout/todo-list";
 import { AiAssistant } from "@/components/layout/ai-assistant";
+import { GlobalCreateButton } from "@/components/layout/global-create";
 
 interface HeaderProps {
   /** Wired to the shell's drawer state. Used only on mobile — the
@@ -52,7 +53,15 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       </div>
 
       <div className="relative flex items-center gap-1 sm:gap-2">
+        <GlobalCreateButton />
         <AiAssistant />
+        <Link
+          href="/routine"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Daily Routine"
+        >
+          <CalendarCheck className="h-5 w-5" />
+        </Link>
         <Link
           href="/messages"
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
