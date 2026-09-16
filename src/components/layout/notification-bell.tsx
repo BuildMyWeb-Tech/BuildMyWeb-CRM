@@ -5,8 +5,19 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
-import type { Notification } from "@/types";
-import { Bell, CheckCheck, Clock, Loader2, UserPlus } from "lucide-react";
+import type { Notification, NotificationCategory } from "@/types";
+import {
+  AlertCircle,
+  Bell,
+  BellRing,
+  CheckCheck,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  MessageSquare,
+  Settings,
+  UserPlus,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -16,15 +27,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
-  conversation_assigned: UserPlus,
-  lead_follow_up_due: Clock,
+// ── Category config ────────────────────────────────────────────────────────────
+const CATEGORY_CONFIG: Record<
+  NotificationCategory,
+  { icon: typeof Bell; color: string; bg: string; dot: string; label: string }
+> = {
+  urgent:     { icon: AlertCircle,   color: "text-red-400",    bg: "bg-red-500/15",    dot: "bg-red-500",    label: "Urgent" },
+  reminder:   { icon: Clock,         color: "text-amber-400",  bg: "bg-amber-500/15",  dot: "bg-amber-500",  label: "Reminder" },
+  assignment: { icon: UserPlus,      color: "text-blue-400",   bg: "bg-blue-500/15",   dot: "bg-blue-500",   label: "Assignment" },
+  mention:    { icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-500/15", dot: "bg-purple-500", label: "Mention" },
+  completed:  { icon: CheckCircle2,  color: "text-green-400",  bg: "bg-green-500/15",  dot: "bg-green-500",  label: "Completed" },
+  system:     { icon: Settings,      color: "text-slate-400",  bg: "bg-slate-500/15",  dot: "bg-slate-400",  label: "System" },
 };
 
+function getCategory(n: Notification): NotificationCategory {
+  if (n.category) return n.category;
+  // Legacy fallback
+  if (n.type === 'conversation_assigned') return 'assignment';
+  if (n.type === 'lead_follow_up_due') return 'reminder';
+  return 'system';
+}
+
 /**
- * Top-bar notification bell — replaces the old sidebar "Notifications"
- * page link. Lives next to the theme toggle in the Header so it's
- * reachable from every page without a dedicated nav slot.
+ * Top-bar notification bell with category-colored indicators and
+ * per-notification mark-read.
  */
 export function NotificationBell() {
   const router = useRouter();
@@ -33,6 +59,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[] | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<NotificationCategory | "all">("all");
 
   const load = useCallback(async () => {
     if (!accountId) return;
@@ -42,76 +69,72 @@ export function NotificationBell() {
       .select("*")
       .eq("account_id", accountId)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
     if (error) return;
     setNotifications((data ?? []) as Notification[]);
   }, [accountId]);
 
   useEffect(() => {
-    if (open && notifications === null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      load();
-    }
+    if (open && notifications === null) load();
   }, [open, notifications, load]);
 
+  // Realtime
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel("notifications-bell")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new as Notification;
-            setNotifications((prev) => {
-              if (!prev) return [row];
-              if (prev.some((n) => n.id === row.id)) return prev;
-              return [row, ...prev].slice(0, 20);
-            });
-          } else if (payload.eventType === "UPDATE") {
-            const row = payload.new as Notification;
-            setNotifications(
-              (prev) => prev?.map((n) => (n.id === row.id ? { ...n, ...row } : n)) ?? prev,
-            );
-          } else if (payload.eventType === "DELETE") {
-            const oldRow = payload.old as Partial<Notification>;
-            setNotifications((prev) => prev?.filter((n) => n.id !== oldRow.id) ?? prev);
+      .channel("notifications-bell-v2")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          const row = payload.new as Notification;
+          setNotifications((prev) => {
+            if (!prev) return [row];
+            if (prev.some((n) => n.id === row.id)) return prev;
+            return [row, ...prev].slice(0, 50);
+          });
+          // PWA / browser push
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            try {
+              new Notification(row.title, {
+                body: row.body ?? "",
+                icon: "/icons/icon-192.png",
+                badge: "/icons/icon-192.png",
+              });
+            } catch { /* ignore — no SW registered yet */ }
           }
-        },
-      )
+        } else if (payload.eventType === "UPDATE") {
+          const row = payload.new as Notification;
+          setNotifications((prev) => prev?.map((n) => (n.id === row.id ? { ...n, ...row } : n)) ?? prev);
+        } else if (payload.eventType === "DELETE") {
+          const oldRow = payload.old as Partial<Notification>;
+          setNotifications((prev) => prev?.filter((n) => n.id !== oldRow.id) ?? prev);
+        }
+      })
       .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const markRead = useCallback(async (id: string) => {
-    setNotifications(
-      (prev) =>
-        prev?.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: new Date().toISOString() } : n)) ?? prev,
+    const now = new Date().toISOString();
+    setNotifications((prev) =>
+      prev?.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: now } : n)) ?? prev,
     );
     const supabase = createClient();
     const { error } = await supabase
       .from("notifications")
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: now })
       .eq("id", id)
       .is("read_at", null);
-    if (error) {
-      toast.error("Failed to mark notification as read");
-      load();
-    }
+    if (error) { toast.error("Failed to mark as read"); load(); }
   }, [load]);
 
-  const handleClick = useCallback(
-    (n: Notification) => {
-      if (!n.read_at) markRead(n.id);
-      setOpen(false);
-      if (n.conversation_id) router.push(`/inbox?c=${n.conversation_id}`);
-      else if (n.lead_id) router.push(`/client-leads`);
-    },
-    [markRead, router],
-  );
+  const handleClick = useCallback((n: Notification) => {
+    if (!n.read_at) markRead(n.id);
+    setOpen(false);
+    const url = n.action_url
+      ?? (n.conversation_id ? `/inbox?c=${n.conversation_id}` : null)
+      ?? (n.lead_id ? `/client-leads/${n.lead_id}` : null);
+    if (url) router.push(url);
+  }, [markRead, router]);
 
   const unreadIds = notifications?.filter((n) => !n.read_at).map((n) => n.id) ?? [];
 
@@ -123,11 +146,14 @@ export function NotificationBell() {
     const supabase = createClient();
     const { error } = await supabase.from("notifications").update({ read_at: now }).is("read_at", null);
     setMarkingAll(false);
-    if (error) {
-      toast.error("Failed to mark all as read");
-      load();
-    }
+    if (error) { toast.error("Failed to mark all as read"); load(); }
   }, [unreadIds.length, load]);
+
+  const visibleNotifications = (notifications ?? []).filter((n) =>
+    activeCategory === "all" || getCategory(n) === activeCategory
+  );
+
+  const categories: (NotificationCategory | "all")[] = ["all", "urgent", "assignment", "mention", "reminder", "completed", "system"];
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -135,54 +161,96 @@ export function NotificationBell() {
         className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none data-popup-open:bg-muted"
         aria-label="Notifications"
         onClick={() => {
-          // Native OS notifications need permission, and browsers
-          // only honor that prompt from a real user gesture — this
-          // click is the first one most people make on this button,
-          // so it's the natural place to ask (once; a prior grant or
-          // denial is remembered and this becomes a no-op).
           if (typeof Notification !== "undefined" && Notification.permission === "default") {
             Notification.requestPermission().catch(() => {});
           }
         }}
       >
-        <Bell className="h-[18px] w-[18px]" />
+        {unreadCount > 0 ? (
+          <BellRing className="h-[18px] w-[18px]" />
+        ) : (
+          <Bell className="h-[18px] w-[18px]" />
+        )}
         {unreadCount > 0 && (
           <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </DropdownMenuTrigger>
+
       <DropdownMenuContent
         align="end"
         sideOffset={6}
-        className="w-80 max-w-[90vw] bg-popover p-0 text-popover-foreground ring-border"
+        className="w-96 max-w-[95vw] bg-popover p-0 text-popover-foreground ring-border"
       >
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold text-foreground">Notifications</span>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-foreground" />
+            <span className="text-sm font-semibold text-foreground">Notifications</span>
+            {unreadCount > 0 && (
+              <span className="rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold text-primary-foreground">
+                {unreadCount}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             disabled={unreadIds.length === 0 || markingAll}
             onClick={markAllRead}
-            className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
           >
             {markingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCheck className="h-3 w-3" />}
             Mark all read
           </button>
         </div>
-        <div className="max-h-96 overflow-y-auto">
+
+        {/* Category filter tabs */}
+        <div className="flex gap-1 overflow-x-auto border-b border-border px-2 py-1.5 scrollbar-none">
+          {categories.map((cat) => {
+            const cfg = cat !== "all" ? CATEGORY_CONFIG[cat] : null;
+            const unreadInCat = cat === "all"
+              ? unreadIds.length
+              : (notifications ?? []).filter((n) => !n.read_at && getCategory(n) === cat).length;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-medium capitalize transition-colors",
+                  activeCategory === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {cfg && <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />}
+                {cat === "all" ? "All" : cfg?.label}
+                {unreadInCat > 0 && (
+                  <span className="rounded-full bg-current/20 px-1 text-[9px]">{unreadInCat}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Notification list */}
+        <div className="max-h-[28rem] overflow-y-auto">
           {notifications === null ? (
             <div className="flex h-24 items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
-          ) : notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-              <Bell className="h-6 w-6 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">No notifications yet</p>
+          ) : visibleNotifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <Bell className="h-7 w-7 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No notifications</p>
             </div>
           ) : (
             <ul>
-              {notifications.map((n) => {
-                const Icon = TYPE_ICON[n.type] ?? Bell;
+              {visibleNotifications.map((n) => {
+                const cat = getCategory(n);
+                const cfg = CATEGORY_CONFIG[cat];
+                const Icon = cfg.icon;
                 const isUnread = !n.read_at;
                 return (
                   <li key={n.id}>
@@ -190,36 +258,62 @@ export function NotificationBell() {
                       type="button"
                       onClick={() => handleClick(n)}
                       className={cn(
-                        "flex w-full items-start gap-2.5 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/60",
-                        isUnread && "bg-primary/5",
+                        "flex w-full items-start gap-3 border-b border-border/50 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50",
+                        isUnread && "bg-primary/5"
                       )}
                     >
-                      <div
-                        className={cn(
-                          "mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md",
-                          isUnread ? "bg-primary/15" : "bg-muted",
-                        )}
-                      >
-                        <Icon className={cn("h-3.5 w-3.5", isUnread ? "text-primary" : "text-muted-foreground")} />
+                      {/* Category icon */}
+                      <div className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", cfg.bg)}>
+                        <Icon className={cn("h-4 w-4", cfg.color)} />
                       </div>
+
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn("truncate text-xs font-medium", isUnread ? "text-foreground" : "text-muted-foreground")}>
-                            {n.title}
+                        {/* Category badge + unread dot */}
+                        <div className="mb-0.5 flex items-center gap-1.5">
+                          <span className={cn("text-[9px] font-bold uppercase tracking-wide", cfg.color)}>
+                            {cfg.label}
                           </span>
-                          {isUnread && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" />}
+                          {isUnread && <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />}
                         </div>
-                        {n.body && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{n.body}</p>}
-                        <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                        <p className={cn("text-xs font-semibold leading-snug", isUnread ? "text-foreground" : "text-muted-foreground")}>
+                          {n.title}
+                        </p>
+                        {n.body && (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{n.body}</p>
+                        )}
+                        <p className="mt-1 text-[10px] text-muted-foreground/60">
                           {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                         </p>
                       </div>
+
+                      {/* Mark read button */}
+                      {isUnread && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); markRead(n.id); }}
+                          title="Mark as read"
+                          className="mt-1 shrink-0 rounded p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border px-3 py-2 text-center">
+          <button
+            type="button"
+            onClick={() => { setOpen(false); router.push("/notifications"); }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all notifications →
+          </button>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

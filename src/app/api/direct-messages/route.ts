@@ -60,10 +60,16 @@ export async function POST(request: Request) {
 
     const recipientId = typeof body.recipient_id === 'string' ? body.recipient_id : ''
     const msgBody = typeof body.body === 'string' ? body.body.trim() : ''
+    const mentionedUserIds: string[] = Array.isArray(body.mention_user_ids)
+      ? body.mention_user_ids.filter((v: unknown) => typeof v === 'string')
+      : []
+
     if (!recipientId) return NextResponse.json({ error: 'recipient_id required' }, { status: 400 })
     if (!msgBody) return NextResponse.json({ error: 'body required' }, { status: 400 })
 
-    const { data, error } = await supabaseAdmin()
+    const admin = supabaseAdmin()
+
+    const { data, error } = await admin
       .from('direct_messages')
       .insert({
         account_id: ctx.accountId,
@@ -83,6 +89,37 @@ export async function POST(request: Request) {
         { error: 'Could not send message', detail, code: error.code },
         { status: 500 },
       )
+    }
+
+    // Create mention notifications for each mentioned user (best-effort)
+    if (mentionedUserIds.length > 0) {
+      const { data: senderProfile } = await admin
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', ctx.userId)
+        .maybeSingle()
+      const senderName = senderProfile?.full_name ?? 'Someone'
+      const snippet = msgBody.length > 80 ? msgBody.slice(0, 80) + '…' : msgBody
+
+      const notifRows = mentionedUserIds
+        .filter((uid) => uid !== ctx.userId)
+        .map((uid) => ({
+          account_id: ctx.accountId,
+          user_id: uid,
+          type: 'mentioned',
+          category: 'mention',
+          actor_user_id: ctx.userId,
+          mention_user_id: ctx.userId,
+          action_url: '/messages',
+          title: `${senderName} mentioned you`,
+          body: snippet,
+        }))
+
+      if (notifRows.length > 0) {
+        await admin.from('notifications').insert(notifRows).then(({ error: ne }) => {
+          if (ne) console.warn('[direct-messages] mention notification failed:', ne.message)
+        })
+      }
     }
 
     return NextResponse.json({ message: data }, { status: 201 })

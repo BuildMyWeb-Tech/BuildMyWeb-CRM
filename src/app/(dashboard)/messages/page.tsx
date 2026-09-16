@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Loader2, MessageSquare, Send } from "lucide-react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { AtSign, Loader2, MessageSquare, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { AccountMember, DirectMessage } from "@/types";
@@ -30,6 +30,12 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
+  // @mention picker state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = picker hidden
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // All members including non-selected (for mention picker)
+  const [allMembers, setAllMembers] = useState<AccountMember[]>([]);
 
   // Load team members
   useEffect(() => {
@@ -38,7 +44,9 @@ export default function MessagesPage() {
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d?.members) {
-          setMembers((d.members as AccountMember[]).filter((m) => m.user_id !== user?.id));
+          const all = d.members as AccountMember[];
+          setAllMembers(all);
+          setMembers(all.filter((m) => m.user_id !== user?.id));
         }
       });
   }, [accountId, user?.id]);
@@ -115,10 +123,19 @@ export default function MessagesPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages?.length]);
 
+  // Extract @mentioned user IDs from draft text
+  const mentionedUserIds = useMemo(() => {
+    const handles = Array.from(draft.matchAll(/@(\w[\w\s]*?)(?=\s|$|@)/g)).map((m) => m[1].trim().toLowerCase());
+    return allMembers
+      .filter((m) => handles.some((h) => m.full_name?.toLowerCase().startsWith(h)))
+      .map((m) => m.user_id);
+  }, [draft, allMembers]);
+
   async function send() {
     const body = draft.trim();
     if (!body || !selectedUserId || !user?.id) return;
     setSending(true);
+    setMentionQuery(null);
     const optimistic: DirectMessage = {
       id: crypto.randomUUID(),
       account_id: accountId ?? "",
@@ -134,7 +151,7 @@ export default function MessagesPage() {
       const r = await fetch("/api/direct-messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipient_id: selectedUserId, body }),
+        body: JSON.stringify({ recipient_id: selectedUserId, body, mention_user_ids: mentionedUserIds }),
       });
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}));
@@ -144,6 +161,36 @@ export default function MessagesPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  function onDraftChange(value: string) {
+    setDraft(value);
+    // Detect @query for mention picker
+    const atIdx = value.lastIndexOf("@");
+    if (atIdx >= 0) {
+      const after = value.slice(atIdx + 1);
+      if (!after.includes(" ") || after.length === 0) {
+        setMentionQuery(after.toLowerCase());
+        setMentionIndex(0);
+        return;
+      }
+    }
+    setMentionQuery(null);
+  }
+
+  const mentionSuggestions = useMemo(() => {
+    if (mentionQuery === null) return [];
+    return allMembers.filter(
+      (m) => m.user_id !== user?.id && (m.full_name?.toLowerCase().startsWith(mentionQuery) ?? false)
+    ).slice(0, 5);
+  }, [mentionQuery, allMembers, user?.id]);
+
+  function insertMention(member: AccountMember) {
+    const atIdx = draft.lastIndexOf("@");
+    const newDraft = draft.slice(0, atIdx) + `@${member.full_name} `;
+    setDraft(newDraft);
+    setMentionQuery(null);
+    inputRef.current?.focus();
   }
 
   const selectedMember = members.find((m) => m.user_id === selectedUserId);
@@ -246,7 +293,11 @@ export default function MessagesPage() {
                                 : "rounded-bl-sm bg-muted text-foreground"
                             }`}
                           >
-                            {m.body}
+                            {m.body.split(/(@\w[\w\s]*?)(?=\s|$)/).map((part, i) =>
+                              part.startsWith("@") ? (
+                                <span key={i} className="font-semibold text-purple-400">{part}</span>
+                              ) : part
+                            )}
                           </div>
                           <span className="text-[9px] text-muted-foreground">
                             {new Date(m.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -261,15 +312,44 @@ export default function MessagesPage() {
             </div>
 
             {/* Input */}
-            <div className="border-t border-border bg-card p-4">
+            <div className="relative border-t border-border bg-card p-4">
+              {/* @mention picker */}
+              {mentionSuggestions.length > 0 && (
+                <div className="absolute bottom-full left-4 right-4 mb-1 rounded-xl border border-border bg-popover shadow-xl overflow-hidden">
+                  {mentionSuggestions.map((m, idx) => (
+                    <button
+                      key={m.user_id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                      className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors ${idx === mentionIndex ? "bg-primary/10 text-foreground" : "hover:bg-muted text-foreground"}`}
+                    >
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                        {m.full_name?.charAt(0).toUpperCase() ?? "?"}
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <p className="truncate text-sm font-medium">{m.full_name}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize">{m.role}</p>
+                      </div>
+                      <AtSign className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <input
+                  ref={inputRef}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => onDraftChange(e.target.value)}
                   onKeyDown={(e) => {
+                    if (mentionSuggestions.length > 0) {
+                      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex((i) => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
+                      if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex((i) => Math.max(i - 1, 0)); return; }
+                      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionSuggestions[mentionIndex]); return; }
+                      if (e.key === "Escape") { setMentionQuery(null); return; }
+                    }
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                   }}
-                  placeholder={`Message ${selectedMember?.full_name ?? ""}…`}
+                  placeholder={`Message ${selectedMember?.full_name ?? ""}… (use @ to mention)`}
                   className="h-10 flex-1 rounded-full border border-border bg-muted px-4 text-sm text-foreground focus:outline-none"
                 />
                 <button
@@ -284,7 +364,7 @@ export default function MessagesPage() {
               </div>
               {profile?.full_name && (
                 <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-                  Sending as {profile.full_name}
+                  Sending as {profile.full_name} · type @ to mention a teammate
                 </p>
               )}
             </div>

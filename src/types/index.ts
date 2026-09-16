@@ -187,7 +187,16 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned' | 'lead_follow_up_due';
+export type NotificationType =
+  | 'conversation_assigned'
+  | 'lead_follow_up_due'
+  | 'task_assigned'
+  | 'task_overdue'
+  | 'task_completed'
+  | 'mentioned'
+  | 'system';
+
+export type NotificationCategory = 'urgent' | 'reminder' | 'assignment' | 'mention' | 'completed' | 'system';
 
 export interface Notification {
   id: string;
@@ -195,12 +204,17 @@ export interface Notification {
   /** Recipient — the agent this notification is for. */
   user_id: string;
   type: NotificationType;
+  category: NotificationCategory;
   conversation_id?: string;
   contact_id?: string;
   /** Set only for type === 'lead_follow_up_due' — see 059_client_leads_extras.sql. */
   lead_id?: string;
   /** Who triggered it. Null when an automation/system assigned it. */
   actor_user_id?: string;
+  /** URL to navigate to when notification is clicked. */
+  action_url?: string;
+  /** Set for 'mentioned' type — the user doing the mentioning. */
+  mention_user_id?: string;
   title: string;
   body?: string;
   read_at?: string;
