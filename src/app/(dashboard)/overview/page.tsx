@@ -730,10 +730,11 @@ export default function OverviewPage() {
       const supabase = createClient();
       const { data: projectsData } = await supabase.from("projects").select("*").eq("account_id", accountId).order("name");
       if (!projectsData) return;
+      const dedupedProjects = projectsData.filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
       const { data: taskCounts } = await supabase.from("project_tasks").select("project_id").eq("account_id", accountId);
       const countMap: Record<string, number> = {};
       for (const t of taskCounts ?? []) countMap[t.project_id] = (countMap[t.project_id] ?? 0) + 1;
-      setProjects(projectsData.map((p) => ({ ...p, task_count: countMap[p.id] ?? 0 })));
+      setProjects(dedupedProjects.map((p) => ({ ...p, task_count: countMap[p.id] ?? 0 })));
     } finally { setLoadingProjects(false); }
   }, [accountId]);
 

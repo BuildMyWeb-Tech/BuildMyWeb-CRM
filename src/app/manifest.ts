@@ -13,7 +13,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "BMW CRM",
     description:
       "BuildMyWeb CRM — sales, client projects, and company operations in one place.",
-    start_url: "/dashboard",
+    start_url: "/overview",
     display: "standalone",
     background_color: "#020617",
     theme_color: "#020617",

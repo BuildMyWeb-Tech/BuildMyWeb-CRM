@@ -178,9 +178,13 @@ export function TodoList() {
   }
 
   async function remove(todo: Todo) {
+    setTodos((prev) => prev?.filter((t) => t.id !== todo.id) ?? prev);
     const supabase = createClient();
     const { error } = await supabase.from("todos").delete().eq("id", todo.id);
-    if (error) toast.error("Could not delete to-do.");
+    if (error) {
+      toast.error("Could not delete to-do.");
+      setTodos((prev) => (prev ? [todo, ...prev] : [todo]));
+    }
   }
 
   const list = tab === "mine" ? mine : publicTodos;
