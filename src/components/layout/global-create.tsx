@@ -247,7 +247,7 @@ function CreateProjectTaskDialog({ onClose }: { onClose: () => void }) {
       </div>
       <div className="space-y-1">
         <Label htmlFor="pt-project">Project</Label>
-        <Select value={projectId} onValueChange={setProjectId}>
+        <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "")}>
           <SelectTrigger id="pt-project">
             <SelectValue placeholder="Select project…" />
           </SelectTrigger>
@@ -345,7 +345,7 @@ function CreateProductTaskDialog({ onClose }: { onClose: () => void }) {
       </div>
       <div className="space-y-1">
         <Label htmlFor="prdt-product">Product</Label>
-        <Select value={productId} onValueChange={setProductId}>
+        <Select value={productId} onValueChange={(v) => setProductId(v ?? "")}>
           <SelectTrigger id="prdt-product">
             <SelectValue placeholder="Select product…" />
           </SelectTrigger>
