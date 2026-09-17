@@ -48,6 +48,7 @@ interface ProductTask {
   title: string;
   priority: string;
   due_date: string | null;
+  show_date?: string | null;
   product_id: string | null;
   stage_id?: string | null;
   assignee_user_id?: string | null;
