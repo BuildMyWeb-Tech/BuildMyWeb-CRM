@@ -16,6 +16,11 @@ import { toast } from "sonner";
 const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
   conversation_assigned: UserPlus,
   lead_follow_up_due: Clock,
+  task_assigned: UserPlus,
+  task_overdue: Clock,
+  task_completed: Bell,
+  mentioned: Bell,
+  system: Bell,
 };
 
 export default function NotificationsPage() {
