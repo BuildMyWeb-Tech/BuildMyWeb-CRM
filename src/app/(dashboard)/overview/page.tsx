@@ -826,6 +826,8 @@ export default function OverviewPage() {
   const allFollowups = myWorkData?.followups ?? [];
   const myProductTasks = allProductTasks
     .filter((t) => {
+      // Hide future-scheduled tasks (show_date > today)
+      if (t.show_date && t.show_date > todayStr) return false;
       if (!myWorkUserId) return true;
       return t.assignee_user_id === myWorkUserId || (t.assignee_user_ids ?? []).includes(myWorkUserId);
     })

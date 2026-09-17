@@ -79,7 +79,10 @@ export function UnifiedTasksView() {
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
   const [doneActionLoading, setDoneActionLoading] = useState(false);
   const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
-  const [hiddenRows, setHiddenRows] = useState<Set<string>>(new Set());
+  const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try { return new Set(JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "[]")); } catch { return new Set(); }
+  });
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -627,14 +630,13 @@ export function UnifiedTasksView() {
                     <tr
                       key={`${task.kind}-${task.id}`}
                       onClick={() => {
-                        if (isDone) return;
                         task.kind === "daily" ? openEditTask(task.daily!) : setEditingProjectTask(task.project_task!);
                       }}
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <button type="button" title="Hide row"
-                          onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); return n; }); }}
+                          onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify([...n])); return n; }); }}
                           className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
                           <Eye className="h-3.5 w-3.5" />
                         </button>
@@ -692,7 +694,7 @@ export function UnifiedTasksView() {
                 {hiddenRows.size > 0 && (
                   <tr>
                     <td colSpan={9} className="px-3 py-2">
-                      <button type="button" onClick={() => setHiddenRows(new Set())}
+                      <button type="button" onClick={() => { setHiddenRows(new Set()); window.localStorage.removeItem("daily-tasks-hidden-rows"); }}
                         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                         <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — click to show all
                       </button>

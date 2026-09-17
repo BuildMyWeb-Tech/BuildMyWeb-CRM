@@ -60,6 +60,9 @@ async function backfillMissingClientProjects(
       console.error('[projects] backfill stage seeding failed for client', client.id, stagesError)
       continue
     }
+    // Re-check in case another request already created the project
+    const { count: existsCount } = await supabase.from('projects').select('id', { count: 'exact', head: true }).eq('account_id', accountId).eq('client_id', client.id)
+    if (existsCount && existsCount > 0) continue
     const { error: projectError } = await supabase.from('projects').insert({
       account_id: accountId,
       pipeline_id: pipeline.id,
@@ -92,7 +95,14 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) throw error
-    return NextResponse.json({ projects: data ?? [] })
+
+    // Deduplicate by id — backfill race conditions can occasionally
+    // produce two project rows for the same client before the DB
+    // unique constraint is applied.
+    const seen = new Set<string>()
+    const projects = (data ?? []).filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; })
+
+    return NextResponse.json({ projects })
   } catch (err) {
     return toErrorResponse(err)
   }
