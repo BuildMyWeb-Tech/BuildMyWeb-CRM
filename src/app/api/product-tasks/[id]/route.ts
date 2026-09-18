@@ -23,6 +23,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Auto-delete when moved into a "Done" stage — mirrors the 24-hr
+    // cleanup for project_tasks but triggers immediately for products.
+    if (data?.stage_id) {
+      const { data: stage } = await ctx.supabase
+        .from('pipeline_stages')
+        .select('name')
+        .eq('id', data.stage_id)
+        .maybeSingle()
+      if (stage?.name?.toLowerCase() === 'done') {
+        await ctx.supabase.from('product_tasks').delete().eq('id', data.id)
+        return NextResponse.json({ task: data, auto_deleted: true })
+      }
+    }
+
     return NextResponse.json({ task: data })
   } catch (err) {
     return toErrorResponse(err)

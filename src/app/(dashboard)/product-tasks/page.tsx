@@ -126,6 +126,13 @@ function ProductTaskModal({
         toast.error(err.error ?? "Could not save task");
         return;
       }
+      const resData = await res.json().catch(() => ({}));
+      if (resData?.auto_deleted) {
+        toast.success("Task moved to Done and removed");
+        onClose();
+        onSaved();
+        return;
+      }
       toast.success(isEdit ? "Task updated" : "Task created");
       onClose();
       onSaved();

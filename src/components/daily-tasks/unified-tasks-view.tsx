@@ -394,29 +394,38 @@ export function UnifiedTasksView() {
   async function handleDeleteNow(task: UnifiedRow) {
     setDoneActionLoading(true);
     const supabase = createClient();
-    const table = task.kind === "project" ? "project_tasks" : "daily_tasks";
-    const { error } = await supabase.from(table).delete().eq("id", task.id);
-    setDoneActionLoading(false);
-    if (error) {
-      toast.error("Delete failed: " + error.message);
+    // Delete both sides of the daily ↔ project_task mirror so neither
+    // row reappears after the other is removed.
+    if (task.kind === "daily") {
+      const linkId = task.daily?.linked_project_task_id;
+      if (linkId) await supabase.from("project_tasks").delete().eq("id", linkId);
+      await supabase.from("daily_tasks").delete().eq("id", task.id);
     } else {
-      toast.success("Task deleted");
-            load();
+      // project_tasks row — also wipe any daily_task that points at it
+      await supabase.from("daily_tasks").delete().eq("linked_project_task_id", task.id);
+      await supabase.from("project_tasks").delete().eq("id", task.id);
     }
+    setDoneActionLoading(false);
+    toast.success("Task deleted");
+    load();
   }
 
   async function handleAutoDelete(task: UnifiedRow) {
     setDoneActionLoading(true);
     const supabase = createClient();
-    const table = task.kind === "project" ? "project_tasks" : "daily_tasks";
-    const { error } = await supabase.from(table).update({ done_at: new Date().toISOString() }).eq("id", task.id);
-    setDoneActionLoading(false);
-    if (error) {
-      toast.error("Failed to schedule auto-delete: " + error.message);
+    // Mark both sides done so the 24-hr cleanup job removes them both.
+    const doneAt = new Date().toISOString();
+    if (task.kind === "daily") {
+      const linkId = task.daily?.linked_project_task_id;
+      if (linkId) await supabase.from("project_tasks").update({ done_at: doneAt }).eq("id", linkId);
+      await supabase.from("daily_tasks").update({ done_at: doneAt }).eq("id", task.id);
     } else {
-      toast.success("Task will be auto-deleted in 24 hours");
-            load();
+      await supabase.from("daily_tasks").update({ done_at: doneAt }).eq("linked_project_task_id", task.id);
+      await supabase.from("project_tasks").update({ done_at: doneAt }).eq("id", task.id);
     }
+    setDoneActionLoading(false);
+    toast.success("Task will be auto-deleted in 24 hours");
+    load();
   }
 
   return (

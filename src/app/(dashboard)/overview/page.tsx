@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
+import { ClientsEmbedView } from "@/components/clients/clients-embed-view";
 import Link from "next/link";
 import type { Project, AccountMember } from "@/types";
 import { toast } from "sonner";
@@ -93,7 +94,7 @@ interface MyWorkFollowUp {
   priority: string | null;
 }
 
-type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks" | "leads-captured";
+type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks" | "leads-captured" | "clients";
 type SortDir = "asc" | "desc";
 type EnqSortField = "title" | "status" | "priority" | "next_follow_up_at";
 type PtSortField = "title" | "priority" | "due_date";
@@ -103,6 +104,7 @@ const TABS: { key: TabKey; label: string; icon: typeof ListChecks }[] = [
   { key: "project-tasks",  label: "Project Tasks",    icon: ListChecks },
   { key: "enquiry-tasks",  label: "Enquiry Tasks",    icon: ClipboardList },
   { key: "product-tasks",  label: "Product Tasks",    icon: Package },
+  { key: "clients",        label: "Client Directory", icon: Users },
   { key: "leads-captured", label: "Leads Captured",   icon: Users },
 ];
 
@@ -952,6 +954,13 @@ export default function OverviewPage() {
         });
       }
       if (!res.ok) { toast.error("Could not save task"); return; }
+      const resData = await res.json().catch(() => ({}));
+      if (resData?.auto_deleted) {
+        toast.success("Task moved to Done and removed");
+        setPtModal(null);
+        setProductTasks((prev) => prev.filter((t) => t.id !== ptModal.id));
+        return;
+      }
       toast.success(ptModal.mode === "edit" ? "Task updated" : "Task created");
       setPtModal(null);
       loadProductTasks();
@@ -1545,6 +1554,9 @@ export default function OverviewPage() {
             </div>
           )}
 
+          {/* Client Directory */}
+          {activeTab === "clients" && <ClientsEmbedView />}
+
           {/* Leads Captured */}
           {activeTab === "leads-captured" && (
             <div className="space-y-4">
@@ -1660,6 +1672,13 @@ export default function OverviewPage() {
           <EnquirySidebar enquiries={enquiries} members={members} todayStr={todayStr} />
         ) : activeTab === "product-tasks" ? (
           <ProductTasksSidebar productTasks={productTasks} allProducts={ptProducts} />
+        ) : activeTab === "clients" ? (
+          <div className="flex-1 overflow-y-auto p-4">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Quick Actions</p>
+            <Link href="/clients" className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs text-primary hover:bg-primary/20 transition-colors">
+              Open Full Client Directory →
+            </Link>
+          </div>
         ) : (
           <ProjectsSidebar
             projects={projects}
