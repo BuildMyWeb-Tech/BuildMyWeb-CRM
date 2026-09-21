@@ -11,12 +11,9 @@ import {
   GripVertical,
   Plus,
   Trash2,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 interface Routine {
   id: string;
@@ -28,8 +25,6 @@ interface Routine {
 
 type TabKey = "all" | "completed" | "pending";
 
-// Returns the "routine day" date key (UTC date string).
-// If current time is before 04:30 local, the routine day is yesterday.
 function getRoutineDayKey(): string {
   const now = new Date();
   const cutoff = new Date(now);
@@ -56,6 +51,7 @@ export default function RoutinePage() {
   const [showHidden, setShowHidden] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const dragOverId = useRef<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const dayKey = getRoutineDayKey();
 
@@ -89,13 +85,7 @@ export default function RoutinePage() {
     setAdding(true);
     const maxOrder = routines.reduce((m, r) => Math.max(m, r.order_index), -1);
     const optimisticId = crypto.randomUUID();
-    const optimistic: Routine = {
-      id: optimisticId,
-      title,
-      notes: null,
-      order_index: maxOrder + 1,
-      is_hidden: false,
-    };
+    const optimistic: Routine = { id: optimisticId, title, notes: null, order_index: maxOrder + 1, is_hidden: false };
     setRoutines((prev) => [...prev, optimistic]);
     setNewTitle("");
     try {
@@ -128,11 +118,7 @@ export default function RoutinePage() {
     if (isDone) {
       setCompletedIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
       const supabase = createClient();
-      await supabase
-        .from("daily_routine_completions")
-        .delete()
-        .eq("routine_id", id)
-        .eq("day_key", dayKey);
+      await supabase.from("daily_routine_completions").delete().eq("routine_id", id).eq("day_key", dayKey);
     } else {
       setCompletedIds((prev) => new Set([...prev, id]));
       const supabase = createClient();
@@ -154,7 +140,6 @@ export default function RoutinePage() {
     await supabase.from("daily_routines").update({ is_hidden: !r.is_hidden }).eq("id", id);
   }
 
-  // Drag-and-drop reorder
   function onDragStart(id: string) { setDragId(id); }
   function onDragOver(id: string, e: React.DragEvent) { e.preventDefault(); dragOverId.current = id; }
   async function onDrop() {
@@ -170,14 +155,12 @@ export default function RoutinePage() {
     setDragId(null);
     dragOverId.current = null;
     const supabase = createClient();
-    await Promise.all(
-      updated.map((r) => supabase.from("daily_routines").update({ order_index: r.order_index }).eq("id", r.id))
-    );
+    await Promise.all(updated.map((r) => supabase.from("daily_routines").update({ order_index: r.order_index }).eq("id", r.id)));
   }
 
   function setTabPersisted(t: TabKey) {
     setTab(t);
-    try { localStorage.setItem("routine-tab", t); } catch { /* ignore */ }
+    try { localStorage.setItem("routine-tab", t); } catch {}
   }
 
   const visible = routines.filter((r) => showHidden || !r.is_hidden);
@@ -191,82 +174,111 @@ export default function RoutinePage() {
     return true;
   });
 
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+
   return (
-    <div className="flex flex-col h-full bg-[#0a0d14] p-4 md:p-8 overflow-y-auto">
-      <div className="max-w-2xl w-full mx-auto space-y-6">
+    <div className="min-h-screen bg-[#0a0d14]">
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-white">Daily Routine</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Resets at 4:30 AM · {dayKey}</p>
+            <h1 className="text-2xl font-bold text-white">Daily Routine</h1>
+            <p className="text-sm text-slate-500 mt-0.5">{today}</p>
           </div>
           <button
             type="button"
             onClick={() => setShowHidden((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg bg-[#1a1f2e] px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors border border-[#2a3045]"
+            className="flex items-center gap-1.5 rounded-lg bg-[#1a1f2e] px-3 py-2 text-xs text-slate-400 hover:text-white transition-colors border border-[#2a3045]"
           >
             {showHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             {showHidden ? "Hide hidden" : "Show hidden"}
           </button>
         </div>
 
-        {/* Progress bar */}
-        <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-white">Progress</span>
-            <span className="text-sm font-bold text-teal-400">{done}/{total} · {progress}%</span>
+        {/* Progress card */}
+        <div className="rounded-2xl border border-[#2a3045] bg-[#1a1f2e] p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-medium text-slate-400">Today&apos;s Progress</p>
+              <p className="text-3xl font-bold text-white mt-0.5">{progress}%</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-teal-400">{done}</p>
+              <p className="text-xs text-slate-500">of {total} done</p>
+            </div>
           </div>
-          <div className="h-2 w-full rounded-full bg-[#0f1117] overflow-hidden">
+          <div className="h-3 w-full rounded-full bg-[#0f1117] overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-teal-500 to-blue-500 transition-all duration-500"
-              style={{ width: `${progress}%` }}
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: `${progress}%`,
+                background: progress === 100
+                  ? "linear-gradient(90deg, #10b981, #06b6d4)"
+                  : "linear-gradient(90deg, #14b8a6, #3b82f6)",
+              }}
             />
           </div>
+          {progress === 100 && (
+            <p className="mt-2 text-center text-xs font-semibold text-teal-400">All done for today!</p>
+          )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-[#2a3045]">
-          {(["all", "completed", "pending"] as TabKey[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTabPersisted(t)}
-              className={cn(
-                "px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors",
-                tab === t
-                  ? "border-teal-500 text-teal-400"
-                  : "border-transparent text-slate-500 hover:text-slate-300"
-              )}
-            >
-              {t}
-            </button>
-          ))}
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#1a1f2e] border border-[#2a3045]">
+          {(["all", "pending", "completed"] as TabKey[]).map((t) => {
+            const count = t === "all" ? visible.length : t === "completed" ? done : total - done;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTabPersisted(t)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all capitalize",
+                  tab === t
+                    ? "bg-[#0f1117] text-white shadow"
+                    : "text-slate-500 hover:text-slate-300"
+                )}
+              >
+                {t}
+                <span className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  tab === t ? "bg-teal-500/20 text-teal-400" : "bg-[#2a3045] text-slate-500"
+                )}>{count}</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Add new */}
+        {/* Add new item */}
         <div className="flex items-center gap-2">
-          <Input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Add a routine item…"
-            className="bg-[#1a1f2e] border-[#2a3045] text-white placeholder:text-slate-600"
-            onKeyDown={(e) => { if (e.key === "Enter") addRoutine(); }}
-          />
-          <Button
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addRoutine(); }}
+              placeholder="Add a routine item…"
+              className="w-full rounded-xl border border-[#2a3045] bg-[#1a1f2e] px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
             onClick={addRoutine}
             disabled={adding || !newTitle.trim()}
-            size="sm"
-            className="shrink-0"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white hover:bg-teal-500 disabled:opacity-40 transition-colors"
           >
-            <Plus className="h-4 w-4" />
-          </Button>
+            <Plus className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* List */}
-        <div className="space-y-1">
+        {/* Routine list */}
+        <div className="space-y-2">
           {tabFiltered.length === 0 && (
-            <div className="py-12 text-center text-sm text-slate-500">
-              {tab === "completed" ? "Nothing completed yet today." : tab === "pending" ? "All done!" : "No routine items yet."}
+            <div className="py-16 text-center">
+              <p className="text-slate-500 text-sm">
+                {tab === "completed" ? "Nothing completed yet today." : tab === "pending" ? "All done! Great work." : "No routine items yet — add one above."}
+              </p>
             </div>
           )}
           {tabFiltered.map((r) => {
@@ -279,46 +291,56 @@ export default function RoutinePage() {
                 onDragOver={(e) => onDragOver(r.id, e)}
                 onDrop={onDrop}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-3 py-3 transition-all",
+                  "group flex items-center gap-3 rounded-xl border px-4 py-3.5 transition-all duration-200",
                   isDone
                     ? "border-teal-500/20 bg-teal-500/5"
-                    : "border-[#2a3045] bg-[#1a1f2e]",
-                  r.is_hidden && "opacity-50",
-                  dragId === r.id && "opacity-30"
+                    : "border-[#2a3045] bg-[#1a1f2e] hover:border-[#3a4055]",
+                  r.is_hidden && "opacity-40",
+                  dragId === r.id && "opacity-30 scale-95"
                 )}
               >
-                <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-600 active:cursor-grabbing" />
+                {/* Drag handle */}
+                <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-slate-700 group-hover:text-slate-500 active:cursor-grabbing transition-colors" />
+
+                {/* Checkbox */}
                 <button
                   type="button"
                   onClick={() => toggleComplete(r.id)}
-                  className="shrink-0 text-muted-foreground hover:text-teal-400"
+                  className="shrink-0 transition-transform active:scale-90"
                 >
                   {isDone
                     ? <CheckCircle2 className="h-5 w-5 text-teal-400" />
-                    : <Circle className="h-5 w-5" />}
+                    : <Circle className="h-5 w-5 text-slate-600 hover:text-slate-400 transition-colors" />}
                 </button>
-                <span className={cn("flex-1 text-sm", isDone ? "text-slate-500 line-through" : "text-white")}>
+
+                {/* Title */}
+                <span className={cn("flex-1 text-sm select-none", isDone ? "text-slate-500 line-through" : "text-white")}>
                   {r.title}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => toggleHidden(r.id)}
-                  title={r.is_hidden ? "Show" : "Hide"}
-                  className="shrink-0 text-slate-600 hover:text-slate-300 transition-colors"
-                >
-                  {r.is_hidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeRoutine(r.id)}
-                  className="shrink-0 text-slate-600 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+
+                {/* Actions — visible on hover */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={() => toggleHidden(r.id)}
+                    title={r.is_hidden ? "Show" : "Hide"}
+                    className="rounded-lg p-1.5 text-slate-600 hover:bg-[#2a3045] hover:text-slate-300 transition-colors"
+                  >
+                    {r.is_hidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeRoutine(r.id)}
+                    className="rounded-lg p-1.5 text-slate-600 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
+
       </div>
     </div>
   );

@@ -15,7 +15,6 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
-import { ClientsEmbedView } from "@/components/clients/clients-embed-view";
 import Link from "next/link";
 import type { Project, AccountMember } from "@/types";
 import { toast } from "sonner";
@@ -94,7 +93,7 @@ interface MyWorkFollowUp {
   priority: string | null;
 }
 
-type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks" | "leads-captured" | "clients";
+type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks";
 type SortDir = "asc" | "desc";
 type EnqSortField = "title" | "status" | "priority" | "next_follow_up_at";
 type PtSortField = "title" | "priority" | "due_date";
@@ -104,8 +103,6 @@ const TABS: { key: TabKey; label: string; icon: typeof ListChecks }[] = [
   { key: "project-tasks",  label: "Project Tasks",    icon: ListChecks },
   { key: "enquiry-tasks",  label: "Enquiry Tasks",    icon: ClipboardList },
   { key: "product-tasks",  label: "Product Tasks",    icon: Package },
-  { key: "clients",        label: "Client Directory", icon: Users },
-  { key: "leads-captured", label: "Leads Captured",   icon: Users },
 ];
 
 const ENQUIRY_STATUS_STYLE: Record<string, string> = {
@@ -307,7 +304,9 @@ function ProjectsSidebar({
 
 // ── Followups section (My Work) ───────────────────────────────────────────────
 function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
-  const [showHold, setShowHold] = useState(false);
+  const [showHold, setShowHold] = useState(() => {
+    try { return localStorage.getItem("mw-followups-show-hold") === "1"; } catch { return false; }
+  });
   const [fuSortDir, setFuSortDir] = useState<SortDir>("asc");
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem("mw-hidden-followups") ?? "[]")); } catch { return new Set(); }
@@ -390,7 +389,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
           </tbody>
         </table>
         {hold.length > 0 && (
-          <button type="button" onClick={() => setShowHold((v) => !v)}
+          <button type="button" onClick={() => setShowHold((v) => { const next = !v; try { localStorage.setItem("mw-followups-show-hold", next ? "1" : "0"); } catch {} return next; })}
             className="w-full flex items-center justify-center gap-1 border-t border-[#2a3045] py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors">
             <ChevronDown className={`h-3 w-3 transition-transform ${showHold ? "rotate-180" : ""}`} />
             {showHold ? "Hide" : `Show ${hold.length} hold`}
@@ -546,64 +545,6 @@ function ProductTasksSidebar({ productTasks, allProducts }: { productTasks: Prod
 }
 
 // ── Leads Captured tab ────────────────────────────────────────────────────────
-function LeadsCapturedTab({ accountId }: { accountId: string | null | undefined }) {
-  const [leads, setLeads] = useState<{ id: string; name: string; phone: string; company: string | null; search_category: string | null; lead_score: number | null; created_at: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    if (!accountId) return;
-    const supabase = createClient();
-    supabase.from("contacts")
-      .select("id, name, phone, company, search_category, lead_score, created_at")
-      .eq("account_id", accountId)
-      .eq("lead_source", "maps_scraper")
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => { setLeads(data ?? []); setLoading(false); });
-  }, [accountId]);
-  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-slate-500" /></div>;
-  if (leads.length === 0) return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 gap-3 text-center">
-      <Users className="h-10 w-10 text-slate-600" />
-      <p className="text-sm text-slate-500">No leads captured yet.</p>
-      <Link href="/leads/generate" className="text-xs text-blue-400 hover:underline">Generate leads →</Link>
-    </div>
-  );
-  return (
-    <div className="overflow-hidden rounded-xl border border-[#2a3045]">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-[#2a3045] text-left text-[11px] uppercase tracking-wider text-slate-500 bg-[#1a1f2e]">
-            <th className="px-4 py-2.5 font-medium">Name</th>
-            <th className="px-4 py-2.5 font-medium">Phone</th>
-            <th className="px-4 py-2.5 font-medium">Company / Address</th>
-            <th className="px-4 py-2.5 font-medium">Category</th>
-            <th className="px-4 py-2.5 font-medium">Score</th>
-            <th className="px-4 py-2.5 font-medium">Added</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.map((l) => (
-            <tr key={l.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
-              <td className="px-4 py-3 font-medium text-white">
-                <Link href="/contacts" className="hover:text-blue-400 transition-colors">{l.name}</Link>
-              </td>
-              <td className="px-4 py-3 text-xs text-slate-400">{l.phone}</td>
-              <td className="px-4 py-3 text-xs text-slate-400 max-w-[160px]"><p className="line-clamp-2 break-words">{l.company ?? "—"}</p></td>
-              <td className="px-4 py-3 text-xs text-slate-500 capitalize">{l.search_category ?? "—"}</td>
-              <td className="px-4 py-3">
-                {l.lead_score != null
-                  ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${l.lead_score >= 7 ? "bg-green-500/20 text-green-400" : l.lead_score >= 4 ? "bg-yellow-500/20 text-yellow-400" : "bg-slate-500/20 text-slate-400"}`}>{l.lead_score}/10</span>
-                  : <span className="text-slate-600">—</span>}
-              </td>
-              <td className="px-4 py-3 text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
   const { accountId, user, profile } = useAuth();
@@ -1108,7 +1049,7 @@ export default function OverviewPage() {
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
 
         {/* Header + global filter */}
-        <div className="shrink-0 px-6 pt-5 pb-3 flex items-start justify-between gap-4">
+        <div className="shrink-0 px-3 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
             <p className="mt-0.5 text-sm text-slate-400">Every task worth tracking — all in one place.</p>
@@ -1125,7 +1066,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Tabs */}
-        <div className="shrink-0 border-b border-[#2a3045] px-6">
+        <div className="shrink-0 border-b border-[#2a3045] px-3 sm:px-6">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -1145,7 +1086,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-3 sm:p-6">
 
           {/* My Work */}
           {activeTab === "my-work" && (
@@ -1554,27 +1495,11 @@ export default function OverviewPage() {
             </div>
           )}
 
-          {/* Client Directory */}
-          {activeTab === "clients" && <ClientsEmbedView />}
-
-          {/* Leads Captured */}
-          {activeTab === "leads-captured" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">Leads sourced via Google Places</p>
-                <Link href="/contacts"
-                  className="flex items-center gap-1.5 rounded-lg bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-400 hover:bg-blue-600/30 transition-colors">
-                  <ExternalLink className="h-3.5 w-3.5" /> Open Leads Captured
-                </Link>
-              </div>
-              <LeadsCapturedTab accountId={accountId} />
-            </div>
-          )}
         </div>
       </div>
 
       {/* Right sidebar — content varies per tab */}
-      <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+      <div className="hidden xl:flex w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
         {activeTab === "my-work" ? (
           <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             {/* Stats row */}
@@ -1672,13 +1597,6 @@ export default function OverviewPage() {
           <EnquirySidebar enquiries={enquiries} members={members} todayStr={todayStr} />
         ) : activeTab === "product-tasks" ? (
           <ProductTasksSidebar productTasks={productTasks} allProducts={ptProducts} />
-        ) : activeTab === "clients" ? (
-          <div className="flex-1 overflow-y-auto p-4">
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Quick Actions</p>
-            <Link href="/clients" className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-xs text-primary hover:bg-primary/20 transition-colors">
-              Open Full Client Directory →
-            </Link>
-          </div>
         ) : (
           <ProjectsSidebar
             projects={projects}

@@ -132,6 +132,7 @@ export default function ClientLeadsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [priorityFilter, setPriorityFilter] = useState<"all" | LeadPriority>("all");
   const [peopleFilter, setPeopleFilter] = useState<"all" | string>("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ClientLead | null>(null);
 
@@ -183,6 +184,10 @@ export default function ClientLeadsPage() {
         const q = search.trim().toLowerCase();
         const haystack = `${lead.title} ${lead.phone ?? ""} ${lead.notes ?? ""}`.toLowerCase();
         if (!haystack.includes(q)) return false;
+      }
+      if (overdueOnly) {
+        const fu = lead.next_follow_up_at ? new Date(lead.next_follow_up_at) : null;
+        if (!fu || fu >= new Date()) return false;
       }
       return true;
     })
@@ -384,10 +389,11 @@ export default function ClientLeadsPage() {
 
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+            onClick={() => setOverdueOnly((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}
           >
-            <Filter className="h-4 w-4" />
-            More Filters
+            <Calendar className="h-4 w-4" />
+            Overdue
           </button>
         </div>
 

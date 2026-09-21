@@ -327,6 +327,9 @@ export default function ProductTasksPage() {
   });
   const [search, setSearch] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState("all");
+  const [productFilter, setProductFilter] = useState("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -386,6 +389,12 @@ export default function ProductTasksPage() {
     .filter((t) => {
       if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
       if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
+      if (personFilter !== "all") {
+        const ids = t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [];
+        if (!ids.includes(personFilter)) return false;
+      }
+      if (productFilter !== "all" && t.product_id !== productFilter) return false;
+      if (overdueOnly && !(t.due_date && t.due_date < todayStr)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -494,6 +503,20 @@ export default function ProductTasksPage() {
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
+            <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}
+              className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
+              <option value="all">All People</option>
+              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
+            </select>
+            <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)}
+              className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
+              <option value="all">All Products</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+            </select>
+            <button type="button" onClick={() => setOverdueOnly((v) => !v)}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
+              Overdue
+            </button>
             <Link href="/products" className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Products
             </Link>
@@ -507,7 +530,7 @@ export default function ProductTasksPage() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 text-center gap-3">
               <Package className="h-10 w-10 text-slate-700" />
-              <p className="text-slate-500 text-sm">{search || priorityFilter !== "all" ? "No tasks match this filter." : "No product tasks yet."}</p>
+              <p className="text-slate-500 text-sm">{search || priorityFilter !== "all" || personFilter !== "all" || productFilter !== "all" || overdueOnly ? "No tasks match this filter." : "No product tasks yet."}</p>
               <button type="button" onClick={openCreate}
                 className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-4 py-2 text-sm text-slate-300 hover:border-teal-500/50 transition-colors">
                 <Plus className="h-4 w-4" /> Create first task

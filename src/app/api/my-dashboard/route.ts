@@ -15,13 +15,15 @@ export async function GET(request: Request) {
     const todayStr = now.toISOString().split('T')[0]
 
     // Project tasks assigned to targetUserId, visible today (show_date <= today or null)
-    const { data: tasks } = await ctx.supabase
+    // NOTE: two chained .or() calls can behave as OR at the URL level in some PostgREST
+    // versions. Apply the show_date guard in JS instead to guarantee AND semantics.
+    const { data: rawTasks } = await ctx.supabase
       .from('project_tasks')
       .select('id, title, priority, due_date, show_date, project_id, assignee_user_id, assignee_user_ids, project:projects(id, name, client_id, client:clients(id, name)), stage:pipeline_stages(name)')
       .eq('account_id', ctx.accountId)
       .or(`assignee_user_id.eq.${targetUserId},assignee_user_ids.cs.{${targetUserId}}`)
-      .or(`show_date.is.null,show_date.lte.${todayStr}`)
       .order('due_date', { ascending: true, nullsFirst: false })
+    const tasks = (rawTasks ?? []).filter((t) => !t.show_date || t.show_date <= todayStr)
 
     // Enquiry tasks assigned to targetUserId
     const { data: enquiryTasks } = await ctx.supabase
