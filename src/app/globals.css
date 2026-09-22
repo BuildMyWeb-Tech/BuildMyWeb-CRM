@@ -229,6 +229,47 @@ html[data-theme="rose"] {
   }
 }
 
+/* ============================================================
+ * MOBILE RESPONSIVENESS — global overrides
+ * ============================================================ */
+
+/* Wrap every table in a horizontal scroll container on small screens */
+@media (max-width: 767px) {
+  .overflow-hidden table,
+  .rounded-xl table,
+  .overflow-x-auto table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent long words / URLs from breaking layouts */
+  p, td, th, span, a {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Ensure fixed-width columns on mobile still shrink */
+  .w-72 { width: 100% !important; }
+
+  /* Ensure every page has comfortable horizontal padding on mobile */
+  main > .p-6 { padding: 1rem !important; }
+  main > .p-8 { padding: 1rem !important; }
+}
+
+/* Make all tables scroll instead of overflow */
+.table-mobile-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Minimum touch target size for buttons */
+@media (max-width: 767px) {
+  button, a[role="button"] {
+    min-height: 36px;
+  }
+}
+
 /* Scrollable but no visible scrollbar track/thumb — mouse wheel and
    touch scrolling still work, there's just nothing drawn for it. */
 .scrollbar-none {

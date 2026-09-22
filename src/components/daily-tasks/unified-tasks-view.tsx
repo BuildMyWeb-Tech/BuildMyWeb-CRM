@@ -578,7 +578,7 @@ export function UnifiedTasksView() {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[540px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                   <th className="px-2 py-2 font-medium w-8" />

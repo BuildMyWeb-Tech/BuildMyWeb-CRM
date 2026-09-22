@@ -1307,6 +1307,10 @@ export interface ProjectChatMessage {
   body: string;
   is_note: boolean;
   created_at: string;
+  attachment_url?: string | null;
+  attachment_type?: 'image' | 'pdf' | null;
+  attachment_name?: string | null;
+  reply_to_id?: string | null;
   sender?: AccountMember;
 }
 

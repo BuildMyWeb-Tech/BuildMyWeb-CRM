@@ -331,6 +331,8 @@ export default function ProductTasksPage() {
   const [productFilter, setProductFilter] = useState("all");
   const [overdueOnly, setOverdueOnly] = useState(false);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<ProductTask | null>(null);
@@ -420,7 +422,8 @@ export default function ProductTasksPage() {
   function openCreate() { setEditTask(null); setModalOpen(true); }
   function openEdit(task: ProductTask) { setEditTask(task); setModalOpen(true); }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Only show products that appear in at least one task in the filter dropdown
+  const productsWithTasks = products.filter((p) => (tasks ?? []).some((t) => t.product_id === p.id));
 
   return (
     <>
@@ -457,7 +460,7 @@ export default function ProductTasksPage() {
 
           {/* Stat cards */}
           {tasks !== null && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 w-full">
               {(() => {
                 const allT = tasks ?? [];
                 const inProgress = allT.filter((t) => {
@@ -492,7 +495,7 @@ export default function ProductTasksPage() {
           )}
 
           {/* Filter bar */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
             <input type="text" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)}
               className="flex-1 min-w-[180px] max-w-xs rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none" />
             <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
@@ -511,7 +514,7 @@ export default function ProductTasksPage() {
             <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
               <option value="all">All Products</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+              {productsWithTasks.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
             </select>
             <button type="button" onClick={() => setOverdueOnly((v) => !v)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
@@ -537,8 +540,8 @@ export default function ProductTasksPage() {
               </button>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-[#2a3045]">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
                     {(["title", "priority", "due_date"] as SortField[]).map((f) => (

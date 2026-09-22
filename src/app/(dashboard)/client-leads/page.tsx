@@ -447,7 +447,7 @@ export default function ClientLeadsPage() {
           /* TABLE VIEW */
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-[#2a3045] bg-[#1e2436]">
                     <th className="w-10 px-4 py-3 text-left">
