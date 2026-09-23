@@ -506,6 +506,7 @@ function StatusBadge({ state }: { state: WaConnectionState }) {
     AUTHENTICATING: { label: 'Authenticating', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
     PAIRING:        { label: 'Pairing',        color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
     LOGGED_OUT:     { label: 'Logged Out',     color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
+    DISCONNECTED:   { label: 'Disconnected',   color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
     ERROR:          { label: 'Error',          color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
   }
   const item = map[state] ?? { label: state, color: 'bg-gray-100 text-gray-600' }
