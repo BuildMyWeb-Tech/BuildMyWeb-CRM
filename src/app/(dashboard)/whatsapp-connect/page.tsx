@@ -63,7 +63,9 @@ function PairDialog({
   const [phoneNum, setPhoneNum] = useState('')
   const [assignTo, setAssignTo] = useState(user?.id ?? '')
   const [activateAfter, setActivateAfter] = useState(true)
-  const [step, setStep] = useState<'details' | 'scanning'>('details')
+  const [step, setStep] = useState<'details' | 'scanning'>(() =>
+    pageState === 'qr' || pageState === 'connecting' || pageState === 'connected' ? 'scanning' : 'details'
+  )
 
   function handleConnect() {
     const fullPhone = `${countryCode}${phoneNum.replace(/\D/g, '')}`
@@ -265,6 +267,11 @@ export default function WhatsAppConnectPage() {
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
 
+  // Auto-open pair dialog when QR becomes available so it's always shown in context
+  useEffect(() => {
+    if (pageState === 'qr') setPairOpen(true)
+  }, [pageState])
+
   useEffect(() => {
     if (pageState === 'connected') return
     const id = setInterval(fetchStatus, 3000)
@@ -368,29 +375,6 @@ export default function WhatsAppConnectPage() {
                   {actionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
                   {pageState === 'logged_out' ? 'Reconnect WhatsApp' : 'Pair a WhatsApp number'}
                 </button>
-              </div>
-            )}
-
-            {pageState === 'qr' && !pairOpen && (
-              <div className="flex flex-col items-center gap-6">
-                <div className="p-3 rounded-xl border-2 border-green-200 dark:border-green-800 bg-white">
-                  {account?.qr_data_uri ? (
-                    <Image src={account.qr_data_uri} alt="WhatsApp QR code" width={220} height={220} className="rounded" unoptimized />
-                  ) : (
-                    <div className="w-[220px] h-[220px] flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                    </div>
-                  )}
-                </div>
-                <ol className="text-sm text-gray-600 dark:text-gray-400 space-y-1 text-left w-full">
-                  <li>1. Open <span className="font-medium text-gray-800 dark:text-gray-200">WhatsApp</span> on your phone</li>
-                  <li>2. Tap <span className="font-medium">Settings → Linked Devices</span></li>
-                  <li>3. Tap <span className="font-medium">Link a device</span> and scan this code</li>
-                </ol>
-                <p className="text-xs text-gray-400 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  Waiting for scan…
-                </p>
               </div>
             )}
 
