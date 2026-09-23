@@ -29,11 +29,18 @@ import { toast } from "sonner";
 
 type C360Tab = "overview" | "projects" | "tasks" | "files" | "payments" | "notes" | "info" | "scope";
 
-const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
+const STATUSES: ClientStatus[] = ["active", "inactive", "archived", "completed"];
 const STATUS_STYLE: Record<ClientStatus, string> = {
   active: "bg-primary/10 text-primary",
   inactive: "bg-amber-500/15 text-amber-500",
   archived: "bg-muted text-muted-foreground",
+  completed: "bg-blue-500/15 text-blue-400",
+};
+const STATUS_LABEL: Record<ClientStatus, string> = {
+  active: "Active",
+  inactive: "Hold On",
+  archived: "Archived",
+  completed: "Completed",
 };
 const ACCENT_COLORS = [
   "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
@@ -331,10 +338,10 @@ export default function ClientDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">{client.name}</h1>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLE[client.status]}`}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[client.status]}`}
                 style={{ borderLeft: `3px solid ${accentColor}` }}
               >
-                {client.status}
+                {STATUS_LABEL[client.status] ?? client.status}
               </span>
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -733,7 +740,7 @@ export default function ClientDetailPage() {
                 <Select value={client.status} onValueChange={(v) => v && saveStatus(v as ClientStatus)} disabled={savingStatus}>
                   <SelectTrigger className="h-8 w-full"><SelectValue className="capitalize">{(v: string) => v}</SelectValue></SelectTrigger>
                   <SelectContent>
-                    {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Button variant="ghost" size="icon-xs" onClick={() => setEditingStatus(false)} className="shrink-0 text-muted-foreground hover:text-foreground">
@@ -742,7 +749,7 @@ export default function ClientDetailPage() {
               </div>
             ) : (
               <div className="mt-0.5 flex items-center justify-between">
-                <p className="text-sm capitalize text-foreground">{client.status}</p>
+                <p className="text-sm text-foreground">{STATUS_LABEL[client.status] ?? client.status}</p>
                 {canEditInfo && <button type="button" onClick={() => setEditingStatus(true)} className="text-xs text-primary hover:underline">Edit</button>}
               </div>
             )}

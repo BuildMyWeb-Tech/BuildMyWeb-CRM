@@ -43,7 +43,14 @@ async function fetchClients(): Promise<Client[]> {
   return (await res.json()).clients ?? [];
 }
 
-const STATUSES: ClientStatus[] = ["active", "inactive", "archived"];
+const STATUSES: ClientStatus[] = ["active", "inactive", "archived", "completed"];
+
+const STATUS_LABEL: Record<ClientStatus, string> = {
+  active: "Active",
+  inactive: "Hold On",
+  archived: "Archived",
+  completed: "Completed",
+};
 
 // Client Directory — the whole client relationship, from when they
 // first became a client until now (or archived). Distinct from
@@ -80,22 +87,12 @@ function getInitials(name: string): string {
 
 function StatusBadge({ status }: { status: ClientStatus }) {
   if (status === "active")
-    return (
-      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-        Active
-      </span>
-    );
+    return <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold text-green-400">Active</span>;
   if (status === "inactive")
-    return (
-      <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
-        Inactive
-      </span>
-    );
-  return (
-    <span className="rounded-full bg-slate-600/20 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-      Archived
-    </span>
-  );
+    return <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-[10px] font-semibold text-yellow-400">Hold On</span>;
+  if (status === "completed")
+    return <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-semibold text-blue-400">Completed</span>;
+  return <span className="rounded-full bg-slate-600/20 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Archived</span>;
 }
 
 
@@ -230,6 +227,7 @@ export default function ClientsPage() {
   const activeCount = allClients.filter((c) => c.status === "active").length;
   const atRiskCount = allClients.filter((c) => c.status === "inactive").length;
   const archivedCount = allClients.filter((c) => c.status === "archived").length;
+  const completedCount = allClients.filter((c) => c.status === "completed").length;
 
   const visibleClients = allClients.filter((c) => {
     const matchesStatus = statusFilter === "all" || c.status === statusFilter;
@@ -286,16 +284,29 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          {/* Inactive */}
+          {/* Hold On */}
           <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Inactive</span>
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Hold On</span>
               <div className="h-8 w-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
                 <AlertTriangle className="h-4 w-4 text-yellow-400" />
               </div>
             </div>
             <div className="text-2xl font-bold text-white mb-1">
               {clients === null ? "—" : atRiskCount}
+            </div>
+          </div>
+
+          {/* Completed */}
+          <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Completed</span>
+              <div className="h-8 w-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Archive className="h-4 w-4 text-blue-400" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {clients === null ? "—" : completedCount}
             </div>
           </div>
 
@@ -310,7 +321,6 @@ export default function ClientsPage() {
             <div className="text-2xl font-bold text-white mb-1">
               {clients === null ? "—" : archivedCount}
             </div>
-            <div className="text-xs text-slate-500">no change</div>
           </div>
         </div>
 
@@ -344,7 +354,8 @@ export default function ClientsPage() {
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="inactive">Hold On</option>
+            <option value="completed">Completed</option>
             <option value="archived">Archived</option>
           </select>
 
@@ -486,7 +497,7 @@ export default function ClientsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {STATUSES.map((s) => (
-                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                    <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -580,7 +591,7 @@ export default function ClientsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {STATUSES.map((s) => (
-                    <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                    <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

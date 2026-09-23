@@ -611,7 +611,7 @@ export interface CompanyInfoValue {
 // Client Directory
 // ============================================================
 
-export type ClientStatus = "active" | "inactive" | "archived";
+export type ClientStatus = "active" | "inactive" | "archived" | "completed";
 
 export interface Client {
   id: string;

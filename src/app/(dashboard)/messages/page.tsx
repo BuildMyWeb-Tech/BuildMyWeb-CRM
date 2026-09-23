@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { AtSign, Loader2, MessageSquare, Send } from "lucide-react";
+import { AtSign, CheckCheck, Loader2, MessageSquare, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { AccountMember, DirectMessage } from "@/types";
@@ -202,6 +202,11 @@ export default function MessagesPage() {
         <div className="border-b border-border px-4 py-3">
           <h1 className="font-semibold text-foreground flex items-center gap-2">
             <MessageSquare className="h-4 w-4" /> Messages
+            {Object.values(unreadMap).reduce((s, n) => s + n, 0) > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                {Object.values(unreadMap).reduce((s, n) => s + n, 0)}
+              </span>
+            )}
           </h1>
           <p className="text-[11px] text-muted-foreground mt-0.5">Direct messages with your team</p>
         </div>
@@ -257,10 +262,22 @@ export default function MessagesPage() {
             {/* Header */}
             <div className="flex items-center gap-3 border-b border-border bg-card px-5 py-3">
               <Avatar name={selectedMember?.full_name ?? "?"} />
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold text-foreground">{selectedMember?.full_name}</p>
                 <p className="text-xs text-muted-foreground capitalize">{selectedMember?.role}</p>
               </div>
+              {selectedUserId && (unreadMap[selectedUserId] ?? 0) > 0 && (
+                <button type="button"
+                  onClick={() => {
+                    fetch(`/api/direct-messages/${selectedUserId}`, { method: "PATCH" }).then(() => {
+                      setUnreadMap((prev) => ({ ...prev, [selectedUserId]: 0 }));
+                    });
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  Mark as read ({unreadMap[selectedUserId]})
+                </button>
+              )}
             </div>
 
             {/* Messages */}

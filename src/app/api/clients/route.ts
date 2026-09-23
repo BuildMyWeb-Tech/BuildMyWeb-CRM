@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-  const status = typeof body.status === 'string' && ['active', 'inactive', 'archived'].includes(body.status)
+  const status = typeof body.status === 'string' && ['active', 'inactive', 'archived', 'completed'].includes(body.status)
     ? body.status
     : 'active'
 

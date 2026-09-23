@@ -36,6 +36,8 @@ export default function ProjectDetailPage() {
   const [defaultStageId, setDefaultStageId] = useState<string | null>(null);
   const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [taskViewMode, setTaskViewMode] = useState<"current" | "scheduled" | "all">("current");
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const load = useCallback(() => {
     Promise.all([
@@ -184,31 +186,73 @@ export default function ProjectDetailPage() {
         </button>
       </div>
 
-      {tab === "board" && stages.length > 0 && (
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {stages.map((s) => {
-            const count = tasks.filter((t) => t.stage_id === s.id).length;
-            return (
-              <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
-                <p className="text-xl font-bold text-foreground">{count}</p>
-                <p className="truncate text-[10px] text-muted-foreground">{s.name}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {tab === "board" && (() => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const stageNameOf = (name: string) => stages.find((s) => s.name.toLowerCase().includes(name.toLowerCase()))?.id;
+        const inProgressId = stageNameOf("progress");
+        const reviewId = stageNameOf("review");
+        const todoId = stageNameOf("to do") ?? stageNameOf("todo");
+        const holdId = stageNameOf("hold");
+        const waitingId = stageNameOf("waiting");
+        const overdueTasks = tasks.filter((t) => (t as unknown as { due_date?: string }).due_date && (t as unknown as { due_date: string }).due_date < todayStr);
 
-      {tab === "board" && (
-        <div className="mt-6">
-          <TaskBoard
-            stages={stages}
-            tasks={tasks}
-            onTaskMoved={handleTaskMoved}
-            onAddTask={handleAddTask}
-            onEditTask={handleEditTask}
-          />
-        </div>
-      )}
+        // Filter tasks for board based on view mode
+        const filteredTasks = tasks.filter((t) => {
+          const sd = (t as unknown as { show_date?: string }).show_date;
+          if (taskViewMode === "current" && sd && sd > todayStr) return false;
+          if (taskViewMode === "scheduled" && !(sd && sd > todayStr)) return false;
+          if (overdueOnly && !((t as unknown as { due_date?: string }).due_date && (t as unknown as { due_date: string }).due_date < todayStr)) return false;
+          return true;
+        });
+
+        const STAT_CARDS = [
+          { label: "Total Tasks", count: tasks.length, color: "text-foreground" },
+          { label: "In Progress", count: inProgressId ? tasks.filter((t) => t.stage_id === inProgressId).length : 0, color: "text-blue-500" },
+          { label: "Review", count: reviewId ? tasks.filter((t) => t.stage_id === reviewId).length : 0, color: "text-yellow-500" },
+          { label: "To Do", count: todoId ? tasks.filter((t) => t.stage_id === todoId).length : 0, color: "text-slate-400" },
+          { label: "Hold", count: holdId ? tasks.filter((t) => t.stage_id === holdId).length : 0, color: "text-orange-400" },
+          { label: "Waiting on Client", count: waitingId ? tasks.filter((t) => t.stage_id === waitingId).length : 0, color: "text-purple-400" },
+        ];
+
+        return (
+          <>
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {STAT_CARDS.map((s) => (
+                <div key={s.label} className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
+                  <p className={`text-xl font-bold ${s.color}`}>{s.count}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* View mode + overdue controls */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+                {(["current", "scheduled", "all"] as const).map((mode) => (
+                  <button key={mode} type="button" onClick={() => setTaskViewMode(mode)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${taskViewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                    {mode === "current" ? "Current" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setOverdueOnly((v) => !v)}
+                className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}>
+                Overdue ({overdueTasks.length})
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <TaskBoard
+                stages={stages}
+                tasks={filteredTasks}
+                onTaskMoved={handleTaskMoved}
+                onAddTask={handleAddTask}
+                onEditTask={handleEditTask}
+              />
+            </div>
+          </>
+        );
+      })()}
       {tab === "files" && accountId && user && (
         <div className="mt-6">
           <CombinedFilesView accountId={accountId} userId={user.id} projectId={project.id} />

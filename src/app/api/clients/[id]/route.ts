@@ -70,7 +70,7 @@ export async function PATCH(
   if ('owner_user_id' in body) update.owner_user_id = body.owner_user_id ?? null
   if ('next_follow_up_at' in body) update.next_follow_up_at = body.next_follow_up_at ?? null
   if (typeof body.status === 'string') {
-    if (!['active', 'inactive', 'archived'].includes(body.status)) {
+    if (!['active', 'inactive', 'archived', 'completed'].includes(body.status)) {
       return NextResponse.json({ error: 'invalid status' }, { status: 400 })
     }
     update.status = body.status

@@ -330,6 +330,7 @@ export default function ProductTasksPage() {
   const [personFilter, setPersonFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<"current" | "scheduled" | "all">("current");
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -389,6 +390,10 @@ export default function ProductTasksPage() {
 
   const filtered = (tasks ?? [])
     .filter((t) => {
+      // View mode filter
+      if (viewMode === "current" && t.show_date && t.show_date > todayStr) return false;
+      if (viewMode === "scheduled" && !(t.show_date && t.show_date > todayStr)) return false;
+      // all = no show_date filter
       if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
       if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
       if (personFilter !== "all") {
@@ -493,6 +498,16 @@ export default function ProductTasksPage() {
               })()}
             </div>
           )}
+
+          {/* View mode tabs */}
+          <div className="flex items-center gap-1 rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-1 w-fit">
+            {(["current", "scheduled", "all"] as const).map((mode) => (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)}
+                className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${viewMode === mode ? "bg-teal-600 text-white" : "text-slate-400 hover:text-white"}`}>
+                {mode === "current" ? "Current Tasks" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
+              </button>
+            ))}
+          </div>
 
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
