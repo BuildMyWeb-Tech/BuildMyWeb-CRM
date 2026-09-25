@@ -36,7 +36,10 @@ import {
   Phone,
   Radio,
   Rows3,
+  Receipt,
+  Star,
   Search,
+  Timer,
   UserPlus,
   Users,
   Users2,
@@ -76,6 +79,7 @@ export interface CrmModule {
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/overview", labelKey: "dashboard", icon: Rows3, minRole: "viewer" },
+  { href: "/business-dashboard", labelKey: "businessDashboard", icon: LayoutDashboard, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,
@@ -89,6 +93,16 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer", pageKey: "client_directory" },
       { href: "/client-leads", labelKey: "clientLeads", icon: UserPlus, minRole: "viewer", pageKey: "client_leads" },
       { href: "/future-clients", labelKey: "futureClients", icon: Sparkles, minRole: "viewer", pageKey: "future_clients" },
+    ],
+  },
+  {
+    id: "business",
+    labelKey: "moduleBusiness",
+    minRole: "viewer",
+    items: [
+      { href: "/time-tracker", labelKey: "timeTracker", icon: Timer, minRole: "viewer" },
+      { href: "/expenses", labelKey: "expenses", icon: Receipt, minRole: "viewer" },
+      { href: "/reviews", labelKey: "reviews", icon: Star, minRole: "viewer" },
     ],
   },
   {
