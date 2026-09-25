@@ -248,6 +248,24 @@ describe('ConnectionManager', () => {
     expect(provider.logout).toHaveBeenCalled()
   })
 
+  it('clears qr_data_uri in DB when state transitions to CONNECTED', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const mgr = makeManager(provider, store, repo)
+    await mgr.start()
+
+    provider._emit({ type: 'state_changed', state: 'CONNECTED' })
+    await Promise.resolve()
+
+    // setConnectionState must have been called with qrDataUri: null to clear
+    // the stale QR code that the CRM status API would otherwise keep returning.
+    const calls = (repo.setConnectionState as ReturnType<typeof vi.fn>).mock.calls
+    const connectedCall = calls.find((args: unknown[]) => args[1] === 'CONNECTED')
+    expect(connectedCall).toBeDefined()
+    expect((connectedCall![2] as Record<string, unknown>).qrDataUri).toBeNull()
+  })
+
   it('temporary disconnect does NOT clear session', async () => {
     const provider = makeProvider()
     const store = makeSessionStore()

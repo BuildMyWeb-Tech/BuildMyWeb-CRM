@@ -163,6 +163,9 @@ export class ConnectionManager {
 
     await this.repo.setConnectionState(this.whatsappAccountId, next, {
       reconnectAttempts: this.reconnectAttempts,
+      // Clear the stale QR from DB the moment connection is established so
+      // the CRM status API stops returning an expired QR code.
+      ...(next === 'CONNECTED' ? { qrDataUri: null } : {}),
     })
 
     if (next === 'CONNECTED') {

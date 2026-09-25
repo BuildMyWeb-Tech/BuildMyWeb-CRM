@@ -126,6 +126,38 @@ describe('DbSessionStore', () => {
     expect(result).toBeNull()
   })
 
+  it('save → load preserves Buffer-tagged objects (BaileysProvider serialization contract)', async () => {
+    // BaileysProvider.snapshotAuthState() uses BufferJSON.replacer to encode
+    // Uint8Arrays as {type:"Buffer",data:"base64"}. DbSessionStore must round-trip
+    // these objects correctly so BaileysProvider.initialize() can revive them.
+    const sharedDb = new Map<string, Record<string, unknown>>()
+    const store = new DbSessionStore(makeFakeSupabase(sharedDb) as never, TEST_KEY)
+
+    const authStateWithBufferTags: AuthState = {
+      creds: {
+        noiseKey: { type: 'Buffer', data: 'AQID' },
+        signedIdentityKey: { public: { type: 'Buffer', data: 'BAUG' }, private: { type: 'Buffer', data: 'BwgJ' } },
+        registered: true,
+        me: { id: '91999@s.whatsapp.net', name: 'Test' },
+      },
+      keys: {
+        'pre-key': { '0': { keyPair: { private: { type: 'Buffer', data: 'AQID' } }, id: 0, counter: 0 } },
+        'session': {},
+      },
+    }
+
+    await store.save(accountId, authStateWithBufferTags)
+    const loaded = await store.load(accountId)
+
+    expect(loaded).not.toBeNull()
+    // Buffer-tagged objects must be preserved exactly so BufferJSON.reviver can restore them.
+    expect(loaded?.creds.noiseKey).toEqual({ type: 'Buffer', data: 'AQID' })
+    expect((loaded?.creds.signedIdentityKey as Record<string, unknown>).public)
+      .toEqual({ type: 'Buffer', data: 'BAUG' })
+    expect(loaded?.creds.registered).toBe(true)
+    expect((loaded?.keys as Record<string, unknown>)['pre-key']).toBeDefined()
+  })
+
   it('different encryption keys produce different ciphertext', async () => {
     const db1 = new Map<string, Record<string, unknown>>()
     const db2 = new Map<string, Record<string, unknown>>()

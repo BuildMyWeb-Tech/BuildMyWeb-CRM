@@ -6,6 +6,7 @@
 import makeWASocket, {
   initAuthCreds,
   DisconnectReason,
+  BufferJSON,
   type WASocket,
   type AuthenticationState,
   type BaileysEventMap,
@@ -66,8 +67,14 @@ export class BaileysProvider implements WhatsAppProvider {
 
   async initialize(authState: AuthState | null): Promise<void> {
     if (authState) {
-      this.savedCreds = authState.creds
-      this.keysData = (authState.keys ?? {}) as Record<string, Record<string, unknown>>
+      // Revive Buffer-tagged objects ({type:"Buffer",data:"base64"}) back to
+      // Buffer instances so Baileys can use them for crypto operations.
+      this.savedCreds = JSON.parse(
+        JSON.stringify(authState.creds), BufferJSON.reviver,
+      ) as Record<string, unknown>
+      this.keysData = JSON.parse(
+        JSON.stringify(authState.keys), BufferJSON.reviver,
+      ) as Record<string, Record<string, unknown>>
     } else {
       this.savedCreds = null
       this.keysData = {}
@@ -194,11 +201,17 @@ export class BaileysProvider implements WhatsAppProvider {
   }
 
   private snapshotAuthState(baileysAuth: AuthenticationState): AuthState {
+    // Use BufferJSON.replacer so Uint8Array/Buffer values in creds and keys
+    // are encoded as {type:"Buffer",data:"base64"} — safe for JSON.stringify
+    // in DbSessionStore. Without this, Uint8Arrays become {0:x,1:y,...} plain
+    // objects that Baileys rejects as crypto keys on session restore.
     return {
-      // Spread creds to capture the latest device identity state.
-      creds: { ...(baileysAuth.creds as unknown as Record<string, unknown>) },
-      // Deep clone keys so the persisted snapshot is immutable.
-      keys: JSON.parse(JSON.stringify(this.keysData)) as Record<string, unknown>,
+      creds: JSON.parse(
+        JSON.stringify(baileysAuth.creds, BufferJSON.replacer),
+      ) as Record<string, unknown>,
+      keys: JSON.parse(
+        JSON.stringify(this.keysData, BufferJSON.replacer),
+      ) as Record<string, unknown>,
     }
   }
 
