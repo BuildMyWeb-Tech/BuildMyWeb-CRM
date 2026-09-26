@@ -104,12 +104,30 @@ export class BaileysProvider implements WhatsAppProvider {
     // Build Baileys AuthenticationState entirely in memory.
     // savedCreds=null → fresh session → Baileys emits QR.
     // savedCreds set  → restored session → Baileys reconnects without QR.
-    const baileysAuthState = this.buildBaileysAuthState()
+    //
+    // IMPORTANT: baileysAuth must be declared before buildKeyStore is called
+    // so the onSet hook (which closes over baileysAuth) can call
+    // snapshotAuthState with the live creds object Baileys mutates in place.
+    const creds = this.savedCreds ? (this.savedCreds as never) : initAuthCreds()
+    const baileysAuth: AuthenticationState = { creds, keys: null as never }
+
+    // When Baileys commits a Signal key transaction (every message advances
+    // the Double Ratchet), it calls keys.set().  Without this hook those key
+    // updates live in keysData only — never written to the DB.  On the next
+    // worker restart the DB has stale ratchet state → Bad MAC on every inbound
+    // message.  The hook immediately queues a serialised save so the DB always
+    // has the latest Signal key material.
+    baileysAuth.keys = this.buildKeyStore(() => {
+      const snapshot = this.snapshotAuthState(baileysAuth)
+      this.savedCreds = snapshot.creds
+      logger.debug('signal_keys_persisted', { op: 'keys_set_hook', types: Object.keys(this.keysData).join(',') })
+      this.emit({ type: 'auth_state_updated', authState: snapshot })
+    })
 
     this.socket = makeWASocket({
       auth: {
-        creds: baileysAuthState.creds,
-        keys: makeCacheableSignalKeyStore(baileysAuthState.keys, noopLogger as never),
+        creds: baileysAuth.creds,
+        keys: makeCacheableSignalKeyStore(baileysAuth.keys, noopLogger as never),
       },
       printQRInTerminal: false,
       logger: noopLogger as never,
@@ -117,7 +135,7 @@ export class BaileysProvider implements WhatsAppProvider {
       connectTimeoutMs: 60_000,
     })
 
-    this.wireEvents(this.socket, baileysAuthState)
+    this.wireEvents(this.socket, baileysAuth)
     this.setState('AUTHENTICATING')
   }
 
@@ -186,17 +204,14 @@ export class BaileysProvider implements WhatsAppProvider {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private buildBaileysAuthState(): AuthenticationState {
-    const creds = this.savedCreds ? (this.savedCreds as never) : initAuthCreds()
-    return { creds, keys: this.buildKeyStore() }
-  }
-
   /**
    * In-memory keys store backed by keysData.
-   * Baileys calls set() whenever keys change; keysData stays current so
-   * snapshotAuthState always captures the complete Signal key material.
+   * Baileys calls set() whenever Signal keys change (ratchet advance, prekey
+   * consumption, sender-key updates).  The onSet hook fires after each commit
+   * so the DB always has the latest key material — without it a worker restart
+   * after any message exchange would load stale ratchet state → Bad MAC.
    */
-  private buildKeyStore() {
+  private buildKeyStore(onSet?: () => void) {
     return {
       get: async (type: string, ids: string[]) => {
         const out: Record<string, unknown> = {}
@@ -207,10 +222,13 @@ export class BaileysProvider implements WhatsAppProvider {
         return out
       },
       set: async (data: Record<string, Record<string, unknown>>) => {
+        const types = Object.keys(data)
         for (const [type, vals] of Object.entries(data)) {
           this.keysData[type] ??= {}
           Object.assign(this.keysData[type], vals)
         }
+        logger.debug('signal_keys_updated', { types: types.join(',') })
+        onSet?.()
       },
     } as never
   }
@@ -273,9 +291,11 @@ export class BaileysProvider implements WhatsAppProvider {
 
     sock.ev.on('creds.update', () => {
       // Baileys updated device creds — persist creds + keys immediately.
+      // Note: Signal session key changes are persisted via the buildKeyStore onSet
+      // hook; this handler covers credential-only updates (device registration, etc).
       const snapshot = this.snapshotAuthState(baileysAuth)
-      // Update our local creds reference so reconnects use the latest.
       this.savedCreds = snapshot.creds
+      logger.debug('creds_update_persisted', { op: 'creds_update' })
       this.emit({ type: 'auth_state_updated', authState: snapshot })
     })
 

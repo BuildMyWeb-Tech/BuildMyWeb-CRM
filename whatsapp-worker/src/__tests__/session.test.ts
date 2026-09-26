@@ -158,6 +158,67 @@ describe('DbSessionStore', () => {
     expect((loaded?.keys as Record<string, unknown>)['pre-key']).toBeDefined()
   })
 
+  it('serialized save queue: slower first save cannot overwrite faster second save', async () => {
+    // Simulates the race: save(A) starts, save(B) starts while A is in-flight,
+    // B resolves first.  Without the serialized queue the DB ends up with A.
+    // With the queue saves run in order so the DB always ends up with B (latest).
+    const sharedDb = new Map<string, Record<string, unknown>>()
+
+    // Intercept DB writes and track order of completions.
+    let resolveFirst!: () => void
+    let firstStarted = false
+    const completionOrder: string[] = []
+
+    // Override the fake supabase to make the FIRST write async/slow.
+    const originalFrom = makeFakeSupabase(sharedDb).from
+    let callCount = 0
+    const supabase = {
+      from: (table: string) => {
+        const chain = originalFrom(table)
+        const originalThen = chain.then.bind(chain)
+        chain.then = (resolve: Parameters<typeof chain.then>[0]) => {
+          callCount++
+          if (callCount === 1) {
+            // First save is "slow" — returns a Promise that we control.
+            firstStarted = true
+            return new Promise<void>((res) => {
+              resolveFirst = () => { originalThen(resolve); res() }
+            })
+          }
+          completionOrder.push('B')
+          return originalThen(resolve)
+        }
+        return chain
+      },
+    }
+
+    const store = new DbSessionStore(supabase as never, TEST_KEY)
+
+    const stateA: AuthState = { creds: { label: 'A', registered: true }, keys: {} }
+    const stateB: AuthState = { creds: { label: 'B', registered: true }, keys: {} }
+
+    // Start save A (slow) and immediately queue save B.
+    const saveA = store.save(accountId, stateA)
+    const saveB = store.save(accountId, stateB)
+
+    // Allow B to run (in the non-serialized world B would finish first).
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Now let A complete.
+    if (firstStarted) {
+      completionOrder.push('A')
+      resolveFirst?.()
+    }
+
+    await Promise.all([saveA, saveB])
+
+    // With a serialized queue: A runs first, B runs second.
+    // Final DB state must be B (the later-queued save with newer state).
+    const loaded = await store.load(accountId)
+    expect(loaded?.creds).toEqual(stateB.creds)
+  })
+
   it('different encryption keys produce different ciphertext', async () => {
     const db1 = new Map<string, Record<string, unknown>>()
     const db2 = new Map<string, Record<string, unknown>>()

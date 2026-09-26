@@ -42,6 +42,10 @@ export type LogEvent =
   | 'inbound_owner_not_found'
   | 'inbound_lid_resolved'
   | 'inbound_lid_unresolvable'
+  | 'signal_keys_updated'
+  | 'signal_keys_persisted'
+  | 'creds_update_persisted'
+  | 'session_save_queued'
 
 function log(level: Level, event: LogEvent, data?: Record<string, unknown>) {
   if (LEVELS[level] < configLevel()) return

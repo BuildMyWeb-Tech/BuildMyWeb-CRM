@@ -15,6 +15,11 @@ import type { AuthState } from '../provider/adapter.js'
 import { logger } from '../logger.js'
 
 export class DbSessionStore implements WhatsAppSessionStore {
+  // Serialised save queue — saves are chained so a slow in-flight save can
+  // never overwrite a faster later save with older key material.
+  private saveQueue: Promise<void> = Promise.resolve()
+  private saveSeq = 0
+
   constructor(
     private readonly supabase: SupabaseClient,
     private readonly encryptionKeyHex: string,
@@ -48,26 +53,41 @@ export class DbSessionStore implements WhatsAppSessionStore {
   }
 
   async save(whatsappAccountId: string, authState: AuthState): Promise<void> {
-    const plain = JSON.stringify(authState)
-    const encrypted = encrypt(plain, this.encryptionKeyHex)
+    const seq = ++this.saveSeq
+    const start = Date.now()
+    logger.debug('session_save_queued', { whatsappAccountId, seq })
 
-    const { error } = await this.supabase
-      .from('whatsapp_session_state')
-      .upsert(
-        {
-          whatsapp_account_id: whatsappAccountId,
-          encrypted_state: encrypted,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'whatsapp_account_id' },
-      )
+    // Chain every save onto the previous one so they execute sequentially.
+    // Without this, rapid back-to-back saves (e.g. one per inbound message)
+    // can complete out of order — an older save overwrites newer key material.
+    this.saveQueue = this.saveQueue
+      .then(async () => {
+        const plain = JSON.stringify(authState)
+        const encrypted = encrypt(plain, this.encryptionKeyHex)
 
-    if (error) {
-      logger.error('error', { op: 'session_save', message: error.message })
-      return
-    }
+        const { error } = await this.supabase
+          .from('whatsapp_session_state')
+          .upsert(
+            {
+              whatsapp_account_id: whatsappAccountId,
+              encrypted_state: encrypted,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'whatsapp_account_id' },
+          )
 
-    logger.info('session_saved', { whatsappAccountId })
+        const durationMs = Date.now() - start
+        if (error) {
+          logger.error('error', { op: 'session_save', seq, durationMs, message: error.message })
+          return
+        }
+        logger.info('session_saved', { whatsappAccountId, seq, durationMs })
+      })
+      .catch((err: unknown) => {
+        logger.error('error', { op: 'session_save_queue', seq, message: String(err) })
+      })
+
+    return this.saveQueue
   }
 
   async clear(whatsappAccountId: string): Promise<void> {
