@@ -133,21 +133,54 @@ export class ConnectionManager {
 
       case 'message_received': {
         const msg = event.message
+        logger.info('inbound_message_received', {
+          messageId: msg.messageId,
+          from: msg.from,
+          contentType: msg.contentType,
+          hasBody: msg.body !== null,
+          timestamp: msg.timestamp,
+        })
+
         const contactId = await this.inboxRepo.resolveContact(
           this.accountId,
           msg.from,
           null,
         )
-        if (!contactId) break
+        if (!contactId) {
+          logger.warn('inbound_contact_not_resolved', {
+            messageId: msg.messageId,
+            from: msg.from,
+            accountId: this.accountId,
+          })
+          break
+        }
+        logger.info('inbound_contact_resolved', { messageId: msg.messageId, contactId })
+
         const conversationId = await this.inboxRepo.resolveConversation(
           this.accountId,
           contactId,
         )
-        if (!conversationId) break
-        await this.inboxRepo.insertInboundMessage(conversationId, msg, {
+        if (!conversationId) {
+          logger.warn('inbound_conversation_not_resolved', {
+            messageId: msg.messageId,
+            contactId,
+            accountId: this.accountId,
+          })
+          break
+        }
+        logger.info('inbound_conversation_resolved', { messageId: msg.messageId, conversationId })
+
+        const insertedId = await this.inboxRepo.insertInboundMessage(conversationId, msg, {
           accountId: this.accountId,
           contactId,
         })
+        if (insertedId) {
+          logger.info('inbound_message_inserted', {
+            messageId: msg.messageId,
+            crmMessageId: insertedId,
+            conversationId,
+          })
+        }
         break
       }
 

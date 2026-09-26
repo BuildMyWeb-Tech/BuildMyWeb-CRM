@@ -52,6 +52,7 @@ export class InboxRepository {
             .update({ name: displayName, updated_at: new Date().toISOString() })
             .eq('id', match.id)
         }
+        logger.info('inbound_contact_found', { contactId: match.id, accountId })
         return match.id
       }
     }
@@ -87,6 +88,9 @@ export class InboxRepository {
       return null
     }
 
+    if (created?.id) {
+      logger.info('inbound_contact_created', { contactId: created.id, phone, accountId })
+    }
     return created?.id ?? null
   }
 
@@ -103,7 +107,10 @@ export class InboxRepository {
       .order('created_at', { ascending: true })
       .limit(1)
 
-    if (existing && existing.length > 0) return existing[0].id
+    if (existing && existing.length > 0) {
+      logger.info('inbound_conversation_found', { conversationId: existing[0].id, accountId, contactId })
+      return existing[0].id
+    }
 
     const ownerUserId = await this.resolveOwnerUserId(accountId)
     if (!ownerUserId) return null
@@ -133,6 +140,9 @@ export class InboxRepository {
       return null
     }
 
+    if (created?.id) {
+      logger.info('inbound_conversation_created', { conversationId: created.id, accountId, contactId })
+    }
     return created?.id ?? null
   }
 
@@ -181,6 +191,7 @@ export class InboxRepository {
     }
 
     const msgId = rows[0].id as string
+    logger.info('inbound_message_saved', { crmMessageId: msgId, conversationId, messageId: msg.messageId })
 
     // bump_conversation_on_inbound atomically increments unread_count +
     // updates last_message_text/at/status in one UPDATE.
@@ -276,7 +287,15 @@ export class InboxRepository {
       .maybeSingle()
 
     const id = data?.user_id ?? null
-    if (id) this.ownerCache.set(accountId, id)
+    if (id) {
+      this.ownerCache.set(accountId, id)
+    } else {
+      logger.warn('inbound_owner_not_found', {
+        op: 'resolveOwnerUserId',
+        accountId,
+        note: 'no account_members row with role=owner; inbound contact/conversation creation will fail',
+      })
+    }
     return id
   }
 }

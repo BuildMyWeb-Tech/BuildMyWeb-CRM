@@ -264,9 +264,41 @@ export class BaileysProvider implements WhatsAppProvider {
       this.emit({ type: 'auth_state_updated', authState: snapshot })
     })
 
-    sock.ev.on('messages.upsert', ({ messages }: BaileysEventMap['messages.upsert']) => {
+    sock.ev.on('messages.upsert', ({ messages, type: upsertType }: BaileysEventMap['messages.upsert']) => {
+      logger.info('inbound_upsert_received', { upsertType, count: messages.length })
+
       for (const msg of messages) {
-        if (!msg.message || msg.key.fromMe) continue
+        const messageType = msg.message ? (Object.keys(msg.message)[0] ?? 'none') : 'none'
+
+        logger.info('inbound_message_raw', {
+          messageId: msg.key.id,
+          remoteJid: msg.key.remoteJid,
+          fromMe: msg.key.fromMe,
+          messageType,
+          hasMessage: !!msg.message,
+          upsertType,
+        })
+
+        if (!msg.message) {
+          logger.info('inbound_message_skipped', { messageId: msg.key.id, reason: 'no_message_field' })
+          continue
+        }
+
+        if (msg.key.fromMe) {
+          logger.info('inbound_message_skipped', { messageId: msg.key.id, reason: 'from_me' })
+          continue
+        }
+
+        // Skip protocol, key-distribution, and reaction messages — these carry
+        // no user-visible content and should not appear in the inbox.
+        if (
+          msg.message.protocolMessage ||
+          msg.message.senderKeyDistributionMessage ||
+          msg.message.reactionMessage
+        ) {
+          logger.info('inbound_message_skipped', { messageId: msg.key.id, reason: 'protocol_or_reaction', messageType })
+          continue
+        }
 
         const body =
           msg.message.conversation ??
@@ -279,6 +311,14 @@ export class BaileysProvider implements WhatsAppProvider {
           : msg.message.audioMessage ? 'audio'
           : msg.message.videoMessage ? 'video'
           : 'unknown'
+
+        logger.info('inbound_message_dispatching', {
+          messageId: msg.key.id,
+          remoteJid: msg.key.remoteJid,
+          contentType,
+          hasBody: body !== null,
+          upsertType,
+        })
 
         this.emit({
           type: 'message_received',

@@ -24,6 +24,22 @@ export type LogEvent =
   | 'lock_acquired'
   | 'lock_released'
   | 'error'
+  | 'inbound_upsert_received'
+  | 'inbound_message_raw'
+  | 'inbound_message_skipped'
+  | 'inbound_message_dispatching'
+  | 'inbound_message_received'
+  | 'inbound_contact_found'
+  | 'inbound_contact_created'
+  | 'inbound_contact_not_resolved'
+  | 'inbound_contact_resolved'
+  | 'inbound_conversation_found'
+  | 'inbound_conversation_created'
+  | 'inbound_conversation_not_resolved'
+  | 'inbound_conversation_resolved'
+  | 'inbound_message_saved'
+  | 'inbound_message_inserted'
+  | 'inbound_owner_not_found'
 
 function log(level: Level, event: LogEvent, data?: Record<string, unknown>) {
   if (LEVELS[level] < configLevel()) return
