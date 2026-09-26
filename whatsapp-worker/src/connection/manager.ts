@@ -243,16 +243,19 @@ export class ConnectionManager {
       delayMs: delay,
       whatsappAccountId: this.whatsappAccountId,
     })
-    this.reconnectTimer = setTimeout(async () => {
+    this.reconnectTimer = setTimeout(() => {
       if (this.stopped) return
       logger.info('reconnect_attempt', {
         attempt: this.reconnectAttempts,
         whatsappAccountId: this.whatsappAccountId,
       })
-      await this.repo.setConnectionState(this.whatsappAccountId, 'RECONNECTING', {
+      this.repo.setConnectionState(this.whatsappAccountId, 'RECONNECTING', {
         reconnectAttempts: this.reconnectAttempts,
       })
-      await this.connect()
+        .then(() => this.connect())
+        .catch((err: unknown) => {
+          logger.error('error', { op: 'reconnect_attempt', message: String(err) })
+        })
     }, delay)
   }
 

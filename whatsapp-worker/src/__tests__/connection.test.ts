@@ -14,6 +14,11 @@ import type {
   MediaPayload,
   SendResult,
 } from '../provider/adapter.js'
+
+/** Flush enough microtask ticks to let a 3-await async handler complete. */
+async function flush(ticks = 10) {
+  for (let i = 0; i < ticks; i++) await Promise.resolve()
+}
 import type { WhatsAppSessionStore } from '../session/store.js'
 import type { ConnectionState } from '../connection/states.js'
 import type { InboxRepository } from '../inbox/repository.js'
@@ -280,5 +285,184 @@ describe('ConnectionManager', () => {
 
     expect(store.clear).not.toHaveBeenCalled()
     expect(mgr.getState()).toBe('RECONNECTING')
+  })
+
+  // ── Multi-contact / error-isolation tests ──────────────────────────────────
+
+  it('processes two messages from different contacts in sequence — both saved', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    // Return distinct contact/conv ids per call so each message follows its own path.
+    ;(inboxRepo.resolveContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('contact-A')
+      .mockResolvedValueOnce('contact-B')
+    ;(inboxRepo.resolveConversation as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('conv-A')
+      .mockResolvedValueOnce('conv-B')
+    ;(inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('msg-A')
+      .mockResolvedValueOnce('msg-B')
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-A', from: '91001@s.whatsapp.net', body: 'Hi A', contentType: 'text', timestamp: 1 },
+    })
+    await flush()
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-B', from: '91002@s.whatsapp.net', body: 'Hi B', contentType: 'text', timestamp: 2 },
+    })
+    await flush()
+
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(2)
+    const calls = (inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>).mock.calls
+    expect(calls[0][0]).toBe('conv-A')
+    expect(calls[1][0]).toBe('conv-B')
+  })
+
+  it('resolveContact throws for message A — message B from different contact still saved', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    ;(inboxRepo.resolveContact as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('DB timeout'))
+      .mockResolvedValueOnce('contact-B')
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-fail', from: '91001@s.whatsapp.net', body: 'A', contentType: 'text', timestamp: 1 },
+    })
+    await flush()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-ok', from: '91002@s.whatsapp.net', body: 'B', contentType: 'text', timestamp: 2 },
+    })
+    await flush()
+
+    // Failed message: resolveContact was called but threw — insertInboundMessage must NOT be called for it.
+    // Successful message: insertInboundMessage called once for message B.
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(1)
+    expect((inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>).mock.calls[0][1].messageId).toBe('wa-ok')
+  })
+
+  it('insertInboundMessage throws for message A — message B still saved', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    ;(inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new Error('upsert failed'))
+      .mockResolvedValueOnce('msg-B')
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-fail', from: '91001@s.whatsapp.net', body: 'A', contentType: 'text', timestamp: 1 },
+    })
+    await flush()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-ok', from: '91002@s.whatsapp.net', body: 'B', contentType: 'text', timestamp: 2 },
+    })
+    await flush()
+
+    // insertInboundMessage was called twice: first threw, second succeeded.
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('resolveContact returns null (skip) — next valid message still processed', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    ;(inboxRepo.resolveContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)       // first: skip (group JID or unresolvable)
+      .mockResolvedValueOnce('contact-C')
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-skip', from: 'skipped@s.whatsapp.net', body: null, contentType: 'unknown', timestamp: 1 },
+    })
+    await flush()
+
+    provider._emit({
+      type: 'message_received',
+      message: { messageId: 'wa-valid', from: '91003@s.whatsapp.net', body: 'Hello', contentType: 'text', timestamp: 2 },
+    })
+    await flush()
+
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(1)
+    expect((inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>).mock.calls[0][1].messageId).toBe('wa-valid')
+  })
+
+  it('three contacts — all three messages saved independently', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    ;(inboxRepo.resolveContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('c-1').mockResolvedValueOnce('c-2').mockResolvedValueOnce('c-3')
+    ;(inboxRepo.resolveConversation as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('cv-1').mockResolvedValueOnce('cv-2').mockResolvedValueOnce('cv-3')
+    ;(inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce('m-1').mockResolvedValueOnce('m-2').mockResolvedValueOnce('m-3')
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    for (const [id, from] of [['wa-1', '91001@s.whatsapp.net'], ['wa-2', '91002@s.whatsapp.net'], ['wa-3', '91003@s.whatsapp.net']]) {
+      provider._emit({ type: 'message_received', message: { messageId: id, from, body: 'hi', contentType: 'text', timestamp: 1 } })
+      await flush()
+    }
+
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(3)
+  })
+
+  it('[group/skip][valid][group/skip][valid] — only two valid messages saved', async () => {
+    const provider = makeProvider()
+    const store = makeSessionStore()
+    const repo = makeRepo()
+    const inboxRepo = makeInboxRepo()
+    // Simulate: group/skip returns null, valid returns contact-id
+    ;(inboxRepo.resolveContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)         // group/system → null
+      .mockResolvedValueOnce('contact-D')  // valid
+      .mockResolvedValueOnce(null)         // group/system → null
+      .mockResolvedValueOnce('contact-E')  // valid
+
+    const mgr = makeManager(provider, store, repo, inboxRepo)
+    await mgr.start()
+
+    const events: ProviderEvent[] = [
+      { type: 'message_received', message: { messageId: 'g-1', from: 'group@g.us', body: null, contentType: 'unknown', timestamp: 1 } },
+      { type: 'message_received', message: { messageId: 'v-1', from: '91004@s.whatsapp.net', body: 'Hi D', contentType: 'text', timestamp: 2 } },
+      { type: 'message_received', message: { messageId: 'g-2', from: 'other@newsletter', body: null, contentType: 'unknown', timestamp: 3 } },
+      { type: 'message_received', message: { messageId: 'v-2', from: '91005@s.whatsapp.net', body: 'Hi E', contentType: 'text', timestamp: 4 } },
+    ]
+
+    for (const ev of events) {
+      provider._emit(ev)
+      await flush()
+    }
+
+    expect(inboxRepo.insertInboundMessage).toHaveBeenCalledTimes(2)
+    const savedIds = (inboxRepo.insertInboundMessage as ReturnType<typeof vi.fn>).mock.calls.map((c: unknown[]) => (c[1] as { messageId: string }).messageId)
+    expect(savedIds).toEqual(['v-1', 'v-2'])
   })
 })
