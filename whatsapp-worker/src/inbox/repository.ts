@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { InboundMessage } from '../provider/adapter.js'
-import { jidToPhone, normalizePhone, phonesMatch, isGroupJid } from './phone-utils.js'
+import { jidToPhone, normalizePhone, phonesMatch, isSkipJid } from './phone-utils.js'
 import { logger } from '../logger.js'
 import { getConfig } from '../config.js'
 
@@ -25,7 +25,7 @@ export class InboxRepository {
     jid: string,
     displayName: string | null,
   ): Promise<string | null> {
-    if (isGroupJid(jid)) return null
+    if (isSkipJid(jid)) return null
 
     const rawPhone = jidToPhone(jid)
     const normalized = normalizePhone(rawPhone)
@@ -278,22 +278,24 @@ export class InboxRepository {
     const cached = this.ownerCache.get(accountId)
     if (cached) return cached
 
+    // The owner is stored on accounts.owner_user_id, NOT in account_members.
+    // Migration 017 has CHECK (role <> 'owner') on account_members — querying
+    // account_members for role='owner' always returns null. This matches the
+    // pattern used by the Meta inbound path (src/lib/api/v1/contacts.ts#resolveAuditUserId).
     const { data } = await this.supabase
-      .from('account_members')
-      .select('user_id')
-      .eq('account_id', accountId)
-      .eq('role', 'owner')
-      .limit(1)
+      .from('accounts')
+      .select('owner_user_id')
+      .eq('id', accountId)
       .maybeSingle()
 
-    const id = data?.user_id ?? null
+    const id = (data?.owner_user_id as string | null | undefined) ?? null
     if (id) {
       this.ownerCache.set(accountId, id)
     } else {
       logger.warn('inbound_owner_not_found', {
         op: 'resolveOwnerUserId',
         accountId,
-        note: 'no account_members row with role=owner; inbound contact/conversation creation will fail',
+        note: 'no accounts row found or owner_user_id is null',
       })
     }
     return id

@@ -101,7 +101,9 @@ const OWNER_USER_ID = 'user-owner'
 
 function makeRepo(tables: Record<string, Row[]> = {}) {
   const db = makeFakeDb({
-    account_members: [{ account_id: ACCOUNT_ID, user_id: OWNER_USER_ID, role: 'owner' }],
+    // Owner lives on accounts.owner_user_id — NOT in account_members.
+    // Migration 017 has CHECK (role <> 'owner') on account_members.
+    accounts: [{ id: ACCOUNT_ID, owner_user_id: OWNER_USER_ID }],
     contacts: [],
     conversations: [],
     messages: [],
@@ -177,6 +179,33 @@ describe('InboxRepository', () => {
     const { repo } = makeRepo()
     const result = await repo.resolveContact(ACCOUNT_ID, '123456789@g.us', null)
     expect(result).toBeNull()
+  })
+
+  it('skips @lid JIDs (WhatsApp Linked-Device IDs are not real phone numbers)', async () => {
+    const { repo } = makeRepo()
+    const result = await repo.resolveContact(ACCOUNT_ID, '29438494429212@lid', null)
+    expect(result).toBeNull()
+  })
+
+  it('skips @newsletter JIDs', async () => {
+    const { repo } = makeRepo()
+    const result = await repo.resolveContact(ACCOUNT_ID, 'abcdef123@newsletter', null)
+    expect(result).toBeNull()
+  })
+
+  it('skips status@broadcast JID', async () => {
+    const { repo } = makeRepo()
+    const result = await repo.resolveContact(ACCOUNT_ID, 'status@broadcast', null)
+    expect(result).toBeNull()
+  })
+
+  it('resolves owner from accounts.owner_user_id (not account_members)', async () => {
+    const { repo, db } = makeRepo()
+    // No account_members rows at all — owner comes from accounts table
+    expect(db._store.account_members).toBeUndefined()
+    const contactId = await repo.resolveContact(ACCOUNT_ID, '919111222333@s.whatsapp.net', null)
+    expect(contactId).toBeTruthy()
+    expect(db._store.contacts[0].user_id).toBe(OWNER_USER_ID)
   })
 
   it('account isolation: does not return contacts from other accounts', async () => {
