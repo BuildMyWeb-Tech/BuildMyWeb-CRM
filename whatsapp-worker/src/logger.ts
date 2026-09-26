@@ -40,6 +40,8 @@ export type LogEvent =
   | 'inbound_message_saved'
   | 'inbound_message_inserted'
   | 'inbound_owner_not_found'
+  | 'inbound_lid_resolved'
+  | 'inbound_lid_unresolvable'
 
 function log(level: Level, event: LogEvent, data?: Record<string, unknown>) {
   if (LEVELS[level] < configLevel()) return

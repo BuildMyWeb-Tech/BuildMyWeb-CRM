@@ -7,9 +7,11 @@ import makeWASocket, {
   initAuthCreds,
   DisconnectReason,
   BufferJSON,
+  isLidUser,
   type WASocket,
   type AuthenticationState,
   type BaileysEventMap,
+  type Contact as BaileysContact,
   makeCacheableSignalKeyStore,
   type ConnectionState as BaileysConnectionState,
 } from '@whiskeysockets/baileys'
@@ -48,6 +50,12 @@ export class BaileysProvider implements WhatsAppProvider {
   // Signal Protocol keys — mutated in-place by Baileys' set() callback so
   // snapshotAuthState always reads the current state without needing a proxy.
   private keysData: Record<string, Record<string, unknown>> = {}
+
+  // LID → phone JID mapping built from contacts.upsert / chats.phoneNumberShare.
+  // WhatsApp LID (Linked-Device Identifier) is an anonymous ID the server uses
+  // instead of a phone number for privacy. The mapping is stable for the session
+  // and rebuilt on every reconnect via contacts.upsert (history sync).
+  private lidToJidMap = new Map<string, string>()
 
   onEvent(handler: ProviderEventHandler): void {
     this.handler = handler
@@ -264,6 +272,22 @@ export class BaileysProvider implements WhatsAppProvider {
       this.emit({ type: 'auth_state_updated', authState: snapshot })
     })
 
+    // Build LID→JID map from history-sync contacts.  Baileys fires this on
+    // every reconnect, so the map is always populated for known contacts.
+    sock.ev.on('contacts.upsert', (contacts: BaileysContact[]) => {
+      for (const c of contacts) {
+        if (c.lid && c.jid) {
+          this.lidToJidMap.set(c.lid, c.jid)
+        }
+      }
+    })
+
+    // chats.phoneNumberShare fires when the other party explicitly shares their
+    // phone — supplements the map for first-ever contacts before history sync.
+    sock.ev.on('chats.phoneNumberShare', ({ lid, jid }: { lid: string; jid: string }) => {
+      this.lidToJidMap.set(lid, jid)
+    })
+
     sock.ev.on('messages.upsert', ({ messages, type: upsertType }: BaileysEventMap['messages.upsert']) => {
       logger.info('inbound_upsert_received', { upsertType, count: messages.length })
 
@@ -277,6 +301,7 @@ export class BaileysProvider implements WhatsAppProvider {
           messageType,
           hasMessage: !!msg.message,
           upsertType,
+          senderPn: msg.key.senderPn ?? null,
         })
 
         if (!msg.message) {
@@ -300,6 +325,30 @@ export class BaileysProvider implements WhatsAppProvider {
           continue
         }
 
+        // Resolve LID JID to a real phone JID.
+        // WhatsApp sends @lid identifiers for privacy-mode users.  Baileys
+        // populates msg.key.senderPn (from stanza attr `sender_pn`) with the
+        // actual phone JID when available.  Fall back to the in-memory map
+        // built from contacts.upsert / chats.phoneNumberShare.
+        let from = msg.key.remoteJid ?? ''
+        if (isLidUser(from)) {
+          const resolved = (msg.key as { senderPn?: string }).senderPn ?? this.lidToJidMap.get(from)
+          if (!resolved) {
+            logger.warn('inbound_lid_unresolvable', {
+              messageId: msg.key.id,
+              lid: from,
+              lidMapSize: this.lidToJidMap.size,
+            })
+            continue
+          }
+          logger.info('inbound_lid_resolved', {
+            messageId: msg.key.id,
+            lid: from,
+            resolvedJid: resolved,
+          })
+          from = resolved
+        }
+
         const body =
           msg.message.conversation ??
           msg.message.extendedTextMessage?.text ??
@@ -314,7 +363,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
         logger.info('inbound_message_dispatching', {
           messageId: msg.key.id,
-          remoteJid: msg.key.remoteJid,
+          remoteJid: from,
           contentType,
           hasBody: body !== null,
           upsertType,
@@ -324,7 +373,7 @@ export class BaileysProvider implements WhatsAppProvider {
           type: 'message_received',
           message: {
             messageId: msg.key.id ?? '',
-            from: msg.key.remoteJid ?? '',
+            from,
             body,
             contentType,
             timestamp: (msg.messageTimestamp as number) ?? Math.floor(Date.now() / 1000),

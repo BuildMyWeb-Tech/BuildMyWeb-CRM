@@ -29,13 +29,15 @@ export function isGroupJid(jid: string): boolean {
 
 /**
  * True for JIDs that should never produce a CRM contact.
- * Covers groups, WhatsApp Linked-Device IDs (@lid), newsletters, and status broadcasts.
- * @lid JIDs are internal WhatsApp identifiers — they carry no real phone number.
+ * Covers groups, newsletters, and status broadcasts.
+ *
+ * @lid (Linked-Device ID) JIDs are NOT skipped here — they are resolved to
+ * a real phone JID in BaileysProvider.wireEvents before the message_received
+ * event is emitted.  Any @lid that reaches this point was already resolved.
  */
 export function isSkipJid(jid: string): boolean {
   return (
     jid.includes('@g.us') ||
-    jid.includes('@lid') ||
     jid.includes('@newsletter') ||
     jid === 'status@broadcast'
   )

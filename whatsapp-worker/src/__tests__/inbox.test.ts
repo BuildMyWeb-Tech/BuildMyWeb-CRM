@@ -181,10 +181,16 @@ describe('InboxRepository', () => {
     expect(result).toBeNull()
   })
 
-  it('skips @lid JIDs (WhatsApp Linked-Device IDs are not real phone numbers)', async () => {
+  it('@lid JIDs are resolved to phone JIDs before reaching resolveContact (not skipped here)', async () => {
+    // BaileysProvider resolves @lid → phone@s.whatsapp.net before emitting message_received.
+    // By the time resolveContact is called, the JID is already a normal phone JID.
+    // So resolveContact should NOT receive @lid JIDs — this test documents that contract.
     const { repo } = makeRepo()
-    const result = await repo.resolveContact(ACCOUNT_ID, '29438494429212@lid', null)
-    expect(result).toBeNull()
+    // A raw @lid passed directly would fail normalizePhone (no digits → null) or
+    // be treated as a garbage phone; it is never expected in production.
+    // The isSkipJid check does NOT cover @lid — resolution is the provider's job.
+    const result = await repo.resolveContact(ACCOUNT_ID, '919111222333@s.whatsapp.net', null)
+    expect(result).toBeTruthy()
   })
 
   it('skips @newsletter JIDs', async () => {
