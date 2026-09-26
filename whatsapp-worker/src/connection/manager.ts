@@ -132,53 +132,64 @@ export class ConnectionManager {
         break
 
       case 'message_received': {
-        const msg = event.message
-        logger.info('inbound_message_received', {
-          messageId: msg.messageId,
-          from: msg.from,
-          contentType: msg.contentType,
-          hasBody: msg.body !== null,
-          timestamp: msg.timestamp,
-        })
-
-        const contactId = await this.inboxRepo.resolveContact(
-          this.accountId,
-          msg.from,
-          null,
-        )
-        if (!contactId) {
-          logger.warn('inbound_contact_not_resolved', {
+        // Wrap the entire inbound pipeline in try/catch so a single message
+        // failure (DB error, network blip) never rejects the handler Promise
+        // and never stops processing of subsequent messages.
+        try {
+          const msg = event.message
+          logger.info('inbound_message_received', {
             messageId: msg.messageId,
             from: msg.from,
-            accountId: this.accountId,
+            contentType: msg.contentType,
+            hasBody: msg.body !== null,
+            timestamp: msg.timestamp,
           })
-          break
-        }
-        logger.info('inbound_contact_resolved', { messageId: msg.messageId, contactId })
 
-        const conversationId = await this.inboxRepo.resolveConversation(
-          this.accountId,
-          contactId,
-        )
-        if (!conversationId) {
-          logger.warn('inbound_conversation_not_resolved', {
-            messageId: msg.messageId,
+          const contactId = await this.inboxRepo.resolveContact(
+            this.accountId,
+            msg.from,
+            null,
+          )
+          if (!contactId) {
+            logger.warn('inbound_contact_not_resolved', {
+              messageId: msg.messageId,
+              from: msg.from,
+              accountId: this.accountId,
+            })
+            break
+          }
+          logger.info('inbound_contact_resolved', { messageId: msg.messageId, contactId })
+
+          const conversationId = await this.inboxRepo.resolveConversation(
+            this.accountId,
             contactId,
-            accountId: this.accountId,
-          })
-          break
-        }
-        logger.info('inbound_conversation_resolved', { messageId: msg.messageId, conversationId })
+          )
+          if (!conversationId) {
+            logger.warn('inbound_conversation_not_resolved', {
+              messageId: msg.messageId,
+              contactId,
+              accountId: this.accountId,
+            })
+            break
+          }
+          logger.info('inbound_conversation_resolved', { messageId: msg.messageId, conversationId })
 
-        const insertedId = await this.inboxRepo.insertInboundMessage(conversationId, msg, {
-          accountId: this.accountId,
-          contactId,
-        })
-        if (insertedId) {
-          logger.info('inbound_message_inserted', {
-            messageId: msg.messageId,
-            crmMessageId: insertedId,
-            conversationId,
+          const insertedId = await this.inboxRepo.insertInboundMessage(conversationId, msg, {
+            accountId: this.accountId,
+            contactId,
+          })
+          if (insertedId) {
+            logger.info('inbound_message_inserted', {
+              messageId: msg.messageId,
+              crmMessageId: insertedId,
+              conversationId,
+            })
+          }
+        } catch (err) {
+          logger.error('error', {
+            op: 'message_received',
+            messageId: (event as { message?: { messageId?: string } }).message?.messageId,
+            message: String(err),
           })
         }
         break

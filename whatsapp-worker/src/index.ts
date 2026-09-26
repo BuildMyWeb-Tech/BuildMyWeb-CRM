@@ -100,9 +100,13 @@ async function main() {
     logger.error('error', { op: 'uncaughtException', message: String(err) })
     process.exit(1)
   })
+  // Log unhandled rejections but do NOT exit — Baileys emits internal
+  // "Timed Out" rejections (ack timeouts, keepalive races) that are harmless
+  // to the worker.  Killing the process on every one would cause constant
+  // restarts and data loss.  uncaughtException still exits on truly fatal
+  // synchronous errors.
   process.on('unhandledRejection', (reason) => {
-    logger.error('error', { op: 'unhandledRejection', message: String(reason) })
-    process.exit(1)
+    logger.warn('error', { op: 'unhandledRejection', message: String(reason) })
   })
 }
 

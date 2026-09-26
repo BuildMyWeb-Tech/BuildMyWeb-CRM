@@ -62,7 +62,14 @@ export class BaileysProvider implements WhatsAppProvider {
   }
 
   private emit(event: ProviderEvent) {
-    this.handler?.(event)
+    const result = this.handler?.(event)
+    // handler is async — catch rejections so they don't become
+    // unhandledRejection events that could surface as Baileys Timed Out noise.
+    if (result instanceof Promise) {
+      result.catch((err: unknown) => {
+        logger.error('error', { op: 'emit_handler', event: event.type, message: String(err) })
+      })
+    }
   }
 
   private setState(next: ConnectionState) {

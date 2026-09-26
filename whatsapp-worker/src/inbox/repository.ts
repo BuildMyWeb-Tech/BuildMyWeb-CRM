@@ -208,7 +208,7 @@ export class InboxRepository {
           last_message_at: new Date(msg.timestamp * 1000).toISOString(),
           updated_at: new Date().toISOString(),
           status: 'open',
-        }).eq('id', conversationId)
+        }).eq('id', conversationId).then(() => {}, () => {})
       })
 
     // Dispatch automations + flows via internal CRM endpoint (fire-and-forget).
