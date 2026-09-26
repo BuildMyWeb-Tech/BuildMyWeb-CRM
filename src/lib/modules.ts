@@ -28,6 +28,7 @@ import {
   KanbanSquare,
   Layers,
   LayoutDashboard,
+  LayoutGrid,
   ListTodo,
   Megaphone,
   MessageSquare,
@@ -80,6 +81,7 @@ export interface CrmModule {
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
   { href: "/overview", labelKey: "dashboard", icon: Rows3, minRole: "viewer" },
   { href: "/business-dashboard", labelKey: "businessDashboard", icon: LayoutDashboard, minRole: "viewer" },
+  { href: "/my-pages", labelKey: "myPages", icon: LayoutGrid, minRole: "viewer" },
 ];
 
 // Order here is the sidebar's render order — Client, Project,
@@ -93,15 +95,6 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/clients", labelKey: "clientDirectory", icon: Users, minRole: "viewer", pageKey: "client_directory" },
       { href: "/client-leads", labelKey: "clientLeads", icon: UserPlus, minRole: "viewer", pageKey: "client_leads" },
       { href: "/future-clients", labelKey: "futureClients", icon: Sparkles, minRole: "viewer", pageKey: "future_clients" },
-    ],
-  },
-  {
-    id: "business",
-    labelKey: "moduleBusiness",
-    minRole: "viewer",
-    items: [
-      { href: "/time-tracker", labelKey: "timeTracker", icon: Timer, minRole: "viewer" },
-      { href: "/expenses", labelKey: "expenses", icon: Receipt, minRole: "viewer" },
       { href: "/reviews", labelKey: "reviews", icon: Star, minRole: "viewer" },
     ],
   },
@@ -114,6 +107,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/daily-tasks", labelKey: "dailyTasks", icon: ListTodo, minRole: "viewer", pageKey: "daily_tasks" },
       { href: "/projects/chat", labelKey: "projectChats", icon: MessageSquare, minRole: "viewer", pageKey: "projects" },
       { href: "/projects/automations", labelKey: "crmAutomations", icon: Zap, minRole: "agent", pageKey: "projects" },
+      { href: "/time-tracker", labelKey: "timeTracker", icon: Timer, minRole: "viewer" },
     ],
   },
   {
@@ -165,6 +159,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/user-management", labelKey: "userManagement", icon: Users2, minRole: "admin", pageKey: "user_management" },
       { href: "/activity-log", labelKey: "activityLog", icon: Clock, minRole: "admin", pageKey: "activity_log" },
       { href: "/whatsapp-connect", labelKey: "whatsappConnect", icon: Zap, minRole: "admin" },
+      { href: "/expenses", labelKey: "expenses", icon: Receipt, minRole: "admin" },
     ],
   },
 ];

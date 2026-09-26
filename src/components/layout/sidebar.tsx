@@ -12,6 +12,8 @@ import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/mo
 import {
   Crown,
   ChevronDown,
+  Eye,
+  EyeOff,
   LogOut,
   Settings,
   Shield,
@@ -116,6 +118,7 @@ function NavLink({
   totalUnread,
   unreadNotifications,
   siblingHrefs,
+  onHide,
 }: {
   item: ModuleNavItem;
   pathname: string;
@@ -124,6 +127,7 @@ function NavLink({
   totalUnread: number;
   unreadNotifications: number;
   siblingHrefs?: string[];
+  onHide?: (href: string) => void;
 }) {
   const isActive =
     pathname === item.href ||
@@ -135,28 +139,23 @@ function NavLink({
 
   const showUnreadDot = item.href === "/inbox" && totalUnread > 0 && !isActive;
 
-  // Unlike the inbox dot, the notifications count stays visible
-  // even while the page is active — it reflects unread state
-  // (cleared by marking notifications read), not "currently
-  // viewing this section".
   const showNotificationBadge =
     item.href === "/notifications" && unreadNotifications > 0;
 
   return (
-    <li key={item.href}>
+    <li key={item.href} className="group/navitem relative">
       <Link
         href={item.href}
         onClick={onClose}
         className={cn(
-          // Taller on mobile so fingers can hit the row reliably (≥44px).
-          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+          "flex items-center gap-3 rounded-lg px-3 py-2.5 pr-8 text-sm font-medium transition-colors lg:py-2",
           isActive
             ? "bg-primary/10 text-primary"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}
       >
-        <item.icon className="h-4 w-4" />
-        <span className="flex-1">{t(item.labelKey)}</span>
+        <item.icon className="h-4 w-4 shrink-0" />
+        <span className="flex-1 min-w-0 truncate">{t(item.labelKey)}</span>
         {item.beta && (
           <span
             aria-label={t("beta")}
@@ -183,6 +182,16 @@ function NavLink({
           </span>
         )}
       </Link>
+      {onHide && (
+        <button
+          type="button"
+          title="Hide from sidebar"
+          onClick={(e) => { e.stopPropagation(); onHide(item.href); }}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded opacity-0 group-hover/navitem:opacity-100 text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/60 transition-opacity"
+        >
+          <EyeOff className="h-3.5 w-3.5" />
+        </button>
+      )}
     </li>
   );
 }
@@ -220,11 +229,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const globalItems = visibleGlobalItems(accountRole);
   const modules = visibleModules(accountRole, deniedPageKeys);
 
-  // Which module sections (Sales/Clients/Projects/Office/...) are
-  // collapsed, persisted per-browser so a choice sticks across
-  // reloads and sessions. Stores the SET of collapsed ids (not
-  // expanded) so newly-added modules default to expanded without
-  // needing a migration of stored state.
+  // Which module sections are collapsed (persisted per-browser).
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -238,12 +243,53 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   function toggleSection(id: string) {
     setCollapsedSections((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id); else next.add(id);
       window.localStorage.setItem("sidebar-collapsed-sections", JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  // Individual nav items hidden by the user (eye-off click).
+  const [hiddenItems, setHiddenItems] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("sidebar-hidden-items");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+
+  function hideNavItem(href: string) {
+    setHiddenItems((prev) => {
+      const next = new Set(prev);
+      next.add(href);
+      try { window.localStorage.setItem("sidebar-hidden-items", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function showModuleItems(hrefs: string[]) {
+    setHiddenItems((prev) => {
+      const next = new Set(prev);
+      for (const h of hrefs) next.delete(h);
+      try { window.localStorage.setItem("sidebar-hidden-items", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  // Entire modules hidden by the user (eye-off on module header).
+  const [hiddenModules, setHiddenModules] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("sidebar-hidden-modules");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+
+  function toggleModuleHidden(id: string) {
+    setHiddenModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { window.localStorage.setItem("sidebar-hidden-modules", JSON.stringify([...next])); } catch {}
       return next;
     });
   }
@@ -340,7 +386,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             the current role can't see any of its items. */}
         <nav className="flex-1 overflow-y-auto scrollbar-none px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {globalItems.map((item) => (
+            {globalItems.filter((item) => !hiddenItems.has(item.href)).map((item) => (
               <NavLink
                 key={item.href}
                 item={item}
@@ -349,48 +395,112 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 onClose={onClose}
                 totalUnread={totalUnread}
                 unreadNotifications={unreadNotifications}
+                onHide={hideNavItem}
               />
             ))}
+            {/* Restore hidden global items */}
+            {globalItems.some((item) => hiddenItems.has(item.href)) && (
+              <button
+                type="button"
+                onClick={() => showModuleItems(globalItems.map((i) => i.href))}
+                className="flex items-center gap-1.5 rounded px-3 py-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <Eye className="h-3 w-3" />
+                Show hidden
+              </button>
+            )}
           </ul>
 
-          {modules.map((mod) => {
+          {modules.filter((mod) => !hiddenModules.has(mod.id)).map((mod) => {
             const isCollapsed = collapsedSections.has(mod.id);
+            const visibleItems = mod.items.filter((i) => !hiddenItems.has(i.href));
+            const hiddenCount = mod.items.length - visibleItems.length;
             return (
-              <div key={mod.id}>
+              <div key={mod.id} className="group/modsection">
                 <div className="my-4 border-t border-border" />
-                <button
-                  type="button"
-                  onClick={() => toggleSection(mod.id)}
-                  className="mb-1 flex w-full items-center justify-between rounded px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-                  aria-expanded={!isCollapsed}
-                >
-                  {t(mod.labelKey)}
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform",
-                      isCollapsed ? "-rotate-90" : "",
+                <div className="mb-1 flex w-full items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(mod.id)}
+                    className="flex flex-1 items-center gap-1.5 rounded px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                    aria-expanded={!isCollapsed}
+                  >
+                    <span className="flex-1 text-left">{t(mod.labelKey)}</span>
+                    {hiddenCount > 0 && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-primary/60">
+                        <Eye className="h-3 w-3" />
+                        {hiddenCount}
+                      </span>
                     )}
-                  />
-                </button>
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform shrink-0",
+                        isCollapsed ? "-rotate-90" : "",
+                      )}
+                    />
+                  </button>
+                  {/* Eye-off to hide entire module — shows on hover */}
+                  <button
+                    type="button"
+                    title="Hide module"
+                    onClick={() => toggleModuleHidden(mod.id)}
+                    className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 group-hover/modsection:opacity-100 text-muted-foreground/30 hover:text-muted-foreground transition-opacity"
+                  >
+                    <EyeOff className="h-3 w-3" />
+                  </button>
+                </div>
                 {!isCollapsed && (
-                  <ul className="flex flex-col gap-1">
-                    {mod.items.map((item) => (
-                      <NavLink
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        t={t}
-                        onClose={onClose}
-                        totalUnread={totalUnread}
-                        unreadNotifications={unreadNotifications}
-                        siblingHrefs={mod.items.map((i) => i.href)}
-                      />
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="flex flex-col gap-1">
+                      {visibleItems.map((item) => (
+                        <NavLink
+                          key={item.href}
+                          item={item}
+                          pathname={pathname}
+                          t={t}
+                          onClose={onClose}
+                          totalUnread={totalUnread}
+                          unreadNotifications={unreadNotifications}
+                          siblingHrefs={mod.items.map((i) => i.href)}
+                          onHide={hideNavItem}
+                        />
+                      ))}
+                    </ul>
+                    {/* Restore hidden items inside this module */}
+                    {hiddenCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => showModuleItems(mod.items.map((i) => i.href))}
+                        className="mt-1 flex w-full items-center gap-1.5 rounded px-3 py-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                      >
+                        <Eye className="h-3 w-3" />
+                        Show {hiddenCount} hidden
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             );
           })}
+
+          {/* Restore hidden modules */}
+          {hiddenModules.size > 0 && (
+            <>
+              <div className="my-4 border-t border-border" />
+              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">Hidden</p>
+              {modules.filter((mod) => hiddenModules.has(mod.id)).map((mod) => (
+                <button
+                  key={mod.id}
+                  type="button"
+                  onClick={() => toggleModuleHidden(mod.id)}
+                  className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  {t(mod.labelKey)}
+                </button>
+              ))}
+            </>
+          )}
 
           <div className="my-4 border-t border-border" />
 

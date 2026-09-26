@@ -55,10 +55,12 @@ export default function ActivityLogPage() {
   useEffect(() => {
     if (!accountId) return;
     const supabase = createClient();
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
     supabase
       .from("activity_logs")
       .select("*")
       .eq("account_id", accountId)
+      .gte("created_at", fiveDaysAgo)
       .order("created_at", { ascending: false })
       .limit(500)
       .then(({ data, error }) => {

@@ -5,6 +5,7 @@ import {
   ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
   Folder,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
@@ -32,11 +33,20 @@ function getProjectColor(index: number) {
   return PROJECT_COLORS[index % PROJECT_COLORS.length];
 }
 
+type ViewMode = "current" | "scheduled" | "all";
+
+const VIEW_TABS: { id: ViewMode; label: string }[] = [
+  { id: "current", label: "Current Tasks" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "all", label: "All Tasks" },
+];
+
 export default function DailyTasksPage() {
   const { accountId } = useAuth();
   const [stats, setStats] = useState<TaskStats>({ total: 0, inProgress: 0, pending: 0, overdue: 0 });
   const [projects, setProjects] = useState<ProjectWithTaskCount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>("current");
 
   const loadData = useCallback(async () => {
     if (!accountId) return;
@@ -165,9 +175,30 @@ export default function DailyTasksPage() {
           })}
         </div>
 
+        {/* View mode tabs */}
+        <div className="shrink-0 px-6 pb-3">
+          <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
+            {VIEW_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setViewMode(tab.id)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  viewMode === tab.id
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "text-slate-400 hover:text-slate-200",
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Tasks table */}
         <div className="flex-1 overflow-auto px-6 pb-6">
-          <UnifiedTasksView />
+          <UnifiedTasksView viewMode={viewMode} />
         </div>
       </div>
 

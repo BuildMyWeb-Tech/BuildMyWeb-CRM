@@ -19,7 +19,6 @@ import { ModeToggle } from "@/components/layout/mode-toggle";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { TodoList } from "@/components/layout/todo-list";
 import { AiAssistant } from "@/components/layout/ai-assistant";
-import { GlobalCreateButton } from "@/components/layout/global-create";
 import { CommandPalette } from "@/components/layout/command-palette";
 
 interface HeaderProps {
@@ -55,7 +54,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       </div>
 
       <div className="relative flex items-center gap-1 sm:gap-2">
-        <GlobalCreateButton />
         <AiAssistant />
         <Link
           href="/routine"

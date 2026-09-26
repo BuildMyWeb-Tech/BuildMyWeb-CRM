@@ -59,7 +59,7 @@ const PRIORITY_STYLE: Record<TaskPriority, string> = {
   urgent: "bg-red-500/15 text-red-400",
 };
 
-export function UnifiedTasksView() {
+export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current" | "scheduled" | "all" }) {
   const { accountId, user, canManageMembers, canSendMessages } = useAuth();
   const { canCreate: gridCanCreate } = usePagePermissions("daily_tasks");
   const canCreateTask = canSendMessages && gridCanCreate;
@@ -138,6 +138,9 @@ export function UnifiedTasksView() {
   // from the normal view; this toggle flips to showing ONLY those
   // scheduled-future tasks instead of everything else.
   const [showScheduledOnly, setShowScheduledOnly] = useState(false);
+  // viewMode prop overrides the internal toggle when set externally
+  const effectiveShowScheduled = viewMode === "scheduled" || showScheduledOnly;
+  const effectiveShowAll = viewMode === "all";
 
   function makeToggler<T>(setFn: React.Dispatch<React.SetStateAction<Set<T>>>, storageKey: string) {
     return (value: T) => {
@@ -313,10 +316,9 @@ export function UnifiedTasksView() {
   const filteredTasks = unifiedRows
     .filter((t) => {
       const isFutureScheduled = !!t.showDateValue && t.showDateValue > todayStr;
-      if (showScheduledOnly) return isFutureScheduled;
-      // Hidden until its show date arrives — the whole point of "show
-      // date" scheduling (item 16): not visible in the normal list
-      // until then, only under the "Scheduled" toggle above.
+      if (effectiveShowScheduled) return isFutureScheduled;
+      if (effectiveShowAll) return true;
+      // Hidden until its show date arrives — only visible under "Scheduled" tab.
       if (isFutureScheduled) return false;
       if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
       if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
