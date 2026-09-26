@@ -1,20 +1,63 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { LayoutGrid, Plus, X } from "lucide-react";
+import { useEffect, useState, lazy, Suspense } from "react";
+import dynamic from "next/dynamic";
+import { LayoutGrid, Plus, X, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { CRM_MODULES, GLOBAL_NAV_ITEMS } from "@/lib/modules";
 
-// All CRM pages available to add as tabs.
+// ---------------------------------------------------------------------------
+// Component registry — maps href to a lazily-loaded page component.
+// Only pages that have a simple (no dynamic-segment) route are included.
+// ---------------------------------------------------------------------------
+const PAGE_REGISTRY: Record<string, React.ComponentType> = {
+  "/overview": dynamic(() => import("@/app/(dashboard)/overview/page")),
+  "/dashboard": dynamic(() => import("@/app/(dashboard)/dashboard/page")),
+  "/business-dashboard": dynamic(() => import("@/app/(dashboard)/business-dashboard/page")),
+  "/clients": dynamic(() => import("@/app/(dashboard)/clients/page")),
+  "/client-leads": dynamic(() => import("@/app/(dashboard)/client-leads/page")),
+  "/future-clients": dynamic(() => import("@/app/(dashboard)/future-clients/page")),
+  "/reviews": dynamic(() => import("@/app/(dashboard)/reviews/page")),
+  "/projects": dynamic(() => import("@/app/(dashboard)/projects/page")),
+  "/daily-tasks": dynamic(() => import("@/app/(dashboard)/daily-tasks/page")),
+  "/projects/chat": dynamic(() => import("@/app/(dashboard)/projects/chat/page")),
+  "/projects/automations": dynamic(() => import("@/app/(dashboard)/projects/automations/page")),
+  "/time-tracker": dynamic(() => import("@/app/(dashboard)/time-tracker/page")),
+  "/products": dynamic(() => import("@/app/(dashboard)/products/page")),
+  "/product-tasks": dynamic(() => import("@/app/(dashboard)/product-tasks/page")),
+  "/contacts": dynamic(() => import("@/app/(dashboard)/contacts/page")),
+  "/inbox": dynamic(() => import("@/app/(dashboard)/inbox/page")),
+  "/pipelines": dynamic(() => import("@/app/(dashboard)/pipelines/page")),
+  "/broadcasts": dynamic(() => import("@/app/(dashboard)/broadcasts/page")),
+  "/automations": dynamic(() => import("@/app/(dashboard)/automations/page")),
+  "/flows": dynamic(() => import("@/app/(dashboard)/flows/page")),
+  "/agents": dynamic(() => import("@/app/(dashboard)/agents/page")),
+  "/workspace": dynamic(() => import("@/app/(dashboard)/workspace/page")),
+  "/marketing/tele-calling": dynamic(() => import("@/app/(dashboard)/marketing/tele-calling/page")),
+  "/marketing/content-creation": dynamic(() => import("@/app/(dashboard)/marketing/content-creation/page")),
+  "/marketing/paid-marketing": dynamic(() => import("@/app/(dashboard)/marketing/paid-marketing/page")),
+  "/office": dynamic(() => import("@/app/(dashboard)/office/page")),
+  "/files": dynamic(() => import("@/app/(dashboard)/files/page")),
+  "/accounts": dynamic(() => import("@/app/(dashboard)/accounts/page")),
+  "/user-management": dynamic(() => import("@/app/(dashboard)/user-management/page")),
+  "/activity-log": dynamic(() => import("@/app/(dashboard)/activity-log/page")),
+  "/whatsapp-connect": dynamic(() => import("@/app/(dashboard)/whatsapp-connect/page")),
+  "/expenses": dynamic(() => import("@/app/(dashboard)/expenses/page")),
+  "/lead-finder": dynamic(() => import("@/app/(dashboard)/lead-finder/page")),
+  "/kanban": dynamic(() => import("@/app/(dashboard)/kanban/page")),
+};
+
+// ---------------------------------------------------------------------------
+// Available pages list (from sidebar config, excluding my-pages itself)
+// ---------------------------------------------------------------------------
 const ALL_PAGES = [
   ...GLOBAL_NAV_ITEMS.map((i) => ({ href: i.href, label: i.labelKey, group: "General" })),
   ...CRM_MODULES.flatMap((mod) =>
     mod.items.map((i) => ({ href: i.href, label: i.labelKey, group: mod.labelKey })),
   ),
-].filter((p) => p.href !== "/my-pages");
+].filter((p) => p.href !== "/my-pages" && p.href in PAGE_REGISTRY);
 
-// Static label map (labelKey → human-readable) pulled from common sidebar keys.
 const LABEL_MAP: Record<string, string> = {
   dashboard: "Dashboard",
   businessDashboard: "Business Dashboard",
@@ -48,44 +91,36 @@ const LABEL_MAP: Record<string, string> = {
   activityLog: "Activity Log",
   whatsappConnect: "WhatsApp Connect",
   expenses: "Expenses",
-  moduleClients: "Clients",
-  moduleProjects: "Projects",
-  moduleProduct: "Product",
-  moduleSales: "Sales",
-  moduleMarketing: "Marketing",
-  moduleOffice: "Office",
-  General: "General",
+  leadFinder: "Lead Finder",
+  kanban: "Kanban",
+  office: "Office",
 };
 
 function label(key: string) {
   return LABEL_MAP[key] ?? key;
 }
 
-interface TabConfig {
-  id: string;
-  href: string;
-  title: string;
-}
+// ---------------------------------------------------------------------------
+// Persistence helpers
+// ---------------------------------------------------------------------------
+interface TabConfig { id: string; href: string; title: string }
 
-function storageKey(userId: string) {
-  return `my-pages-tabs-${userId}`;
-}
+function storageKey(userId: string) { return `my-pages-tabs-${userId}`; }
 
 function loadTabs(userId: string): TabConfig[] {
   try {
     const raw = localStorage.getItem(storageKey(userId));
     return raw ? (JSON.parse(raw) as TabConfig[]) : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function saveTabs(userId: string, tabs: TabConfig[]) {
-  try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(tabs));
-  } catch {}
+  try { localStorage.setItem(storageKey(userId), JSON.stringify(tabs)); } catch {}
 }
 
+// ---------------------------------------------------------------------------
+// Page component
+// ---------------------------------------------------------------------------
 export default function MyPagesPage() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -95,7 +130,6 @@ export default function MyPagesPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Load saved tabs once the user id is known.
   useEffect(() => {
     if (!userId) return;
     const saved = loadTabs(userId);
@@ -104,27 +138,19 @@ export default function MyPagesPage() {
   }, [userId]);
 
   function addPage(page: { href: string; label: string }) {
-    if (tabs.some((t) => t.href === page.href)) {
-      // Already added — just switch to it.
-      const existing = tabs.find((t) => t.href === page.href)!;
-      setActiveTab(existing.id);
-      setShowPicker(false);
-      return;
-    }
+    const existing = tabs.find((t) => t.href === page.href);
+    if (existing) { setActiveTab(existing.id); setShowPicker(false); return; }
     const id = `tab-${Date.now()}`;
     const next: TabConfig[] = [...tabs, { id, href: page.href, title: label(page.label) }];
-    setTabs(next);
-    setActiveTab(id);
+    setTabs(next); setActiveTab(id);
     saveTabs(userId, next);
-    setShowPicker(false);
-    setSearch("");
+    setShowPicker(false); setSearch("");
   }
 
   function removeTab(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     const next = tabs.filter((t) => t.id !== id);
-    setTabs(next);
-    saveTabs(userId, next);
+    setTabs(next); saveTabs(userId, next);
     if (activeTab === id) setActiveTab(next[0]?.id ?? null);
   }
 
@@ -133,24 +159,22 @@ export default function MyPagesPage() {
     return label(p.label).toLowerCase().includes(q) || p.href.toLowerCase().includes(q);
   });
 
-  // Group by module
   const grouped = filteredPages.reduce<Record<string, typeof filteredPages>>((acc, p) => {
     const g = label(p.group);
-    acc[g] ??= [];
-    acc[g].push(p);
+    (acc[g] ??= []).push(p);
     return acc;
   }, {});
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col bg-background">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-4">
         <div className="rounded-lg bg-primary/10 p-2">
           <LayoutGrid className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-foreground">My Pages</h1>
-          <p className="text-xs text-muted-foreground">Add any CRM page as a tab — your customisation is saved automatically.</p>
+          <p className="text-xs text-muted-foreground">Combine any CRM pages into one workspace — your layout is saved automatically.</p>
         </div>
         <button
           type="button"
@@ -162,6 +186,7 @@ export default function MyPagesPage() {
         </button>
       </div>
 
+      {/* ── Empty state ── */}
       {tabs.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center p-8">
           <div className="rounded-2xl bg-muted p-6">
@@ -170,7 +195,7 @@ export default function MyPagesPage() {
           <div>
             <p className="text-base font-medium text-foreground">No pages added yet</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-xs">
-              Click <strong>Add Page</strong> to pick any CRM page. Each page opens as a full tab with all its functionality.
+              Click <strong>Add Page</strong> to pick any CRM page. Each page opens as a full tab with all its filters, tables, and actions.
             </p>
           </div>
           <button
@@ -184,7 +209,7 @@ export default function MyPagesPage() {
         </div>
       ) : (
         <>
-          {/* Tab bar */}
+          {/* ── Tab bar ── */}
           <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-muted/30 px-4 scrollbar-none">
             {tabs.map((tab) => (
               <button
@@ -198,7 +223,7 @@ export default function MyPagesPage() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                <span className="max-w-32 truncate">{tab.title}</span>
+                <span className="max-w-40 truncate">{tab.title}</span>
                 <span
                   role="button"
                   tabIndex={0}
@@ -221,28 +246,36 @@ export default function MyPagesPage() {
             </button>
           </div>
 
-          {/* Iframe panels — all loaded, only active one is visible so
-              state and scroll position are preserved when switching tabs. */}
-          <div className="flex-1 overflow-hidden">
-            {tabs.map((tab) => (
-              <iframe
-                key={tab.id}
-                src={tab.href}
-                title={tab.title}
-                className={cn(
-                  "h-full w-full border-0",
-                  activeTab === tab.id ? "block" : "hidden",
-                )}
-                // Allow same-origin access so the embedded pages
-                // work with the existing auth/cookie session.
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-              />
-            ))}
+          {/* ── Tab panels — all mounted, only active shown ── */}
+          <div className="relative flex-1 overflow-auto">
+            {tabs.map((tab) => {
+              const PageComponent = PAGE_REGISTRY[tab.href];
+              if (!PageComponent) return null;
+              return (
+                <div
+                  key={tab.id}
+                  className={cn(
+                    "absolute inset-0 overflow-auto",
+                    activeTab === tab.id ? "z-10 block" : "z-0 invisible pointer-events-none",
+                  )}
+                >
+                  <Suspense
+                    fallback={
+                      <div className="flex h-40 items-center justify-center">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    }
+                  >
+                    <PageComponent />
+                  </Suspense>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
 
-      {/* Page picker modal */}
+      {/* ── Page picker modal ── */}
       {showPicker && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
@@ -252,7 +285,6 @@ export default function MyPagesPage() {
             className="relative flex w-[480px] max-h-[70vh] flex-col rounded-xl border border-border bg-card shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header */}
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <h2 className="text-base font-semibold text-foreground">Add a Page</h2>
               <button
@@ -263,8 +295,6 @@ export default function MyPagesPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-
-            {/* Search */}
             <div className="border-b border-border px-5 py-3">
               <input
                 type="text"
@@ -275,8 +305,6 @@ export default function MyPagesPage() {
                 className="w-full rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
-
-            {/* Page list */}
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
               {Object.entries(grouped).map(([group, pages]) => (
                 <div key={group}>
@@ -309,7 +337,9 @@ export default function MyPagesPage() {
                 </div>
               ))}
               {Object.keys(grouped).length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">No pages match &ldquo;{search}&rdquo;</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No pages match &ldquo;{search}&rdquo;
+                </p>
               )}
             </div>
           </div>
