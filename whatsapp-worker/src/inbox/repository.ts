@@ -213,11 +213,17 @@ export class InboxRepository {
 
     // Dispatch automations + flows via internal CRM endpoint (fire-and-forget).
     if (opts?.accountId && opts?.contactId && this.dispatchBaseUrl && this.dispatchSecret) {
+      // Resolve the owner userId for automation attribution. It's cached after
+      // the first resolveContact/resolveConversation call so this is a no-op
+      // lookup (Map.get) in the common path — no extra DB round-trip.
+      const dispatchUserId = opts.userId
+        ?? (opts.accountId ? await this.resolveOwnerUserId(opts.accountId) : null)
+        ?? ''
       void this.callDispatch({
         accountId: opts.accountId,
         conversationId,
         contactId: opts.contactId,
-        userId: opts.userId ?? '',
+        userId: dispatchUserId,
         messageText: contentText,
         contentType: msg.contentType,
         messageId: msg.messageId,

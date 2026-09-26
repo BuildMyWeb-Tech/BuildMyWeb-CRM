@@ -223,4 +223,55 @@ describe('InboxRepository', () => {
     expect(contactId).not.toBe('other-contact')
     expect(db._store.contacts.some((c: Row) => c.account_id === ACCOUNT_ID)).toBe(true)
   })
+
+  // ── Phase 1: dispatch userId resolution ────────────────────────────────────
+
+  it('insertInboundMessage resolves owner userId for dispatch when opts.userId not supplied', async () => {
+    // Simulate the QR inbound path where ConnectionManager passes only
+    // accountId + contactId (no explicit userId).  The repo must look up
+    // owner_user_id and pass it to callDispatch, not an empty string.
+    const dispatchCalls: Record<string, unknown>[] = []
+
+    // Patch fetch so callDispatch doesn't need a real server.
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url: unknown, init?: unknown) => {
+      const body = JSON.parse((init as { body: string }).body)
+      dispatchCalls.push(body)
+      return { ok: true, json: async () => ({ ok: true }) } as Response
+    }
+
+    try {
+      const { repo, db } = makeRepo({
+        conversations: [{ id: 'conv-1', account_id: ACCOUNT_ID, contact_id: 'c-1', created_at: '2024-01-01' }],
+      })
+
+      // Build a repo with dispatch configured.
+      const repoWithDispatch = new (repo.constructor as new (
+        db: unknown, url: string, secret: string
+      ) => typeof repo)(db, 'http://localhost:3000', 'test-secret')
+
+      const msg: InboundMessage = {
+        messageId: 'wamid-dispatch-test',
+        from: '919999999999@s.whatsapp.net',
+        body: 'Hello',
+        contentType: 'text',
+        timestamp: 1700000000,
+      }
+
+      await repoWithDispatch.insertInboundMessage('conv-1', msg, {
+        accountId: ACCOUNT_ID,
+        contactId: 'c-1',
+        // No userId supplied — simulates QR inbound path from ConnectionManager
+      })
+
+      // Give the fire-and-forget a tick to execute.
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(dispatchCalls.length).toBe(1)
+      // Must not be empty string — must be the owner's userId from accounts table
+      expect(dispatchCalls[0].userId).toBe(OWNER_USER_ID)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
