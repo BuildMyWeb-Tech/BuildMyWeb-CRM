@@ -32,15 +32,16 @@ export async function POST(
     if (!broadcast) {
       return NextResponse.json({ error: "Broadcast not found." }, { status: 404 });
     }
-    if (broadcast.provider !== "qr") {
+    const bc = broadcast as unknown as Record<string, unknown>
+    if (bc["provider"] !== "qr") {
       return NextResponse.json(
         { error: "Pause/resume is only available for QR broadcasts." },
         { status: 400 },
       );
     }
-    if (broadcast.status !== "paused") {
+    if (bc["status"] !== "paused") {
       return NextResponse.json(
-        { error: `Cannot resume a broadcast with status '${broadcast.status}'.` },
+        { error: `Cannot resume a broadcast with status '${bc["status"]}'.` },
         { status: 400 },
       );
     }

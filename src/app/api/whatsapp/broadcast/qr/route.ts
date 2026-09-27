@@ -195,10 +195,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (qrAccount.connection_state !== "CONNECTED") {
+    const qa = qrAccount as unknown as Record<string, unknown>
+    if (qa["connection_state"] !== "CONNECTED") {
       return NextResponse.json(
         {
-          error: `WhatsApp is not connected (current state: ${qrAccount.connection_state}). Please reconnect and try again.`,
+          error: `WhatsApp is not connected (current state: ${qa["connection_state"]}). Please reconnect and try again.`,
         },
         { status: 400 },
       );

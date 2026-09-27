@@ -43,7 +43,9 @@ export async function GET(
     if (!broadcast) {
       return NextResponse.json({ error: 'Broadcast not found.' }, { status: 404 })
     }
-    if (broadcast.provider !== 'qr') {
+    // Cast to access columns added by migrations that are not in the generated types.
+    const bc = broadcast as unknown as Record<string, unknown>
+    if (bc['provider'] !== 'qr') {
       return NextResponse.json(
         { error: 'This endpoint is for QR broadcasts only.' },
         { status: 400 },
@@ -71,20 +73,20 @@ export async function GET(
       if (s in statusCounts) statusCounts[s]++
     }
 
-    const total = broadcast.total_recipients ?? 0
-    const sent = broadcast.sent_count ?? 0
+    const total = (bc['total_recipients'] as number | null) ?? 0
+    const sent = (bc['sent_count'] as number | null) ?? 0
 
     const progress = {
       total,
       ...statusCounts,
       percentSent: total > 0 ? Math.round((sent / total) * 100) : 0,
       percentDelivered:
-        total > 0 ? Math.round(((broadcast.delivered_count ?? 0) / total) * 100) : 0,
+        total > 0 ? Math.round((((bc['delivered_count'] as number | null) ?? 0) / total) * 100) : 0,
       percentRead:
-        total > 0 ? Math.round(((broadcast.read_count ?? 0) / total) * 100) : 0,
+        total > 0 ? Math.round((((bc['read_count'] as number | null) ?? 0) / total) * 100) : 0,
     }
 
-    return NextResponse.json({ broadcast, progress })
+    return NextResponse.json({ broadcast: bc, progress })
   } catch (err) {
     return toErrorResponse(err)
   }

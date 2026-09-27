@@ -36,15 +36,16 @@ export async function POST(
     if (!broadcast) {
       return NextResponse.json({ error: "Broadcast not found." }, { status: 404 });
     }
-    if (broadcast.provider !== "qr") {
+    const bc = broadcast as unknown as Record<string, unknown>
+    if (bc["provider"] !== "qr") {
       return NextResponse.json(
         { error: "Cancel is only available for QR broadcasts." },
         { status: 400 },
       );
     }
-    if (!CANCELLABLE_STATUSES.has(broadcast.status)) {
+    if (!CANCELLABLE_STATUSES.has(bc["status"] as string)) {
       return NextResponse.json(
-        { error: `Cannot cancel a broadcast with status '${broadcast.status}'.` },
+        { error: `Cannot cancel a broadcast with status '${bc["status"]}'.` },
         { status: 400 },
       );
     }
