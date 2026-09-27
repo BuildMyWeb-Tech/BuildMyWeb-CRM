@@ -218,13 +218,13 @@ function ProjectsSidebar({
         <span className={`h-6 w-6 shrink-0 rounded ${getProjectColor(project.name)} flex items-center justify-center text-[10px] font-bold text-white`}>
           {project.name.charAt(0).toUpperCase()}
         </span>
-        <Link href={`/projects/${project.id}`} className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">
+        <Link href={"/projects/" + project.id} className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">
           {project.name}
         </Link>
         {(project.task_count ?? 0) > 0 && (
           <span className="shrink-0 text-[10px] font-medium text-slate-500">{project.task_count}</span>
         )}
-        <Link href={`/projects/chat?project=${project.id}`} title="Open project chat"
+        <Link href={"/projects/chat?project=" + project.id} title="Open project chat"
           className="shrink-0 rounded p-0.5 text-slate-600 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
           <ArrowRight className="h-3 w-3" />
         </Link>
@@ -1190,7 +1190,6 @@ export default function OverviewPage() {
               )}
             </div>
 
-          {null /* enquiry-tasks tab removed */}
 
         </div>
       </div>
