@@ -187,15 +187,26 @@ export default function BroadcastsPage() {
             {t('subtitle')}
           </p>
         </div>
-        <GatedButton
-          canAct={canCreate}
-          gateReason="create broadcasts"
-          onClick={() => router.push('/broadcasts/new')}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          {t('newBroadcast')}
-        </GatedButton>
+        <div className="flex items-center gap-2">
+          <GatedButton
+            canAct={canCreate}
+            gateReason="create broadcasts"
+            onClick={() => router.push('/broadcasts/new-qr')}
+            className="border border-border bg-background text-foreground hover:bg-muted"
+          >
+            <Plus className="h-4 w-4" />
+            QR Broadcast
+          </GatedButton>
+          <GatedButton
+            canAct={canCreate}
+            gateReason="create broadcasts"
+            onClick={() => router.push('/broadcasts/new')}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            {t('newBroadcast')}
+          </GatedButton>
+        </div>
       </div>
 
       {broadcasts.length === 0 ? (

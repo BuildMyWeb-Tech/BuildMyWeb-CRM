@@ -193,6 +193,62 @@ export class WhatsAppRepository {
       .eq('id', crmMessageId)
   }
 
+  // ── QR broadcast helpers ─────────────────────────────────────────────────
+
+  /**
+   * Returns the send_interval_ms for a broadcast, or null if the broadcast
+   * doesn't exist or is not a QR broadcast.  Used by the consumer to pace
+   * delivery rather than using the hardcoded 800 ms fallback.
+   */
+  async getBroadcastSendIntervalMs(broadcastId: string): Promise<number | null> {
+    const { data } = await this.supabase
+      .from('broadcasts')
+      .select('send_interval_ms, provider')
+      .eq('id', broadcastId)
+      .maybeSingle()
+    if (!data || data.provider !== 'qr') return null
+    return (data.send_interval_ms as number) ?? null
+  }
+
+  /**
+   * Returns true when it is safe to send a QR broadcast outbox job.
+   * A job must NOT be sent if its broadcast is paused or cancelled.
+   * Also checks scheduled_at (the outbox row already gates this, but an
+   * extra check here prevents a race where the outbox was claimed just
+   * before the status changed).
+   */
+  async isBroadcastEligibleToSend(broadcastId: string): Promise<boolean> {
+    const { data } = await this.supabase
+      .from('broadcasts')
+      .select('status')
+      .eq('id', broadcastId)
+      .maybeSingle()
+    if (!data) return false
+    return data.status !== 'paused' && data.status !== 'cancelled'
+  }
+
+  /**
+   * After a QR outbox job completes (sent or failed), mirror the result
+   * onto the associated broadcast_recipients row so the detail page
+   * and aggregate trigger stay in sync.
+   */
+  async updateBroadcastRecipientStatus(
+    recipientId: string,
+    status: 'sent' | 'failed',
+    extra?: { error?: string },
+  ): Promise<void> {
+    const patch: Record<string, unknown> = {
+      status,
+      updated_at: new Date().toISOString(),
+    }
+    if (extra?.error) patch.last_error = extra.error
+    if (status === 'failed') patch.failed_at = new Date().toISOString()
+    await this.supabase
+      .from('broadcast_recipients')
+      .update(patch)
+      .eq('id', recipientId)
+  }
+
   /** Check whether the CRM has requested a disconnect for this account. */
   async checkDisconnectRequested(whatsappAccountId: string): Promise<boolean> {
     const { data } = await this.supabase

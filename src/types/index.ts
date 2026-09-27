@@ -983,18 +983,27 @@ export interface LocalUser {
   created_at: string;
 }
 
-export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+export type BroadcastStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'paused'
+  | 'cancelled';
+
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
 export interface Broadcast {
   id: string;
   user_id: string;
+  account_id?: string;
   name: string;
-  template_name: string;
-  template_language: string;
+  template_name: string | null;
+  template_language: string | null;
   template_variables?: Record<string, unknown>;
   audience_filter?: Record<string, unknown>;
-  scheduled_at?: string;
+  scheduled_at?: string | null;
   status: BroadcastStatus;
   total_recipients: number;
   sent_count: number;
@@ -1008,6 +1017,15 @@ export interface Broadcast {
    * send. Added in migration 038.
    */
   delivery_locked_at?: string | null;
+  // QR broadcast fields (migration 091)
+  provider?: 'meta' | 'qr';
+  whatsapp_account_id?: string | null;
+  message_text?: string | null;
+  media_url?: string | null;
+  media_type?: 'image' | 'video' | 'document' | 'audio' | null;
+  media_filename?: string | null;
+  media_mimetype?: string | null;
+  send_interval_ms?: number;
   created_at: string;
 }
 

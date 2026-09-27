@@ -18,6 +18,9 @@ export interface OutboxJob {
   idempotency_key: string
   locked_at: string | null
   locked_by: string | null
+  // QR broadcast linkage (migration 091)
+  broadcast_id: string | null
+  broadcast_recipient_id: string | null
   created_at: string
   updated_at: string
 }

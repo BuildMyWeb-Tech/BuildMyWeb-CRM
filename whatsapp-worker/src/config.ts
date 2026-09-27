@@ -27,6 +27,9 @@ function buildConfig() {
     },
     outbox: {
       pollIntervalMs: parseInt(optional('OUTBOX_POLL_INTERVAL_MS', '2000'), 10),
+      // Default inter-message delay for broadcast jobs when no per-broadcast
+      // interval is stored on the broadcasts row.
+      broadcastSendIntervalMs: parseInt(optional('BROADCAST_SEND_INTERVAL_MS', '1000'), 10),
     },
     heartbeat: {
       intervalMs: parseInt(optional('HEARTBEAT_INTERVAL_MS', '30000'), 10),

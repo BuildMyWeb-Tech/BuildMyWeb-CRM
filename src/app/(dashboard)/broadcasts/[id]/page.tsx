@@ -34,6 +34,8 @@ import {
   Trash2,
   PlayCircle,
   RotateCcw,
+  PauseCircle,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -163,6 +165,9 @@ export default function BroadcastDetailPage() {
   const [resumingScope, setResumingScope] = useState<
     'pending' | 'failed' | null
   >(null);
+  // QR broadcast controls (Phase H)
+  const [qrAction, setQrAction] = useState<'pausing' | 'resuming' | 'cancelling' | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -298,6 +303,54 @@ export default function BroadcastDetailPage() {
     router.push('/broadcasts');
   }
 
+  // ── QR broadcast controls ────────────────────────────────────────────────
+
+  async function handleQrPause() {
+    setQrAction('pausing');
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/pause`, { method: 'POST' });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(payload?.error ?? 'Failed to pause broadcast.'); return; }
+      toast.success('Broadcast paused. No new messages will be sent.');
+      await fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to pause broadcast.');
+    } finally {
+      setQrAction(null);
+    }
+  }
+
+  async function handleQrResume() {
+    setQrAction('resuming');
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/resume`, { method: 'POST' });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(payload?.error ?? 'Failed to resume broadcast.'); return; }
+      toast.success('Broadcast resumed. The worker will continue sending.');
+      await fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resume broadcast.');
+    } finally {
+      setQrAction(null);
+    }
+  }
+
+  async function handleQrCancel() {
+    setQrAction('cancelling');
+    setConfirmCancel(false);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/cancel`, { method: 'POST' });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(payload?.error ?? 'Failed to cancel broadcast.'); return; }
+      toast.success('Broadcast cancelled. All pending messages have been stopped.');
+      await fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel broadcast.');
+    } finally {
+      setQrAction(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -356,7 +409,11 @@ export default function BroadcastDetailPage() {
               </span>
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{t('template', { name: broadcast.template_name })}</span>
+              {broadcast.template_name ? (
+                <span>{t('template', { name: broadcast.template_name })}</span>
+              ) : (
+                <span>QR broadcast</span>
+              )}
               <span>-</span>
               <span>
                 {t('createdAt', { date: new Date(broadcast.created_at).toLocaleDateString() })}
@@ -408,6 +465,93 @@ export default function BroadcastDetailPage() {
           </Button>
         )}
       </div>
+
+      {/* Phase H: QR broadcast pause / resume / cancel controls.
+          Only rendered for QR broadcasts with controllable status. */}
+      {broadcast.provider === 'qr' &&
+        (broadcast.status === 'sending' || broadcast.status === 'paused' || broadcast.status === 'scheduled') && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+          <div className="text-sm">
+            <p className="font-medium text-foreground">
+              {broadcast.status === 'paused' ? 'Broadcast paused' : 'QR Broadcast controls'}
+            </p>
+            <p className="mt-0.5 text-muted-foreground">
+              {broadcast.status === 'sending'
+                ? 'Pause to stop sending new messages, or cancel to stop permanently.'
+                : broadcast.status === 'paused'
+                ? 'Resume to continue sending, or cancel to stop permanently.'
+                : 'Broadcast is scheduled. You can cancel it before it starts.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {broadcast.status === 'sending' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleQrPause}
+                disabled={qrAction !== null}
+                className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+              >
+                {qrAction === 'pausing' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PauseCircle className="h-3.5 w-3.5" />
+                )}
+                Pause
+              </Button>
+            )}
+            {broadcast.status === 'paused' && (
+              <Button
+                size="sm"
+                onClick={handleQrResume}
+                disabled={qrAction !== null}
+              >
+                {qrAction === 'resuming' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <PlayCircle className="h-3.5 w-3.5" />
+                )}
+                Resume
+              </Button>
+            )}
+            {confirmCancel ? (
+              <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm">
+                <span className="text-red-300">Cancel permanently?</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmCancel(false)}
+                  disabled={qrAction !== null}
+                  className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+                >
+                  No
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleQrCancel}
+                  disabled={qrAction !== null}
+                  className="h-7 bg-red-600 text-white hover:bg-red-700"
+                >
+                  {qrAction === 'cancelling' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : 'Yes, cancel'}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmCancel(true)}
+                disabled={qrAction !== null}
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                Cancel broadcast
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Resume / retry (issue #472). Only rendered when there is
           actually something outstanding. */}

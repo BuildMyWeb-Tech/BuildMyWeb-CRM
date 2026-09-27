@@ -1,10 +1,11 @@
 /**
- * POST /api/whatsapp/broadcast/[id]/resume
+ * POST /api/whatsapp/broadcast/[id]/pause
  *
- * Transitions a QR broadcast from 'paused' → 'sending'.
- * The worker will pick up any remaining pending outbox jobs on its next poll.
+ * Transitions a QR broadcast from 'sending' → 'paused'.
+ * The worker checks isBroadcastEligibleToSend() before each job,
+ * so in-flight jobs finish but no new jobs start after this call.
  *
- * Allowed transitions: paused → sending
+ * Allowed transitions: sending → paused
  */
 
 import { NextResponse } from "next/server";
@@ -19,6 +20,7 @@ export async function POST(
     const { id: broadcastId } = await params;
     const { supabase, accountId } = await requireRole("agent");
 
+    // Verify the broadcast belongs to this account and is a QR broadcast.
     const { data: broadcast, error: fetchErr } = await supabase
       .from("broadcasts")
       .select("id, status, provider")
@@ -38,9 +40,9 @@ export async function POST(
         { status: 400 },
       );
     }
-    if (broadcast.status !== "paused") {
+    if (broadcast.status !== "sending") {
       return NextResponse.json(
-        { error: `Cannot resume a broadcast with status '${broadcast.status}'.` },
+        { error: `Cannot pause a broadcast with status '${broadcast.status}'.` },
         { status: 400 },
       );
     }
@@ -48,14 +50,14 @@ export async function POST(
     const admin = supabaseAdmin();
     const { error: updateErr } = await admin
       .from("broadcasts")
-      .update({ status: "sending", updated_at: new Date().toISOString() })
+      .update({ status: "paused", updated_at: new Date().toISOString() })
       .eq("id", broadcastId);
 
     if (updateErr) {
-      return NextResponse.json({ error: "Failed to resume broadcast." }, { status: 500 });
+      return NextResponse.json({ error: "Failed to pause broadcast." }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, status: "sending" });
+    return NextResponse.json({ success: true, status: "paused" });
   } catch (err) {
     return toErrorResponse(err);
   }

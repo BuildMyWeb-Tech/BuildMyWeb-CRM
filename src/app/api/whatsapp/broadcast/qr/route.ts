@@ -291,11 +291,16 @@ export async function POST(request: Request) {
     }
 
     // 9. Return immediately — worker processes outbox jobs asynchronously.
+    // Phase G: report 'scheduled' when the send time is meaningfully in the future.
+    const isScheduled =
+      body.scheduled_at != null &&
+      new Date(body.scheduled_at).getTime() > Date.now() + 30_000;
+
     return NextResponse.json({
       success: true,
       broadcastId: row.broadcast_id as string,
       totalRecipients: (row.recipient_count as number) ?? 0,
-      status: "queued",
+      status: isScheduled ? "scheduled" : "queued",
     });
   } catch (error) {
     console.error("[qr-broadcast] unhandled error:", error instanceof Error ? error.message : error);
