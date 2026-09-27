@@ -271,9 +271,7 @@ export default function ClientLeadsPage() {
               </div>
               <h1 className="text-2xl font-bold text-white">Client Enquiry</h1>
             </div>
-            <p className="mt-1 text-sm text-slate-400">
-              Track and manage all client enquiries from new leads to conversion.
-            </p>
+            
           </div>
           <div className="flex items-center gap-2">
             {/* View toggle */}

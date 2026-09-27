@@ -146,9 +146,7 @@ export default function DailyTasksPage() {
             </div>
             <h1 className="text-2xl font-bold text-white">Project Tasks</h1>
           </div>
-          <p className="text-sm text-slate-400 ml-11">
-            Track and manage all project tasks, stay on top of deadlines and keep your team aligned.
-          </p>
+        
         </div>
 
         {/* Stat cards */}

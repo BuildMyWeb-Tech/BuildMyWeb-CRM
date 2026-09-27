@@ -241,19 +241,12 @@ export default function ClientsPage() {
       {/* Main content */}
       <div className="flex-1 min-w-0 p-6 pr-4">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-4">
-          <Home className="h-3 w-3" />
-          <span>Home</span>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-300">Clients</span>
-        </div>
+       
 
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Client Directory</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Manage your clients, track relationships and never miss a follow-up.
-          </p>
+          
         </div>
 
         {/* Stat cards */}
@@ -456,7 +449,7 @@ export default function ClientsPage() {
                   <p className="text-xs text-slate-500">
                     {c.client_since
                       ? `Client since ${new Date(c.client_since).toLocaleDateString()}`
-                      : "No start date set"}
+                      : ""}
                   </p>
                 </div>
                 <StatusBadge status={c.status} />
@@ -680,7 +673,7 @@ function ClientCard({
               <StatusBadge status={c.status} />
             </div>
             <p className="text-xs text-slate-400 truncate">
-              {c.notes ? c.notes.split(" ").slice(0, 4).join(" ") : "No industry set"}
+              {c.notes ? c.notes.split(" ").slice(0, 4).join(" ") : ""}
             </p>
           </div>
           <ClientCardMenu
