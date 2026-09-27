@@ -107,15 +107,22 @@ export class OutboxConsumer {
 
     // Phase H: check broadcast eligibility before sending.
     // If the broadcast was paused/cancelled AFTER this job was claimed,
-    // return the job to 'pending' rather than leaving it stuck in 'processing'.
+    // handle the two cases differently:
+    //   paused    → return to 'pending' so it retries when the broadcast is resumed
+    //   cancelled → set to 'cancelled' to avoid an infinite pending→processing loop
     if (job.broadcast_id) {
-      const eligible = await this.repo.isBroadcastEligibleToSend(job.broadcast_id)
-      if (!eligible) {
+      const eligibility = await this.repo.getBroadcastSendEligibility(job.broadcast_id)
+      if (eligibility !== 'eligible') {
         logger.info('outbox_job_returned_paused_broadcast', {
           jobId: job.id,
           broadcastId: job.broadcast_id,
+          reason: eligibility,
         })
-        await this.repo.returnOutboxJobToPending(job.id)
+        if (eligibility === 'cancelled') {
+          await this.repo.markOutboxCancelledByBroadcast(job.id)
+        } else {
+          await this.repo.returnOutboxJobToPending(job.id)
+        }
         return
       }
     }

@@ -585,9 +585,10 @@ export default function BroadcastDetailPage() {
         </div>
       )}
 
-      {/* Resume / retry (issue #472). Only rendered when there is
-          actually something outstanding. */}
-      {(pendingCount > 0 || retryableCount > 0) && (
+      {/* Resume / retry (issue #472). Only rendered for Meta broadcasts
+          where the browser drove sends. QR broadcasts are worker-driven
+          and use the pause/resume/cancel panel above instead. */}
+      {broadcast.provider !== 'qr' && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">

@@ -47,9 +47,11 @@ function makeRepo() {
     // QR broadcast methods (Phase I-J)
     getBroadcastSendIntervalMs: vi.fn(async () => null),
     isBroadcastEligibleToSend: vi.fn(async () => true),
+    getBroadcastSendEligibility: vi.fn(async () => 'eligible' as const),
     updateBroadcastRecipientStatus: vi.fn(async () => {}),
     storeOutboxSentMessageId: vi.fn(async () => {}),
     returnOutboxJobToPending: vi.fn(async () => {}),
+    markOutboxCancelledByBroadcast: vi.fn(async () => {}),
   }
 }
 

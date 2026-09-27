@@ -217,14 +217,30 @@ export class WhatsAppRepository {
    * extra check here prevents a race where the outbox was claimed just
    * before the status changed).
    */
-  async isBroadcastEligibleToSend(broadcastId: string): Promise<boolean> {
+  /**
+   * Returns 'eligible' | 'paused' | 'cancelled'.
+   * The consumer uses this to distinguish the two ineligible states:
+   * - paused  → return job to pending so it retries when resumed
+   * - cancelled → set job to cancelled (stops the infinite loop)
+   */
+  async getBroadcastSendEligibility(
+    broadcastId: string,
+  ): Promise<'eligible' | 'paused' | 'cancelled'> {
     const { data } = await this.supabase
       .from('broadcasts')
       .select('status')
       .eq('id', broadcastId)
       .maybeSingle()
-    if (!data) return false
-    return data.status !== 'paused' && data.status !== 'cancelled'
+    if (!data) return 'cancelled'
+    if (data.status === 'cancelled') return 'cancelled'
+    if (data.status === 'paused') return 'paused'
+    return 'eligible'
+  }
+
+  /** @deprecated Use getBroadcastSendEligibility instead. */
+  async isBroadcastEligibleToSend(broadcastId: string): Promise<boolean> {
+    const result = await this.getBroadcastSendEligibility(broadcastId)
+    return result === 'eligible'
   }
 
   /**
@@ -283,14 +299,33 @@ export class WhatsAppRepository {
 
   /**
    * Return a claimed outbox job back to 'pending' so the worker can retry
-   * it later. Used when a broadcast is found to be paused/cancelled AFTER
-   * the job was already claimed (set to 'processing').
+   * it later. Used when a broadcast is found to be PAUSED after the job was
+   * already claimed (set to 'processing'). Do NOT use for cancelled broadcasts
+   * — use markOutboxCancelledByBroadcast instead.
    */
   async returnOutboxJobToPending(jobId: string): Promise<void> {
     await this.supabase
       .from('whatsapp_message_outbox')
       .update({
         status: 'pending',
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId)
+  }
+
+  /**
+   * Cancel a single outbox job that was claimed (processing) when the
+   * broadcast was cancelled. Setting it to 'cancelled' prevents the
+   * infinite pending→processing→pending loop that returnOutboxJobToPending
+   * would cause for a permanently-stopped broadcast.
+   */
+  async markOutboxCancelledByBroadcast(jobId: string): Promise<void> {
+    await this.supabase
+      .from('whatsapp_message_outbox')
+      .update({
+        status: 'cancelled',
         locked_at: null,
         locked_by: null,
         updated_at: new Date().toISOString(),
@@ -308,12 +343,16 @@ export class WhatsAppRepository {
     status: 'sent' | 'failed',
     extra?: { error?: string },
   ): Promise<void> {
+    const now = new Date().toISOString()
     const patch: Record<string, unknown> = {
       status,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     }
-    if (extra?.error) patch.last_error = extra.error
-    if (status === 'failed') patch.failed_at = new Date().toISOString()
+    if (status === 'sent') patch.sent_at = now
+    if (status === 'failed') {
+      patch.failed_at = now
+      if (extra?.error) patch.last_error = extra.error
+    }
     await this.supabase
       .from('broadcast_recipients')
       .update(patch)

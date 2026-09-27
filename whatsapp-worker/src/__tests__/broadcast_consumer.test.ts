@@ -43,9 +43,11 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     recoverStaleOutboxJobs: vi.fn(async () => 0),
     getBroadcastSendIntervalMs: vi.fn(async () => null as number | null),
     isBroadcastEligibleToSend: vi.fn(async () => true),
+    getBroadcastSendEligibility: vi.fn(async () => 'eligible' as 'eligible' | 'paused' | 'cancelled'),
     updateBroadcastRecipientStatus: vi.fn(async () => {}),
     storeOutboxSentMessageId: vi.fn(async () => {}),
     returnOutboxJobToPending: vi.fn(async () => {}),
+    markOutboxCancelledByBroadcast: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -111,29 +113,32 @@ describe('OutboxConsumer — broadcast eligibility', () => {
 
   it('J-9: returns job to pending when broadcast is paused', async () => {
     const provider = makeProvider()
-    const repo = makeRepo({ isBroadcastEligibleToSend: vi.fn(async () => false) })
+    const repo = makeRepo({ getBroadcastSendEligibility: vi.fn(async () => 'paused') })
     const job = makeJob()
     ;(repo.claimOutboxJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([job])
 
     const consumer = new OutboxConsumer(provider, repo as never, 'wa-1', 'w-1', 2000)
     await runPoll(consumer)
 
-    // Must return to pending — NOT leave stuck in processing.
+    // Paused: return to pending so it retries when resumed.
     expect(repo.returnOutboxJobToPending).toHaveBeenCalledWith('job-bc-1')
-    // Must NOT send.
+    expect(repo.markOutboxCancelledByBroadcast).not.toHaveBeenCalled()
     expect(provider.sendText).not.toHaveBeenCalled()
     expect(repo.markOutboxSentWithMessageUpdate).not.toHaveBeenCalled()
   })
 
-  it('J-10: does not send a cancelled broadcast job', async () => {
+  it('J-10: marks job cancelled (not pending) when broadcast is cancelled — prevents infinite loop', async () => {
     const provider = makeProvider()
-    const repo = makeRepo({ isBroadcastEligibleToSend: vi.fn(async () => false) })
+    const repo = makeRepo({ getBroadcastSendEligibility: vi.fn(async () => 'cancelled') })
     const job = makeJob()
     ;(repo.claimOutboxJobs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([job])
 
     const consumer = new OutboxConsumer(provider, repo as never, 'wa-1', 'w-1', 2000)
     await runPoll(consumer)
 
+    // Cancelled: mark the outbox job cancelled — NOT returned to pending.
+    expect(repo.markOutboxCancelledByBroadcast).toHaveBeenCalledWith('job-bc-1')
+    expect(repo.returnOutboxJobToPending).not.toHaveBeenCalled()
     expect(provider.sendText).not.toHaveBeenCalled()
   })
 
@@ -148,6 +153,7 @@ describe('OutboxConsumer — broadcast eligibility', () => {
 
     expect(provider.sendText).toHaveBeenCalledOnce()
     expect(repo.returnOutboxJobToPending).not.toHaveBeenCalled()
+    expect(repo.markOutboxCancelledByBroadcast).not.toHaveBeenCalled()
   })
 })
 
