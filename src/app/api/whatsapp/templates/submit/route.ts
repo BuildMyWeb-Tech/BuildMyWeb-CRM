@@ -138,28 +138,30 @@ export async function POST(request: Request) {
       metaTemplateId = `dry-run-${crypto.randomUUID()}`
       metaStatus = 'PENDING'
     } else {
-      const { data: config, error: configError } = await supabase
+      const { data: config } = await supabase
         .from('whatsapp_config')
         .select('*')
         .eq('account_id', accountId)
         .single()
-      if (configError || !config) {
-        return NextResponse.json(
-          {
-            error:
-              'WhatsApp not configured. Connect your WhatsApp Business account in Settings first.',
-          },
-          { status: 400 },
+
+      // No Meta Business account configured — save locally as DRAFT so
+      // QR-only users can still manage templates without a Business API.
+      if (!config || !config.waba_id) {
+        const { data: row, error: upsertErr } = await upsertTemplateRow(
+          supabase,
+          buildUpsertRow(accountId, userId, payload, {
+            status: 'DRAFT',
+            metaTemplateId: null,
+            submissionError: null,
+          }),
         )
-      }
-      if (!config.waba_id) {
-        return NextResponse.json(
-          {
-            error:
-              'WABA (WhatsApp Business Account) ID missing. Re-connect your account in Settings.',
-          },
-          { status: 400 },
-        )
+        if (upsertErr) {
+          return NextResponse.json(
+            { error: `Failed to save template: ${upsertErr.message}` },
+            { status: 500 },
+          )
+        }
+        return NextResponse.json({ success: true, template: row, dry_run: true })
       }
 
       const accessToken = decrypt(config.access_token)
