@@ -37,6 +37,7 @@ interface AllocationInput {
   recipient_type?: unknown
   recipient_user_id?: unknown
   role_label?: unknown
+  outsource_role?: unknown
   amount?: unknown
 }
 
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
       recipient_type: a.recipient_type === 'company' ? 'company' : a.recipient_type === 'outsource' ? 'outsource' : 'team_member',
       recipient_user_id: typeof a.recipient_user_id === 'string' ? a.recipient_user_id : null,
       role_label: typeof a.role_label === 'string' ? a.role_label : null,
+      outsource_role: typeof a.outsource_role === 'string' ? a.outsource_role : null,
       amount: typeof a.amount === 'number' ? a.amount : NaN,
     }))
     .filter((a) => Number.isFinite(a.amount) && (a.recipient_type === 'company' || a.recipient_type === 'outsource' || a.recipient_user_id))
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
         recipient_type: a.recipient_type,
         recipient_user_id: a.recipient_user_id,
         role_label: a.role_label,
+        outsource_role: a.outsource_role,
         amount: a.amount,
       })),
     )

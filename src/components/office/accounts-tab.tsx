@@ -46,11 +46,12 @@ interface AllocationDraft {
   recipient_user_id: string;
   role_label: string;
   outsource_name: string;
+  outsource_role: string;
   amount: string;
 }
 
 function emptyAllocation(): AllocationDraft {
-  return { recipient_type: "team_member", recipient_user_id: "", role_label: "", outsource_name: "", amount: "" };
+  return { recipient_type: "team_member", recipient_user_id: "", role_label: "", outsource_name: "", outsource_role: "", amount: "" };
 }
 
 function formatCurrency(n: number) {
@@ -160,6 +161,7 @@ export function AccountsTab() {
             recipient_user_id: a.recipient_user_id ?? "",
             role_label: a.role_label ?? "",
             outsource_name: a.recipient_type === "outsource" ? (a.role_label ?? "") : "",
+            outsource_role: (a as { outsource_role?: string }).outsource_role ?? "",
             amount: String(a.amount),
           }))
         : [emptyAllocation()],
@@ -206,6 +208,7 @@ export function AccountsTab() {
                 role_label: a.recipient_type === "outsource"
                   ? (a.outsource_name.trim() || null)
                   : (a.role_label.trim() || null),
+                outsource_role: a.recipient_type === "outsource" ? (a.outsource_role.trim() || null) : null,
                 amount: Number(a.amount),
               })),
             installments: installments
@@ -623,12 +626,20 @@ export function AccountsTab() {
                       </Select>
                     )}
                     {a.recipient_type === "outsource" && (
-                      <Input
-                        value={a.outsource_name}
-                        onChange={(e) => updateAllocation(i, { outsource_name: e.target.value })}
-                        placeholder="Who have to pay"
-                        className="h-8 w-36 shrink-0 border-transparent bg-transparent text-sm text-foreground focus:border-border"
-                      />
+                      <>
+                        <Input
+                          value={a.outsource_name}
+                          onChange={(e) => updateAllocation(i, { outsource_name: e.target.value })}
+                          placeholder="Name"
+                          className="h-8 w-28 shrink-0 border-transparent bg-transparent text-sm text-foreground focus:border-border"
+                        />
+                        <Input
+                          value={a.outsource_role}
+                          onChange={(e) => updateAllocation(i, { outsource_role: e.target.value })}
+                          placeholder="Role"
+                          className="h-8 w-24 shrink-0 border-transparent bg-transparent text-sm text-foreground focus:border-border"
+                        />
+                      </>
                     )}
                     {a.recipient_type !== "outsource" && (
                     <Input

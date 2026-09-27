@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   FileText, ArrowLeft, Loader2, Plus, Pencil, X, Trash2,
   ChevronRight, Home, CheckCircle2, CreditCard, CalendarDays,
-  Hash, Building2, AlertTriangle,
+  Hash, Building2, AlertTriangle, Download,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -261,6 +261,76 @@ export default function InvoiceDetailPage() {
   const today = new Date().toISOString().slice(0, 10);
   const isOverdue = invoice.due_date && invoice.due_date < today && balance > 0 && !["paid","cancelled","void"].includes(invoice.status);
 
+  function handlePrint() {
+    const sortedItems = [...items].sort((a, b) => a.position - b.position);
+    const currency = invoice.currency || "INR";
+    const f = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(n ?? 0);
+    const fd = (d: string | null) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+    const itemRows = sortedItems.map((item) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${item.description || ""}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${item.quantity} ${item.unit || ""}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${f(item.unit_price)}</td>
+        ${item.discount_pct > 0 ? `<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${item.discount_pct}%</td>` : `<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#9ca3af;">—</td>`}
+        ${item.tax_pct > 0 ? `<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${item.tax_pct}%</td>` : `<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#9ca3af;">—</td>`}
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${f(item.line_total)}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${invoice.invoice_number}</title>
+<style>
+  body{font-family:Arial,sans-serif;color:#111827;margin:0;padding:40px;font-size:14px;}
+  h1{margin:0;font-size:24px;} h2{margin:0;font-size:16px;color:#6b7280;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;}
+  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151;}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:24px;}
+  .meta-row{font-size:13px;} .meta-label{color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+  thead tr{background:#f9fafb;} th{padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;}
+  th:last-child,td:last-child{text-align:right;}
+  .totals{display:flex;justify-content:flex-end;} .totals-inner{width:220px;}
+  .totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#6b7280;}
+  .totals-total{display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:15px;border-top:2px solid #111827;}
+  .note{margin-top:24px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px;color:#374151;}
+  @media print{body{padding:24px;} @page{margin:1.5cm;}}
+</style></head><body>
+<div class="header">
+  <div><h1>INVOICE</h1><h2>${invoice.client_name}</h2></div>
+  <div style="text-align:right;">
+    <div style="font-size:20px;font-weight:700;font-family:monospace;">${invoice.invoice_number}</div>
+    <div class="badge" style="margin-top:6px;">${STATUS_META[invoice.status]?.label ?? invoice.status}</div>
+  </div>
+</div>
+<div class="meta">
+  <div class="meta-row"><div class="meta-label">Issue Date</div>${fd(invoice.issue_date)}</div>
+  <div class="meta-row"><div class="meta-label">Due Date</div>${fd(invoice.due_date)}</div>
+  ${invoice.po_number ? `<div class="meta-row"><div class="meta-label">PO Number</div>${invoice.po_number}</div>` : ""}
+  <div class="meta-row"><div class="meta-label">Currency</div>${currency}</div>
+</div>
+${sortedItems.length > 0 ? `
+<table><thead><tr>
+  <th>Description</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Rate</th>
+  <th style="text-align:right;width:70px;">Disc%</th><th style="text-align:right;width:70px;">Tax%</th><th style="text-align:right;width:100px;">Total</th>
+</tr></thead><tbody>${itemRows}</tbody></table>` : ""}
+<div class="totals"><div class="totals-inner">
+  <div class="totals-row"><span>Subtotal</span><span>${f(invoice.subtotal || total)}</span></div>
+  ${(invoice.discount_amount || 0) > 0 ? `<div class="totals-row" style="color:#d97706;"><span>Discount</span><span>-${f(invoice.discount_amount)}</span></div>` : ""}
+  ${(invoice.tax_amount || 0) > 0 ? `<div class="totals-row"><span>Tax</span><span>${f(invoice.tax_amount)}</span></div>` : ""}
+  <div class="totals-total"><span>Total</span><span>${f(total)}</span></div>
+  ${paid > 0 ? `<div class="totals-row" style="color:#16a34a;"><span>Paid</span><span>-${f(paid)}</span></div>` : ""}
+  ${balance > 0 ? `<div class="totals-row" style="font-weight:600;color:#d97706;"><span>Balance Due</span><span>${f(balance)}</span></div>` : ""}
+</div></div>
+${invoice.customer_note || invoice.notes ? `<div class="note"><strong>Note:</strong> ${invoice.customer_note || invoice.notes}</div>` : ""}
+</body></html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
+
   return (
     <>
       <AddPaymentModal open={paymentOpen} onClose={() => setPaymentOpen(false)} onSaved={load} invoice={invoice} />
@@ -297,6 +367,10 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button onClick={handlePrint}
+                className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-2 text-sm text-slate-300 hover:text-white hover:border-slate-500 transition-colors">
+                <Download className="h-4 w-4" /> PDF
+              </button>
               {balance > 0 && !["paid","cancelled","void"].includes(invoice.status) && (
                 <button onClick={() => setPaymentOpen(true)}
                   className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors">

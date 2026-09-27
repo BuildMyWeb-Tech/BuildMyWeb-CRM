@@ -206,8 +206,12 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         setPipeline(pipelineRow);
         setMembers(membersRows);
         if (clientsData) setClients(clientsData.clients ?? []);
-        if (projectsData) setProjects(projectsData.projects ?? []);
-        setProjectTasks((projectTasksRes.data ?? []) as ProjectTask[]);
+        const allProjectTasks = (projectTasksRes.data ?? []) as ProjectTask[];
+        if (projectsData) {
+          const projectIdsWithTasks = new Set(allProjectTasks.map((t) => t.project_id));
+          setProjects((projectsData.projects ?? []).filter((p: { id: string }) => projectIdsWithTasks.has(p.id)));
+        }
+        setProjectTasks(allProjectTasks);
 
         if (pipelineRow) {
           const [stagesRes, tasksRes] = await Promise.all([
@@ -333,7 +337,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
       // which is the correct behavior given the chips shown, not a bug.
       if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
       if (!matchesDatePreset(t.dateValue, datePreset)) return false;
-      if (overdueOnly && !(t.dateValue && t.dateValue < todayStr)) return false;
+      if (overdueOnly && !matchesDatePreset(t.dateValue, "overdue")) return false;
       return true;
     })
     .sort((a, b) => {

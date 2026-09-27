@@ -65,6 +65,13 @@ const ALL_PAGES = [
 ].filter((p) => p.href !== "/my-pages" && p.href in PAGE_REGISTRY);
 
 const LABEL_MAP: Record<string, string> = {
+  myWork: "My Work",
+  moduleClients: "Clients",
+  moduleProjects: "Projects",
+  moduleProduct: "Product",
+  moduleSales: "Sales",
+  moduleMarketing: "Marketing",
+  moduleOffice: "Office",
   dashboard: "Dashboard",
   businessDashboard: "Business Dashboard",
   clientDirectory: "Client Directory",
