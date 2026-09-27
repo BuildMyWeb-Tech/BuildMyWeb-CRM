@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, Pencil, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, ExternalLink, X,
+  ChevronsUpDown, Loader2, ExternalLink, X, Eye, EyeOff,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -334,6 +334,17 @@ export default function ProductTasksPage() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("pt-hidden-rows") ?? "[]")); } catch { return new Set(); }
+  });
+  function persistHidden(fn: (prev: Set<string>) => Set<string>) {
+    setHiddenRows((prev) => {
+      const next = fn(prev);
+      try { localStorage.setItem("pt-hidden-rows", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<ProductTask | null>(null);
@@ -559,6 +570,7 @@ export default function ProductTasksPage() {
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
+                    <th className="w-8 px-2 py-2.5" />
                     {(["title", "priority", "due_date"] as SortField[]).map((f) => (
                       <th key={f} className="px-4 py-2.5 font-medium">
                         <button type="button" onClick={() => toggleSort(f)}
@@ -575,11 +587,15 @@ export default function ProductTasksPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((task) => {
+                  {filtered.filter((t) => !hiddenRows.has(t.id)).map((task) => {
                     const isOverdue = task.due_date && task.due_date < todayStr;
                     const isToday = task.due_date === todayStr;
                     return (
                       <tr key={task.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                        <td className="px-2 py-2.5">
+                          <button type="button" title="Hide row" onClick={() => persistHidden((p) => { const n = new Set(p); n.add(task.id); return n; })}
+                            className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
+                        </td>
                         <td className="px-4 py-3 font-medium text-white">{task.title}</td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>
@@ -628,6 +644,14 @@ export default function ProductTasksPage() {
                       </tr>
                     );
                   })}
+                  {hiddenRows.size > 0 && (
+                    <tr><td colSpan={8} className="px-4 py-2">
+                      <button type="button" onClick={() => persistHidden(() => new Set())}
+                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                        <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — show all
+                      </button>
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

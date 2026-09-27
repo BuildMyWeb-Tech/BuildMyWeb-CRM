@@ -36,7 +36,10 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>(() => {
+    if (typeof window === "undefined") return "all";
+    return (window.localStorage.getItem("projects-status-filter") as "all" | ProjectStatus) ?? "all";
+  });
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid";
     return window.localStorage.getItem("projects-view") === "list" ? "list" : "grid";
@@ -91,6 +94,7 @@ export default function ProjectsPage() {
     active: (projects ?? []).filter((p) => p.status === "active").length,
     inactive: (projects ?? []).filter((p) => p.status === "inactive").length,
     archived: (projects ?? []).filter((p) => p.status === "archived").length,
+    completed: (projects ?? []).filter((p) => p.status === "completed").length,
   };
 
   return (
@@ -125,11 +129,11 @@ export default function ProjectsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(["all", "active", "inactive", "archived"] as const).map((s) => (
-            <button key={s} type="button" onClick={() => setStatusFilter(s === "all" ? "all" : s)}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {(["all", "active", "inactive", "archived", "completed"] as const).map((s) => (
+            <button key={s} type="button" onClick={() => { setStatusFilter(s); try { localStorage.setItem("projects-status-filter", s); } catch {} }}
               className={`rounded-xl border p-4 text-left transition-colors ${
-                statusFilter === s || (s === "all" && statusFilter === "all")
+                statusFilter === s
                   ? "border-blue-500/50 bg-blue-500/10"
                   : "border-[#2a3045] bg-[#1a1f2e] hover:border-[#3a4055]"
               }`}>
@@ -181,6 +185,7 @@ export default function ProjectsPage() {
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
                         p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
                         : p.status === "inactive" ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
+                        : p.status === "completed" ? "border-teal-500/30 bg-teal-500/20 text-teal-400"
                         : "border-[#2a3045] bg-[#2a3045] text-slate-500"
                       }`}>{p.status}</span>
                     </td>

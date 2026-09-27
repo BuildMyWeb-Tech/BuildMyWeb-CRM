@@ -31,7 +31,7 @@ import { toast } from "sonner";
 // needs to navigate away afterward (the list page just removes the
 // card; the detail page has to leave the page it's currently on).
 
-const STATUSES: ProjectStatus[] = ["active", "inactive", "archived"];
+const STATUSES: ProjectStatus[] = ["active", "inactive", "archived", "completed"];
 
 interface ProjectSettingsProps {
   open: boolean;

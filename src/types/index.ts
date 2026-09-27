@@ -448,7 +448,7 @@ export interface Deal {
 // (not a re-export of ClientStatus) since the two describe different
 // entities and evolving one shouldn't silently change the other's
 // type signature.
-export type ProjectStatus = 'active' | 'inactive' | 'archived';
+export type ProjectStatus = 'active' | 'inactive' | 'archived' | 'completed';
 
 export interface Project {
   id: string;
