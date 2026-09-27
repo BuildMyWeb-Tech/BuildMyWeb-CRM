@@ -75,6 +75,11 @@ export default function ProjectDetailPage() {
     if (!res.ok) {
       toast.error("Could not move task — reloading board.");
       load();
+      return;
+    }
+    const resData = await res.json().catch(() => null);
+    if (resData?.auto_deleted) {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
     }
   }
 

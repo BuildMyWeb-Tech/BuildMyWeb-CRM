@@ -64,12 +64,28 @@ export async function PATCH(
 
   if (Object.keys(update).length === 0) return NextResponse.json({ ok: true })
 
-  const { error } = await supabaseAdmin()
+  const { data: updatedTask, error } = await supabaseAdmin()
     .from('project_tasks')
     .update(update)
     .eq('id', id)
     .eq('account_id', ctx.accountId)
+    .select('id, title, stage_id')
+    .maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-delete when moved into a "Done" stage — same pattern as product_tasks.
+  if (updatedTask?.stage_id && typeof body.stage_id === 'string') {
+    const { data: stage } = await supabaseAdmin()
+      .from('pipeline_stages')
+      .select('name')
+      .eq('id', updatedTask.stage_id)
+      .maybeSingle()
+    if (stage?.name?.toLowerCase() === 'done') {
+      await supabaseAdmin().from('project_tasks').delete().eq('id', updatedTask.id)
+      return NextResponse.json({ ok: true, auto_deleted: true })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
 

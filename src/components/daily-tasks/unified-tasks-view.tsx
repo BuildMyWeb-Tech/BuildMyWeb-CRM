@@ -138,6 +138,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   // from the normal view; this toggle flips to showing ONLY those
   // scheduled-future tasks instead of everything else.
   const [showScheduledOnly, setShowScheduledOnly] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
   // viewMode prop overrides the internal toggle when set externally
   const effectiveShowScheduled = viewMode === "scheduled" || showScheduledOnly;
   const effectiveShowAll = viewMode === "all";
@@ -171,6 +172,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     setAssigneeFilter(new Set());
     setStageFilter(new Set());
     setDatePreset("all");
+    setOverdueOnly(false);
     ["project", "client", "priority", "assignee", "stage"].forEach((k) =>
       window.localStorage.setItem(`daily-tasks-${k}-filter`, "[]"),
     );
@@ -331,6 +333,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
       // which is the correct behavior given the chips shown, not a bug.
       if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
       if (!matchesDatePreset(t.dateValue, datePreset)) return false;
+      if (overdueOnly && !(t.dateValue && t.dateValue < todayStr)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -392,6 +395,11 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     setPriorityFilter(next);
     window.localStorage.setItem("daily-tasks-priority-filter", JSON.stringify([...next]));
   }
+  function quickSetProject(id: string) {
+    const next = id === "all" ? new Set<string>() : new Set([id]);
+    setProjectFilter(next);
+    window.localStorage.setItem("daily-tasks-project-filter", JSON.stringify([...next]));
+  }
 
   async function handleDeleteNow(task: UnifiedRow) {
     setDoneActionLoading(true);
@@ -452,6 +460,28 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
             ))}
           </SelectContent>
         </Select>
+        {projects.length > 0 && (
+          <Select value={projectFilter.size === 1 ? [...projectFilter][0] : "all"} onValueChange={(v) => v && quickSetProject(v)}>
+            <SelectTrigger size="sm">
+              <SelectValue className="truncate">
+                {(v: string) => (v === "all" ? "Project: All" : projects.find((p) => p.id === v)?.name ?? "Project")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value="all">Project: All</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button
+          variant="outline"
+          onClick={() => setOverdueOnly((v) => !v)}
+          className={overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : ""}
+        >
+          Overdue
+        </Button>
         <Button
           variant="outline"
           onClick={() => setShowScheduledOnly((v) => !v)}
