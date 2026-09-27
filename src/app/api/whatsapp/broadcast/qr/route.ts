@@ -274,10 +274,11 @@ export async function POST(request: Request) {
     );
 
     if (rpcError) {
-      const msg = (rpcError.message ?? '') + (rpcError.details ? ' | ' + rpcError.details : '') + (rpcError.hint ? ' | hint: ' + rpcError.hint : '')
-      console.error("[qr-broadcast] RPC error:", msg);
-      // Always surface the real DB error so the developer can act on it.
-      return NextResponse.json({ error: "RPC error: " + msg }, { status: 500 });
+      console.error("[qr-broadcast] RPC error:", rpcError.message, rpcError.details, rpcError.hint);
+      return NextResponse.json(
+        { error: "Failed to create broadcast: " + (rpcError.message ?? 'unknown error') },
+        { status: 500 },
+      );
     }
 
     const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;

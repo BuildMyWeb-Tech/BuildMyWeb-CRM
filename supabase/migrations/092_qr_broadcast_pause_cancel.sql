@@ -102,7 +102,7 @@ BEGIN
   -- Insert the broadcast header row.
   INSERT INTO broadcasts (
     account_id,
-    created_by,
+    user_id,
     name,
     provider,
     whatsapp_account_id,
