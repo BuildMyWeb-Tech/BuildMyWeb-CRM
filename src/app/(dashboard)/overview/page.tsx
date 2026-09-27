@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -413,7 +413,6 @@ function EnquirySidebar({ enquiries, members, todayStr }: {
 
   return (
     <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-1.5">
         {[
           { label: "Total",      count: total,      color: "text-blue-400" },
@@ -427,7 +426,6 @@ function EnquirySidebar({ enquiries, members, todayStr }: {
           </div>
         ))}
       </div>
-      {/* Overdue follow-ups */}
       {overdueEnq.length > 0 && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
           <div className="flex items-center gap-2 border-b border-red-500/20 px-3 py-2">
@@ -448,7 +446,6 @@ function EnquirySidebar({ enquiries, members, todayStr }: {
           </div>
         </div>
       )}
-      {/* Upcoming follow-ups */}
       <div className="rounded-xl border border-[#2a3045] overflow-hidden">
         <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2">
           <Clock className="h-3.5 w-3.5 text-orange-400" />
@@ -925,7 +922,6 @@ export default function OverviewPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
-      {/* Product Task Modal */}
       {ptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
@@ -989,7 +985,6 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* Enquiry Create Modal */}
       {enqModal !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
@@ -1023,16 +1018,13 @@ export default function OverviewPage() {
           </div>
         </div>
       )}
-      {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
 
-        {/* Header + global filter */}
         <div className="shrink-0 px-3 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">My Work</h1>
             <p className="mt-0.5 text-sm text-slate-400">Every task worth tracking — all in one place.</p>
           </div>
-          {/* Global people picker — always visible on all tabs */}
           <PeoplePicker
             members={members}
             value={globalUserId}
@@ -1043,7 +1035,6 @@ export default function OverviewPage() {
           />
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-auto p-3 sm:p-6">
 
           <div className="space-y-5">
@@ -1194,10 +1185,8 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Right sidebar */}
       <div className="hidden xl:flex w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-            {/* Stats row */}
             <div className="grid grid-cols-3 gap-1.5">
               {[
                 { label: "Tasks",     count: allProjectTasks.length,  color: "text-blue-400" },
@@ -1211,7 +1200,6 @@ export default function OverviewPage() {
               ))}
             </div>
 
-            {/* Overdue */}
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
               <div className="flex items-center gap-2 border-b border-red-500/20 px-3 py-2.5">
                 <AlertCircle className="h-4 w-4 text-red-400" />
@@ -1245,7 +1233,6 @@ export default function OverviewPage() {
               </div>
             </div>
 
-            {/* Upcoming Deadlines */}
             <div className="rounded-xl border border-[#2a3045] overflow-hidden">
               <div className="flex items-center gap-2 border-b border-[#2a3045] px-3 py-2.5">
                 <Clock className="h-4 w-4 text-orange-400" />
@@ -1287,7 +1274,6 @@ export default function OverviewPage() {
                 )}
               </div>
             </div>
-          </div>
         </div>
       </div>
     </div>
