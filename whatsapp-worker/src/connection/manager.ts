@@ -195,9 +195,31 @@ export class ConnectionManager {
         break
       }
 
-      case 'message_status':
+      case 'message_status': {
+        // Update the CRM messages table (existing Meta + QR single-message path).
         await this.inboxRepo.updateMessageStatus(event.messageId, event.status)
+
+        // Phase I-4: For QR broadcast messages, also update broadcast_recipients
+        // with delivered/read timestamps. The wamid→recipient mapping is stored
+        // on the outbox row (migration 093: sent_message_id).
+        if (event.status === 'delivered' || event.status === 'read') {
+          try {
+            const match = await this.repo.getBroadcastRecipientByWamid(event.messageId)
+            if (match) {
+              await this.repo.updateBroadcastRecipientDelivery(match.recipientId, event.status)
+              logger.info('broadcast_recipient_delivery_updated', {
+                recipientId: match.recipientId,
+                broadcastId: match.broadcastId,
+                event: event.status,
+              })
+            }
+          } catch (err) {
+            // Non-fatal: delivery receipt mapping failure must not disrupt the connection loop.
+            logger.warn('broadcast_delivery_map_failed', { wamid: event.messageId, error: String(err) })
+          }
+        }
         break
+      }
     }
   }
 

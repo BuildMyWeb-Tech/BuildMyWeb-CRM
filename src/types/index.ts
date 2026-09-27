@@ -992,7 +992,7 @@ export type BroadcastStatus =
   | 'paused'
   | 'cancelled';
 
-export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
+export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed' | 'cancelled';
 
 export interface Broadcast {
   id: string;
@@ -1057,6 +1057,12 @@ export interface BroadcastRecipient {
    * Added in migration 038; null on rows created before it.
    */
   template_params?: string[] | null;
+  // QR broadcast fields (migration 091/093)
+  phone_number?: string | null;
+  attempts?: number;
+  last_error?: string | null;
+  failed_at?: string | null;
+  updated_at?: string;
   created_at: string;
   contact?: Contact;
 }

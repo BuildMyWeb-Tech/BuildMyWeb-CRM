@@ -46,6 +46,10 @@ export type LogEvent =
   | 'signal_keys_persisted'
   | 'creds_update_persisted'
   | 'session_save_queued'
+  | 'outbox_job_skipped_broadcast_state'
+  | 'outbox_job_returned_paused_broadcast'
+  | 'broadcast_recipient_delivery_updated'
+  | 'broadcast_delivery_map_failed'
 
 function log(level: Level, event: LogEvent, data?: Record<string, unknown>) {
   if (LEVELS[level] < configLevel()) return

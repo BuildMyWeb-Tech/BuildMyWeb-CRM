@@ -228,6 +228,77 @@ export class WhatsAppRepository {
   }
 
   /**
+   * Store the wamid (WhatsApp message ID) on the outbox row after Baileys
+   * accepts the send. This enables delivery/read receipt events (which carry
+   * only the wamid) to be mapped back to the broadcast_recipient_id.
+   */
+  async storeOutboxSentMessageId(jobId: string, wamid: string): Promise<void> {
+    await this.supabase
+      .from('whatsapp_message_outbox')
+      .update({ sent_message_id: wamid, updated_at: new Date().toISOString() })
+      .eq('id', jobId)
+  }
+
+  /**
+   * Find the broadcast_recipient_id for a wamid by looking up the outbox row.
+   * Returns null if not a broadcast job or the wamid is not found.
+   */
+  async getBroadcastRecipientByWamid(
+    wamid: string,
+  ): Promise<{ recipientId: string; broadcastId: string } | null> {
+    const { data } = await this.supabase
+      .from('whatsapp_message_outbox')
+      .select('broadcast_recipient_id, broadcast_id')
+      .eq('sent_message_id', wamid)
+      .maybeSingle()
+    if (!data?.broadcast_recipient_id || !data?.broadcast_id) return null
+    return { recipientId: data.broadcast_recipient_id as string, broadcastId: data.broadcast_id as string }
+  }
+
+  /**
+   * Update broadcast_recipients with a delivery or read event from WhatsApp.
+   * The aggregate trigger (migration 005/093) handles count bumps automatically.
+   */
+  async updateBroadcastRecipientDelivery(
+    recipientId: string,
+    event: 'delivered' | 'read',
+  ): Promise<void> {
+    const now = new Date().toISOString()
+    const patch: Record<string, unknown> = {
+      status: event,
+      updated_at: now,
+    }
+    if (event === 'delivered') patch.delivered_at = now
+    if (event === 'read') {
+      patch.delivered_at = now  // read implies delivered
+      patch.read_at = now
+    }
+    await this.supabase
+      .from('broadcast_recipients')
+      .update(patch)
+      .eq('id', recipientId)
+      // Only advance status — never go backwards.
+      .in('status', event === 'read' ? ['pending', 'sent', 'delivered'] : ['pending', 'sent'])
+  }
+
+  /**
+   * Return a claimed outbox job back to 'pending' so the worker can retry
+   * it later. Used when a broadcast is found to be paused/cancelled AFTER
+   * the job was already claimed (set to 'processing').
+   */
+  async returnOutboxJobToPending(jobId: string): Promise<void> {
+    await this.supabase
+      .from('whatsapp_message_outbox')
+      .update({
+        status: 'pending',
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId)
+  }
+
+  /**
    * After a QR outbox job completes (sent or failed), mirror the result
    * onto the associated broadcast_recipients row so the detail page
    * and aggregate trigger stay in sync.

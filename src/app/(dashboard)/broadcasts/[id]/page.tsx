@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Broadcast, BroadcastRecipient, RecipientStatus } from '@/types';
@@ -123,6 +123,7 @@ const RECIPIENT_STATUSES: readonly RecipientStatus[] = [
   'read',
   'replied',
   'failed',
+  'cancelled',
 ];
 
 /**
@@ -197,9 +198,32 @@ export default function BroadcastDetailPage() {
     }
   }, [broadcastId, t]);
 
+  // Poll while broadcast is active (sending or paused — paused can resume at any time).
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const DETAIL_POLL_MS = 5_000;
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    const isActive = broadcast?.status === 'sending' || broadcast?.status === 'paused' || broadcast?.status === 'scheduled';
+    function stop() {
+      if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null; }
+    }
+    if (isActive && document.visibilityState === 'visible') {
+      if (!pollTimer.current) pollTimer.current = setInterval(fetchData, DETAIL_POLL_MS);
+    } else {
+      stop();
+    }
+    const onVisibility = () => {
+      if (!isActive) return;
+      if (document.visibilityState === 'hidden') { stop(); }
+      else { fetchData(); if (!pollTimer.current) pollTimer.current = setInterval(fetchData, DETAIL_POLL_MS); }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [broadcast?.status, fetchData]);
 
   const filteredRecipients = useMemo(
     () =>
@@ -414,10 +438,18 @@ export default function BroadcastDetailPage() {
               ) : (
                 <span>QR broadcast</span>
               )}
-              <span>-</span>
+              <span>·</span>
               <span>
                 {t('createdAt', { date: new Date(broadcast.created_at).toLocaleDateString() })}
               </span>
+              {broadcast.scheduled_at && broadcast.status === 'scheduled' && (
+                <>
+                  <span>·</span>
+                  <span className="text-blue-400">
+                    Scheduled: {new Date(broadcast.scheduled_at).toLocaleString()}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -733,6 +765,9 @@ export default function BroadcastDetailPage() {
                   <TableHead className="text-muted-foreground">{t('table.delivered')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.read')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.error')}</TableHead>
+                  {broadcast.provider === 'qr' && (
+                    <TableHead className="text-muted-foreground">Attempts</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -769,8 +804,13 @@ export default function BroadcastDetailPage() {
                           : '-'}
                       </TableCell>
                       <TableCell className="max-w-xs truncate text-xs text-red-400">
-                        {recipient.error_message ?? '-'}
+                        {recipient.last_error ?? recipient.error_message ?? '-'}
                       </TableCell>
+                      {broadcast.provider === 'qr' && (
+                        <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                          {recipient.attempts ?? 0}
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}

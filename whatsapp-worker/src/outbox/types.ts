@@ -21,6 +21,9 @@ export interface OutboxJob {
   // QR broadcast linkage (migration 091)
   broadcast_id: string | null
   broadcast_recipient_id: string | null
+  // WhatsApp message ID stored after Baileys accepts the send (migration 093).
+  // Used to map delivery/read receipts back to broadcast_recipient_id.
+  sent_message_id: string | null
   created_at: string
   updated_at: string
 }

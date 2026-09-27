@@ -44,6 +44,12 @@ function makeRepo() {
     markOutboxSentWithMessageUpdate: vi.fn(async () => {}),
     markOutboxFailed: vi.fn(async () => {}),
     recoverStaleOutboxJobs: vi.fn(async () => 0),
+    // QR broadcast methods (Phase I-J)
+    getBroadcastSendIntervalMs: vi.fn(async () => null),
+    isBroadcastEligibleToSend: vi.fn(async () => true),
+    updateBroadcastRecipientStatus: vi.fn(async () => {}),
+    storeOutboxSentMessageId: vi.fn(async () => {}),
+    returnOutboxJobToPending: vi.fn(async () => {}),
   }
 }
 
@@ -66,6 +72,9 @@ function makeJob(overrides: Partial<OutboxJob> = {}): OutboxJob {
     locked_by: 'test-worker',
     processed_at: null,
     error: null,
+    broadcast_id: null,
+    broadcast_recipient_id: null,
+    sent_message_id: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,

@@ -4,6 +4,31 @@ import type { OutboxJob } from './types.js'
 import { logger } from '../logger.js'
 import { config } from '../config.js'
 
+// ── Retry classification ────────────────────────────────────────────────────
+//
+// Transient errors are temporary (network, timeout, provider transient reject).
+// Permanent errors indicate the recipient or message is definitively invalid.
+//
+// Only transient errors are retried; permanent errors immediately exhaust attempts
+// so failed_count is updated without burning through max_attempts.
+//
+// NOTE: pacing/intervals are reliability/throughput controls, not evasion tools.
+// Do NOT add timing intended to bypass WhatsApp rate-limiting or anti-spam.
+
+const PERMANENT_ERROR_PATTERNS = [
+  /invalid.*number/i,
+  /not.*registered/i,
+  /number.*does not exist/i,
+  /unsupported.*media/i,
+  /media.*too large/i,
+  /invalid.*jid/i,
+  /blocked/i,
+]
+
+export function isPermanentFailure(error: string): boolean {
+  return PERMANENT_ERROR_PATTERNS.some((p) => p.test(error))
+}
+
 export class OutboxConsumer {
   private timer: ReturnType<typeof setInterval> | null = null
   private running = false
@@ -35,7 +60,6 @@ export class OutboxConsumer {
     if (this.provider.getConnectionState() !== 'CONNECTED') return
     this.running = true
     try {
-      // Recover stale locks every ~5 minutes (every 150 polls at 2s interval).
       this.pollCount++
       if (this.pollCount % 150 === 1) {
         await this.repo.recoverStaleOutboxJobs().catch(() => {})
@@ -50,9 +74,8 @@ export class OutboxConsumer {
         const job = jobs[i]
         await this.process(job)
 
-        // Phase F — configurable inter-message delay.
-        // For broadcast jobs: use the broadcast's send_interval_ms.
-        // For normal single-message jobs or the last job in a batch: no delay.
+        // Phase F: configurable inter-message delay for broadcast jobs.
+        // Exists for queue stability and responsible throughput, NOT evasion.
         if (i < jobs.length - 1) {
           const delayMs = await this.resolveDelay(job)
           if (delayMs > 0) {
@@ -65,14 +88,8 @@ export class OutboxConsumer {
     }
   }
 
-  /**
-   * Determine the inter-message delay to apply after this job.
-   * Broadcast jobs use their broadcast's send_interval_ms.
-   * Single-message (non-broadcast) jobs use no additional delay.
-   */
   private async resolveDelay(job: OutboxJob): Promise<number> {
     if (job.broadcast_id) {
-      // Try to read the per-broadcast interval; fall back to the global default.
       const stored = await this.repo.getBroadcastSendIntervalMs(job.broadcast_id)
       return stored ?? config.outbox.broadcastSendIntervalMs
     }
@@ -80,17 +97,25 @@ export class OutboxConsumer {
   }
 
   private async process(job: OutboxJob): Promise<void> {
-    logger.info('outbox_job_claimed', { jobId: job.id, type: job.message_type, attempt: job.attempts })
+    logger.info('outbox_job_claimed', {
+      jobId: job.id,
+      type: job.message_type,
+      attempt: job.attempts,
+      broadcastId: job.broadcast_id ?? undefined,
+      broadcastRecipientId: job.broadcast_recipient_id ?? undefined,
+    })
 
-    // Phase H — broadcast state check.
-    // Before sending, verify the broadcast is still eligible (not paused/cancelled).
+    // Phase H: check broadcast eligibility before sending.
+    // If the broadcast was paused/cancelled AFTER this job was claimed,
+    // return the job to 'pending' rather than leaving it stuck in 'processing'.
     if (job.broadcast_id) {
       const eligible = await this.repo.isBroadcastEligibleToSend(job.broadcast_id)
       if (!eligible) {
-        logger.info('outbox_job_skipped_broadcast_state', { jobId: job.id, broadcastId: job.broadcast_id })
-        // Return the job to pending so it can be retried if the broadcast is resumed.
-        // For cancelled broadcasts the job will stay pending; the cancel API
-        // sets pending outbox jobs to 'cancelled' directly.
+        logger.info('outbox_job_returned_paused_broadcast', {
+          jobId: job.id,
+          broadcastId: job.broadcast_id,
+        })
+        await this.repo.returnOutboxJobToPending(job.id)
         return
       }
     }
@@ -115,34 +140,63 @@ export class OutboxConsumer {
 
       if (result.status === 'sent') {
         await this.repo.markOutboxSentWithMessageUpdate(job.id, job.message_id, result.messageId)
-        // Mirror success onto broadcast_recipients so the detail page shows 'sent'.
+
+        // Store the wamid on the outbox row so delivery/read receipt events
+        // (which only carry the wamid) can be mapped back to broadcast_recipient_id.
+        if (job.broadcast_id && result.messageId) {
+          await this.repo.storeOutboxSentMessageId(job.id, result.messageId)
+        }
+
+        // Mirror success onto broadcast_recipients.
         if (job.broadcast_recipient_id) {
           await this.repo.updateBroadcastRecipientStatus(job.broadcast_recipient_id, 'sent')
         }
-        logger.info('outbox_job_completed', { jobId: job.id, messageId: result.messageId })
+
+        logger.info('outbox_job_completed', {
+          jobId: job.id,
+          messageId: result.messageId,
+          broadcastId: job.broadcast_id ?? undefined,
+          recipientId: job.broadcast_recipient_id ?? undefined,
+        })
       } else {
-        const exhausted = job.attempts >= job.max_attempts
-        await this.repo.markOutboxFailed(job.id, result.error ?? 'Unknown error', exhausted)
+        const errorMsg = result.error ?? 'Unknown error'
+        // Permanent failures exhaust attempts immediately — no point retrying.
+        const exhausted = job.attempts >= job.max_attempts || isPermanentFailure(errorMsg)
+        await this.repo.markOutboxFailed(job.id, errorMsg, exhausted)
         if (job.broadcast_recipient_id && exhausted) {
           await this.repo.updateBroadcastRecipientStatus(
             job.broadcast_recipient_id,
             'failed',
-            { error: result.error ?? 'Unknown error' },
+            { error: errorMsg },
           )
         }
-        logger.warn('outbox_job_failed', { jobId: job.id, error: result.error, exhausted })
+        logger.warn('outbox_job_failed', {
+          jobId: job.id,
+          error: errorMsg,
+          exhausted,
+          permanent: isPermanentFailure(errorMsg),
+          broadcastId: job.broadcast_id ?? undefined,
+          recipientId: job.broadcast_recipient_id ?? undefined,
+        })
       }
     } catch (err) {
-      const exhausted = job.attempts >= job.max_attempts
-      await this.repo.markOutboxFailed(job.id, String(err), exhausted)
+      const errorMsg = String(err)
+      const exhausted = job.attempts >= job.max_attempts || isPermanentFailure(errorMsg)
+      await this.repo.markOutboxFailed(job.id, errorMsg, exhausted)
       if (job.broadcast_recipient_id && exhausted) {
         await this.repo.updateBroadcastRecipientStatus(
           job.broadcast_recipient_id,
           'failed',
-          { error: String(err) },
+          { error: errorMsg },
         )
       }
-      logger.error('outbox_job_failed', { jobId: job.id, error: String(err), exhausted })
+      logger.error('outbox_job_failed', {
+        jobId: job.id,
+        error: errorMsg,
+        exhausted,
+        broadcastId: job.broadcast_id ?? undefined,
+        recipientId: job.broadcast_recipient_id ?? undefined,
+      })
     }
   }
 }
