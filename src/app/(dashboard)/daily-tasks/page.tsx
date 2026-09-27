@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
-  Folder,
+  Folder, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -45,6 +45,7 @@ export default function DailyTasksPage() {
   const { accountId } = useAuth();
   const [stats, setStats] = useState<TaskStats>({ total: 0, inProgress: 0, pending: 0, overdue: 0 });
   const [projects, setProjects] = useState<ProjectWithTaskCount[]>([]);
+  const [clients, setClients] = useState<{ id: string; name: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("current");
 
@@ -88,6 +89,13 @@ export default function DailyTasksPage() {
       if (projectsData) {
         setProjects(projectsData.map((p) => ({ ...p, task_count: projectCountMap[p.id] ?? 0 })));
       }
+
+      const { data: clientsData } = await supabase
+        .from("clients")
+        .select("id, name, status")
+        .eq("account_id", accountId)
+        .order("name");
+      if (clientsData) setClients(clientsData as { id: string; name: string; status: string }[]);
     } finally {
       setLoading(false);
     }
@@ -203,6 +211,36 @@ export default function DailyTasksPage() {
       {/* ── Right sidebar ── */}
       <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+          {/* Clients section */}
+          {clients.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="h-4 w-4 text-purple-400" />
+                <h2 className="text-sm font-semibold text-white">Clients</h2>
+              </div>
+              <div className="space-y-1">
+                {(["active","inactive","completed","archived"] as const).map((status) => {
+                  const group = clients.filter((c) => c.status === status);
+                  if (group.length === 0) return null;
+                  return (
+                    <div key={status} className="mb-2">
+                      <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wider text-slate-600 capitalize">{status}</p>
+                      {group.map((c) => (
+                        <Link key={c.id} href={"/clients/" + c.id}
+                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[#0f1117] transition-colors group">
+                          <span className="h-5 w-5 shrink-0 rounded bg-purple-500/20 flex items-center justify-center text-[9px] font-bold text-purple-300">
+                            {c.name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">{c.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Projects section */}
           <div>

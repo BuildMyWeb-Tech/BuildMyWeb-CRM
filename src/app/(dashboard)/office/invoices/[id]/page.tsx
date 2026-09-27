@@ -262,6 +262,7 @@ export default function InvoiceDetailPage() {
   const isOverdue = invoice.due_date && invoice.due_date < today && balance > 0 && !["paid","cancelled","void"].includes(invoice.status);
 
   function handlePrint() {
+    if (!invoice) return;
     const sortedItems = [...items].sort((a, b) => a.position - b.position);
     const currency = invoice.currency || "INR";
     const f = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(n ?? 0);
