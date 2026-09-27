@@ -786,7 +786,6 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
           isAdmin={canManageMembers}
           stages={stages}
           members={members}
-          clients={clients}
           projects={projects}
           task={editingTask}
           defaultStageId={null}

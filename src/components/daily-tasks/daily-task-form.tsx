@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { DailyTask, PipelineStage, AccountMember, Client, Project, TaskPriority } from "@/types";
+import type { DailyTask, PipelineStage, AccountMember, Project, TaskPriority } from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CustomFieldsSection } from "@/components/custom-fields/custom-fields-section";
 import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { resolveCommonStatusId } from "@/lib/kanban/resolve-common-status";
 import { toast } from "sonner";
@@ -40,7 +38,6 @@ interface DailyTaskFormProps {
   isAdmin: boolean;
   stages: PipelineStage[];
   members: AccountMember[];
-  clients: Client[];
   projects: Project[];
   task: DailyTask | null;
   defaultStageId: string | null;
@@ -58,7 +55,6 @@ export function DailyTaskForm({
   isAdmin,
   stages,
   members,
-  clients,
   projects,
   task,
   defaultStageId,
@@ -69,9 +65,7 @@ export function DailyTaskForm({
   const isEditing = !!task;
 
   const [title, setTitle] = useState("");
-  const [brief, setBrief] = useState("");
   const [stageId, setStageId] = useState("");
-  const [clientId, setClientId] = useState("__none__");
   const [projectId, setProjectId] = useState("__none__");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("normal");
@@ -83,9 +77,7 @@ export function DailyTaskForm({
   useEffect(() => {
     if (!open) return;
     setTitle(task?.title ?? "");
-    setBrief(task?.brief ?? "");
     setStageId(task?.stage_id ?? defaultStageId ?? stages[0]?.id ?? "");
-    setClientId(task?.client_id ?? "__none__");
     setProjectId(task?.project_id ?? "__none__");
     setAssigneeIds(task?.assignee_user_ids?.length ? task.assignee_user_ids : task?.assignee_user_id ? [task.assignee_user_id] : []);
     setPriority(task?.priority ?? "normal");
@@ -182,9 +174,8 @@ export function DailyTaskForm({
 
       const payload = {
         title: trimmedTitle,
-        brief: brief.trim() || null,
         stage_id: stageId,
-        client_id: clientId === "__none__" ? null : clientId,
+        client_id: null,
         project_id: projectId === "__none__" ? null : projectId,
         assignee_user_id: assigneeIds[0] ?? null,
         assignee_user_ids: assigneeIds,
@@ -252,44 +243,21 @@ export function DailyTaskForm({
             <Input value={title} onChange={(e) => setTitle(e.target.value)} className="border-border bg-muted text-foreground" autoFocus />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Client (optional)</Label>
-              <Select value={clientId} onValueChange={(v) => setClientId(v ?? "__none__")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__none__" ? "None" : clients.find((c) => c.id === v)?.name ?? "None")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Project (optional)</Label>
-              <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "__none__")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue className="truncate">
-                    {(v: string) => (v === "__none__" ? "None" : projects.find((p) => p.id === v)?.name ?? "None")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           <div className="grid gap-2">
-            <Label className="text-muted-foreground">Instructions / Brief</Label>
-            <Textarea value={brief} onChange={(e) => setBrief(e.target.value)} className="border-border bg-muted text-foreground" rows={4} />
+            <Label className="text-muted-foreground">Project (optional)</Label>
+            <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "__none__")}>
+              <SelectTrigger className="w-full">
+                <SelectValue className="truncate">
+                  {(v: string) => (v === "__none__" ? "None" : projects.find((p) => p.id === v)?.name ?? "None")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -340,14 +308,6 @@ export function DailyTaskForm({
             
           </div>
 
-          <CustomFieldsSection
-            accountId={accountId}
-            currentUserId={currentUserId}
-            entityType="daily_task"
-            entityId={task?.id ?? null}
-            isAdmin={isAdmin}
-            canEdit={isEditing}
-          />
         </div>
 
         <DialogFooter className="border-border bg-popover/50">

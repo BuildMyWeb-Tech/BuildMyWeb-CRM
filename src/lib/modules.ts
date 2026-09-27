@@ -22,6 +22,7 @@ import {
   Bot,
   Building2,
   Clock,
+  FileText,
   Folder,
   GitBranch,
   IndianRupee,
@@ -79,7 +80,7 @@ export interface CrmModule {
 // Global links that sit above every module (not module-specific:
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
-  { href: "/overview", labelKey: "dashboard", icon: Rows3, minRole: "viewer" },
+  { href: "/overview", labelKey: "myWork", icon: Rows3, minRole: "viewer" },
   { href: "/business-dashboard", labelKey: "businessDashboard", icon: LayoutDashboard, minRole: "viewer" },
   { href: "/my-pages", labelKey: "myPages", icon: LayoutGrid, minRole: "viewer" },
 ];
@@ -160,6 +161,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/activity-log", labelKey: "activityLog", icon: Clock, minRole: "admin", pageKey: "activity_log" },
       { href: "/whatsapp-connect", labelKey: "whatsappConnect", icon: Zap, minRole: "admin" },
       { href: "/expenses", labelKey: "expenses", icon: Receipt, minRole: "admin" },
+      { href: "/office/invoices", labelKey: "invoices", icon: FileText, minRole: "admin" },
     ],
   },
 ];

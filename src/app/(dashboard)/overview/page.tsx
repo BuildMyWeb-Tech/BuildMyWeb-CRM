@@ -3,10 +3,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Folder, Search, ClipboardList,
-  ExternalLink, ListChecks, Package,
+  ExternalLink, Package,
   ChevronUp, ChevronDown, ChevronsUpDown,
   UserCheck, XCircle, Clock,
-  Users, ChevronDown as ChevronDownIcon, AlertCircle, Briefcase,
+  Users, ChevronDown as ChevronDownIcon, AlertCircle,
   Plus, Loader2, Zap, ArrowRight, CheckCircle2,
   Eye, EyeOff, Pencil, Trash2, X as XIcon,
   CalendarClock, MessageCircle,
@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
-import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
 import Link from "next/link";
 import type { Project, AccountMember } from "@/types";
 import { toast } from "sonner";
@@ -93,17 +92,10 @@ interface MyWorkFollowUp {
   priority: string | null;
 }
 
-type TabKey = "my-work" | "project-tasks" | "enquiry-tasks" | "product-tasks";
 type SortDir = "asc" | "desc";
 type EnqSortField = "title" | "status" | "priority" | "next_follow_up_at";
 type PtSortField = "title" | "priority" | "due_date";
 
-const TABS: { key: TabKey; label: string; icon: typeof ListChecks }[] = [
-  { key: "my-work",        label: "My Work",          icon: Briefcase },
-  { key: "project-tasks",  label: "Project Tasks",    icon: ListChecks },
-  { key: "enquiry-tasks",  label: "Enquiry Tasks",    icon: ClipboardList },
-  { key: "product-tasks",  label: "Product Tasks",    icon: Package },
-];
 
 const ENQUIRY_STATUS_STYLE: Record<string, string> = {
   new: "bg-blue-500/20 text-blue-400",
@@ -548,14 +540,6 @@ function ProductTasksSidebar({ productTasks, allProducts }: { productTasks: Prod
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function OverviewPage() {
   const { accountId, user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    try { return (localStorage.getItem("ov-active-tab") as TabKey) ?? "my-work"; } catch { return "my-work"; }
-  });
-  function switchTab(t: TabKey) {
-    setActiveTab(t);
-    try { localStorage.setItem("ov-active-tab", t); } catch {}
-  }
-
   // Global people filter — shown on ALL tabs; each tab can override with its own sub-filter
   const [globalUserId, setGlobalUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<AccountMember[]>([]);
@@ -731,14 +715,8 @@ export default function OverviewPage() {
   }, [accountId]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
-  useEffect(() => {
-    if (activeTab === "my-work") loadMyWork();
-    if (activeTab === "enquiry-tasks") loadEnquiries();
-    if (activeTab === "product-tasks") { loadProductTasks(); loadPtSupporting(); }
-  }, [activeTab, loadMyWork, loadEnquiries, loadProductTasks, loadPtSupporting]);
-  useEffect(() => { if (activeTab === "my-work") loadMyWork(); }, [myWorkUserId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (activeTab === "enquiry-tasks") loadEnquiries(); }, [enqEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (activeTab === "product-tasks") loadProductTasks(); }, [prodEffectiveUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadMyWork(); }, [loadMyWork]);
+  useEffect(() => { loadMyWork(); }, [myWorkUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -1051,7 +1029,7 @@ export default function OverviewPage() {
         {/* Header + global filter */}
         <div className="shrink-0 px-3 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <h1 className="text-2xl font-bold text-white">My Work</h1>
             <p className="mt-0.5 text-sm text-slate-400">Every task worth tracking — all in one place.</p>
           </div>
           {/* Global people picker — always visible on all tabs */}
@@ -1065,32 +1043,10 @@ export default function OverviewPage() {
           />
         </div>
 
-        {/* Tabs */}
-        <div className="shrink-0 border-b border-[#2a3045] px-3 sm:px-6">
-          <div className="flex gap-1 overflow-x-auto scrollbar-none">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button key={tab.key} type="button" onClick={() => switchTab(tab.key)}
-                  className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeTab === tab.key
-                      ? "border border-b-0 border-[#2a3045] bg-[#1a1f2e] text-white"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}>
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Tab content */}
+        {/* Content */}
         <div className="flex-1 overflow-auto p-3 sm:p-6">
 
-          {/* My Work */}
-          {activeTab === "my-work" && (
-            <div className="space-y-5">
+          <div className="space-y-5">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400">Showing work for:</span>
                 <span className="rounded-full bg-blue-500/20 px-2.5 py-0.5 text-sm font-medium text-blue-300">{myWorkUserName}</span>
@@ -1233,12 +1189,9 @@ export default function OverviewPage() {
                 </>
               )}
             </div>
-          )}
 
-          {activeTab === "project-tasks" && <UnifiedTasksView />}
-
-          {/* Enquiry Tasks */}
-          {activeTab === "enquiry-tasks" && (
+          {/* removed: enquiry-tasks tab */}
+          {false && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <input type="text" placeholder="Search enquiries..." value={enquirySearch}
@@ -1389,8 +1342,8 @@ export default function OverviewPage() {
             </div>
           )}
 
-          {/* Product Tasks */}
-          {activeTab === "product-tasks" && (
+          {/* removed: product-tasks tab */}
+          {false && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <input type="text" placeholder="Search product tasks..." value={ptSearch}
@@ -1498,10 +1451,9 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Right sidebar — content varies per tab */}
+      {/* Right sidebar */}
       <div className="hidden xl:flex w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
-        {activeTab === "my-work" ? (
-          <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+        <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-4" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             {/* Stats row */}
             <div className="grid grid-cols-3 gap-1.5">
               {[
@@ -1593,18 +1545,7 @@ export default function OverviewPage() {
               </div>
             </div>
           </div>
-        ) : activeTab === "enquiry-tasks" ? (
-          <EnquirySidebar enquiries={enquiries} members={members} todayStr={todayStr} />
-        ) : activeTab === "product-tasks" ? (
-          <ProductTasksSidebar productTasks={productTasks} allProducts={ptProducts} />
-        ) : (
-          <ProjectsSidebar
-            projects={projects}
-            loading={loadingProjects}
-            search={projectSearch}
-            setSearch={setProjectSearch}
-          />
-        )}
+        </div>
       </div>
     </div>
   );
