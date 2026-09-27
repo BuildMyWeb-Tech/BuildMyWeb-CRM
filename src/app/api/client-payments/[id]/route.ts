@@ -69,6 +69,7 @@ export async function PATCH(
   if ('transaction_id' in body) update.transaction_id = body.transaction_id ?? null
   if (typeof body.status === 'string' && PAYMENT_STATUSES.includes(body.status)) update.status = body.status
   if ('notes' in body) update.notes = body.notes ?? null
+  if ('installments' in body) update.installments = Array.isArray(body.installments) ? body.installments : []
 
   if (Object.keys(update).length > 0) {
     const { error: updateError } = await admin
@@ -83,12 +84,12 @@ export async function PATCH(
     const rawAllocations: AllocationInput[] = body.allocations
     const allocations = rawAllocations
       .map((a) => ({
-        recipient_type: a.recipient_type === 'company' ? 'company' : 'team_member',
+        recipient_type: a.recipient_type === 'company' ? 'company' : a.recipient_type === 'outsource' ? 'outsource' : 'team_member',
         recipient_user_id: typeof a.recipient_user_id === 'string' ? a.recipient_user_id : null,
         role_label: typeof a.role_label === 'string' ? a.role_label : null,
         amount: typeof a.amount === 'number' ? a.amount : NaN,
       }))
-      .filter((a) => Number.isFinite(a.amount) && (a.recipient_type === 'company' || a.recipient_user_id))
+      .filter((a) => Number.isFinite(a.amount) && (a.recipient_type === 'company' || a.recipient_type === 'outsource' || a.recipient_user_id))
 
     const { error: deleteError } = await admin.from('payment_allocations').delete().eq('payment_id', id)
     if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })

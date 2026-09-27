@@ -891,7 +891,7 @@ export interface DailyTask {
 // Account Management — client payments + revenue-split allocations
 // ============================================================
 
-export type PaymentRecipientType = "company" | "team_member";
+export type PaymentRecipientType = "company" | "team_member" | "outsource";
 
 export interface PaymentAllocation {
   id: string;
@@ -921,6 +921,7 @@ export interface ClientPayment {
   transaction_id: string | null;
   status: PaymentStatus;
   notes: string | null;
+  installments: Array<{ date: string; amount: number; note?: string }>;
   created_by: string | null;
   created_at: string;
   updated_at: string;

@@ -44,6 +44,8 @@ const PAGE_REGISTRY: Record<string, React.ComponentType> = {
   "/activity-log": dynamic(() => import("@/app/(dashboard)/activity-log/page")),
   "/whatsapp-connect": dynamic(() => import("@/app/(dashboard)/whatsapp-connect/page")),
   "/expenses": dynamic(() => import("@/app/(dashboard)/expenses/page")),
+  "/routine": dynamic(() => import("@/app/(dashboard)/routine/page")),
+  "/notifications": dynamic(() => import("@/app/(dashboard)/notifications/page")),
   "/lead-finder": dynamic(() => import("@/app/(dashboard)/lead-finder/page")),
   "/kanban": dynamic(() => import("@/app/(dashboard)/kanban/page")),
 };
@@ -56,6 +58,10 @@ const ALL_PAGES = [
   ...CRM_MODULES.flatMap((mod) =>
     mod.items.map((i) => ({ href: i.href, label: i.labelKey, group: mod.labelKey })),
   ),
+  { href: "/routine", label: "routine", group: "Personal" },
+  { href: "/notifications", label: "notifications", group: "Personal" },
+  { href: "/daily-tasks", label: "dailyTasksTodo", group: "Personal" },
+  { href: "/inbox", label: "messages", group: "Personal" },
 ].filter((p) => p.href !== "/my-pages" && p.href in PAGE_REGISTRY);
 
 const LABEL_MAP: Record<string, string> = {
@@ -91,6 +97,10 @@ const LABEL_MAP: Record<string, string> = {
   activityLog: "Activity Log",
   whatsappConnect: "WhatsApp Connect",
   expenses: "Expenses",
+  routine: "Routine",
+  notifications: "Notifications",
+  dailyTasksTodo: "To Do",
+  messages: "Messages",
   leadFinder: "Lead Finder",
   kanban: "Kanban",
   office: "Office",
@@ -106,6 +116,7 @@ function label(key: string) {
 interface TabConfig { id: string; href: string; title: string }
 
 function storageKey(userId: string) { return `my-pages-tabs-${userId}`; }
+function activeKey(userId: string) { return `my-pages-active-${userId}`; }
 
 function loadTabs(userId: string): TabConfig[] {
   try {
@@ -116,6 +127,14 @@ function loadTabs(userId: string): TabConfig[] {
 
 function saveTabs(userId: string, tabs: TabConfig[]) {
   try { localStorage.setItem(storageKey(userId), JSON.stringify(tabs)); } catch {}
+}
+
+function saveActiveTab(userId: string, tabId: string) {
+  try { localStorage.setItem(activeKey(userId), tabId); } catch {}
+}
+
+function loadActiveTab(userId: string): string | null {
+  try { return localStorage.getItem(activeKey(userId)); } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,20 +148,41 @@ export default function MyPagesPage() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState("");
+  const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
 
   useEffect(() => {
     if (!userId) return;
     const saved = loadTabs(userId);
     setTabs(saved);
-    if (saved.length > 0) setActiveTab(saved[0].id);
+    const lastActive = loadActiveTab(userId);
+    const initial = (lastActive && saved.find((t) => t.id === lastActive)) ? lastActive : (saved[0]?.id ?? null);
+    setActiveTab(initial);
   }, [userId]);
+
+  function switchTab(id: string) {
+    setActiveTab(id);
+    if (userId) saveActiveTab(userId, id);
+  }
+
+  function handleDragStart(idx: number) { setDragSrcIdx(idx); }
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    if (dragSrcIdx === null || dragSrcIdx === idx) return;
+    const next = [...tabs];
+    const [moved] = next.splice(dragSrcIdx, 1);
+    next.splice(idx, 0, moved);
+    setTabs(next);
+    setDragSrcIdx(idx);
+    saveTabs(userId, next);
+  }
+  function handleDragEnd() { setDragSrcIdx(null); }
 
   function addPage(page: { href: string; label: string }) {
     const existing = tabs.find((t) => t.href === page.href);
-    if (existing) { setActiveTab(existing.id); setShowPicker(false); return; }
+    if (existing) { switchTab(existing.id); setShowPicker(false); return; }
     const id = `tab-${Date.now()}`;
     const next: TabConfig[] = [...tabs, { id, href: page.href, title: label(page.label) }];
-    setTabs(next); setActiveTab(id);
+    setTabs(next); switchTab(id);
     saveTabs(userId, next);
     setShowPicker(false); setSearch("");
   }
@@ -151,7 +191,11 @@ export default function MyPagesPage() {
     e.stopPropagation();
     const next = tabs.filter((t) => t.id !== id);
     setTabs(next); saveTabs(userId, next);
-    if (activeTab === id) setActiveTab(next[0]?.id ?? null);
+    if (activeTab === id) {
+      const newActive = next[0]?.id ?? null;
+      setActiveTab(newActive);
+      if (newActive && userId) saveActiveTab(userId, newActive);
+    }
   }
 
   const filteredPages = ALL_PAGES.filter((p) => {
@@ -211,16 +255,21 @@ export default function MyPagesPage() {
         <>
           {/* ── Tab bar ── */}
           <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-muted/30 px-4 scrollbar-none">
-            {tabs.map((tab) => (
+            {tabs.map((tab, idx) => (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragEnd={handleDragEnd}
+                onClick={() => switchTab(tab.id)}
                 className={cn(
-                  "group flex shrink-0 items-center gap-2 rounded-t-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "group flex shrink-0 cursor-grab items-center gap-2 rounded-t-lg px-3 py-2.5 text-sm font-medium transition-colors active:cursor-grabbing",
                   activeTab === tab.id
                     ? "border-b-2 border-primary bg-background text-foreground -mb-px"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  dragSrcIdx === idx && "opacity-50",
                 )}
               >
                 <span className="max-w-40 truncate">{tab.title}</span>

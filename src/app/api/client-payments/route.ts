@@ -61,12 +61,12 @@ export async function POST(request: Request) {
   const rawAllocations: AllocationInput[] = Array.isArray(body.allocations) ? body.allocations : []
   const allocations = rawAllocations
     .map((a) => ({
-      recipient_type: a.recipient_type === 'company' ? 'company' : 'team_member',
+      recipient_type: a.recipient_type === 'company' ? 'company' : a.recipient_type === 'outsource' ? 'outsource' : 'team_member',
       recipient_user_id: typeof a.recipient_user_id === 'string' ? a.recipient_user_id : null,
       role_label: typeof a.role_label === 'string' ? a.role_label : null,
       amount: typeof a.amount === 'number' ? a.amount : NaN,
     }))
-    .filter((a) => Number.isFinite(a.amount) && (a.recipient_type === 'company' || a.recipient_user_id))
+    .filter((a) => Number.isFinite(a.amount) && (a.recipient_type === 'company' || a.recipient_type === 'outsource' || a.recipient_user_id))
 
   const { data: payment, error: paymentError } = await ctx.supabase
     .from('client_payments')
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
       transaction_id: typeof body.transaction_id === 'string' ? body.transaction_id : null,
       status: typeof body.status === 'string' && PAYMENT_STATUSES.includes(body.status) ? body.status : 'paid',
       notes: typeof body.notes === 'string' ? body.notes : null,
+      installments: Array.isArray(body.installments) ? body.installments : [],
       created_by: ctx.userId,
     })
     .select('id')

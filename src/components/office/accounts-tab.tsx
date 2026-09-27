@@ -12,7 +12,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Loader2, IndianRupee, Users2, TrendingUp, Clock } from "lucide-react";
+import { Plus, Trash2, Loader2, IndianRupee, Users2, TrendingUp, Clock, Receipt } from "lucide-react";
+import { ExpensesTab } from "@/components/office/expenses-tab";
 import { toast } from "sonner";
 
 // Account Management — client payments + how each one splits across
@@ -38,17 +39,18 @@ const PAYMENT_STATUS_STYLE: Record<PaymentStatus, string> = {
 };
 const PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Card', 'Online', 'Other'];
 
-type AccountsInnerTab = 'overview' | 'payments' | 'expected';
+type AccountsInnerTab = 'overview' | 'payments' | 'expected' | 'expenses';
 
 interface AllocationDraft {
-  recipient_type: "company" | "team_member";
+  recipient_type: "company" | "team_member" | "outsource";
   recipient_user_id: string;
   role_label: string;
+  outsource_name: string;
   amount: string;
 }
 
 function emptyAllocation(): AllocationDraft {
-  return { recipient_type: "team_member", recipient_user_id: "", role_label: "", amount: "" };
+  return { recipient_type: "team_member", recipient_user_id: "", role_label: "", outsource_name: "", amount: "" };
 }
 
 function formatCurrency(n: number) {
@@ -85,6 +87,7 @@ export function AccountsTab() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("paid");
   const [notes, setNotes] = useState("");
   const [allocations, setAllocations] = useState<AllocationDraft[]>([emptyAllocation()]);
+  const [installments, setInstallments] = useState<Array<{ date: string; amount: string; note: string }>>([]);
 
   const loadPayments = useCallback(() => {
     setLoading(true);
@@ -124,6 +127,7 @@ export function AccountsTab() {
     setPaymentStatus("paid");
     setNotes("");
     setAllocations([emptyAllocation()]);
+    setInstallments([]);
   }
 
   function openNewPayment(isExpected = false) {
@@ -155,9 +159,13 @@ export function AccountsTab() {
             recipient_type: a.recipient_type,
             recipient_user_id: a.recipient_user_id ?? "",
             role_label: a.role_label ?? "",
+            outsource_name: a.recipient_type === "outsource" ? (a.role_label ?? "") : "",
             amount: String(a.amount),
           }))
         : [emptyAllocation()],
+    );
+    setInstallments(
+      (p.installments ?? []).map((inst) => ({ date: inst.date, amount: String(inst.amount), note: inst.note ?? "" }))
     );
     setDialogOpen(true);
   }
@@ -195,9 +203,14 @@ export function AccountsTab() {
               .map((a) => ({
                 recipient_type: a.recipient_type,
                 recipient_user_id: a.recipient_type === "team_member" ? a.recipient_user_id : null,
-                role_label: a.role_label.trim() || null,
+                role_label: a.recipient_type === "outsource"
+                  ? (a.outsource_name.trim() || null)
+                  : (a.role_label.trim() || null),
                 amount: Number(a.amount),
               })),
+            installments: installments
+              .filter((inst) => inst.date && inst.amount)
+              .map((inst) => ({ date: inst.date, amount: Number(inst.amount), note: inst.note.trim() || undefined })),
           }),
         },
       );
@@ -259,7 +272,7 @@ export function AccountsTab() {
     <div className="mt-4">
       {/* Inner tab bar */}
       <div className="flex items-center gap-0 border-b border-border">
-        {(['overview', 'payments', 'expected'] as AccountsInnerTab[]).map((t) => (
+        {(['overview', 'payments', 'expected', 'expenses'] as AccountsInnerTab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -474,9 +487,12 @@ export function AccountsTab() {
         </div>
       )}
 
+      {/* ── Expenses tab ────────────────────────────────────────────── */}
+      {innerTab === 'expenses' && <ExpensesTab />}
+
       {/* ── Payment dialog ───────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl bg-popover border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">{editingId ? "Edit payment" : "New payment"}</DialogTitle>
           </DialogHeader>
@@ -585,14 +601,15 @@ export function AccountsTab() {
                   <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2">
                     <Select
                       value={a.recipient_type}
-                      onValueChange={(v) => v && updateAllocation(i, { recipient_type: v as "company" | "team_member", recipient_user_id: "" })}
+                      onValueChange={(v) => v && updateAllocation(i, { recipient_type: v as "company" | "team_member" | "outsource", recipient_user_id: "", outsource_name: "" })}
                     >
                       <SelectTrigger className="w-32 shrink-0">
-                        <SelectValue className="capitalize">{(v: string) => (v === "team_member" ? "Team" : "Company")}</SelectValue>
+                        <SelectValue className="capitalize">{(v: string) => v === "team_member" ? "Team" : v === "outsource" ? "Outsource" : "Company"}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="team_member">Team member</SelectItem>
                         <SelectItem value="company">Company</SelectItem>
+                        <SelectItem value="outsource">Outsource</SelectItem>
                       </SelectContent>
                     </Select>
                     {a.recipient_type === "team_member" && (
@@ -605,12 +622,22 @@ export function AccountsTab() {
                         </SelectContent>
                       </Select>
                     )}
+                    {a.recipient_type === "outsource" && (
+                      <Input
+                        value={a.outsource_name}
+                        onChange={(e) => updateAllocation(i, { outsource_name: e.target.value })}
+                        placeholder="Who have to pay"
+                        className="h-8 w-36 shrink-0 border-transparent bg-transparent text-sm text-foreground focus:border-border"
+                      />
+                    )}
+                    {a.recipient_type !== "outsource" && (
                     <Input
                       value={a.role_label}
                       onChange={(e) => updateAllocation(i, { role_label: e.target.value })}
                       placeholder="Role (optional)"
                       className="h-8 flex-1 border-transparent bg-transparent text-sm text-foreground focus:border-border"
                     />
+                    )}
                     <Input
                       type="number"
                       value={a.amount}
@@ -627,6 +654,48 @@ export function AccountsTab() {
               <Button variant="outline" size="sm" onClick={() => setAllocations((prev) => [...prev, emptyAllocation()])} className="w-fit">
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Add allocation
+              </Button>
+            </div>
+
+            {/* Installments */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-muted-foreground">Installments</Label>
+                <span className="text-xs text-muted-foreground">
+                  {installments.filter((i) => i.amount).length > 0 && `Total: ${formatCurrency(installments.filter((i) => i.date && i.amount).reduce((s, i) => s + Number(i.amount), 0))}`}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {installments.map((inst, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2">
+                    <Input
+                      type="date"
+                      value={inst.date}
+                      onChange={(e) => setInstallments((prev) => prev.map((x, j) => j === i ? { ...x, date: e.target.value } : x))}
+                      className="h-8 w-36 shrink-0 border-transparent bg-transparent text-sm text-foreground"
+                    />
+                    <Input
+                      type="number"
+                      value={inst.amount}
+                      onChange={(e) => setInstallments((prev) => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                      placeholder="Amount"
+                      className="h-8 w-28 shrink-0 border-transparent bg-transparent text-sm text-foreground"
+                    />
+                    <Input
+                      value={inst.note}
+                      onChange={(e) => setInstallments((prev) => prev.map((x, j) => j === i ? { ...x, note: e.target.value } : x))}
+                      placeholder="Note (optional)"
+                      className="h-8 flex-1 border-transparent bg-transparent text-sm text-foreground"
+                    />
+                    <Button variant="ghost" size="icon-xs" onClick={() => setInstallments((prev) => prev.filter((_, j) => j !== i))} className="shrink-0 text-muted-foreground hover:text-red-400">
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setInstallments((prev) => [...prev, { date: new Date().toISOString().slice(0, 10), amount: "", note: "" }])} className="w-fit">
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add installment
               </Button>
             </div>
           </div>
