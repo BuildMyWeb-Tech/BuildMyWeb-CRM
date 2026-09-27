@@ -69,6 +69,7 @@ export default function NewQrBroadcastPage() {
       }
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
+      console.error('[new-qr-broadcast] fetch error:', err);
       toast.error(err instanceof Error ? err.message : 'Unexpected error creating broadcast.');
     } finally {
       setIsSubmitting(false);
@@ -76,7 +77,7 @@ export default function NewQrBroadcastPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">

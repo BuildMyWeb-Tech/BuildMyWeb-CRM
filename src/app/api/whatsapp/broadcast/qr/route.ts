@@ -274,12 +274,21 @@ export async function POST(request: Request) {
     );
 
     if (rpcError) {
-      // Do not expose raw DB error messages to the client.
-      console.error("[qr-broadcast] RPC error:", rpcError.message);
-      return NextResponse.json(
-        { error: "Failed to create broadcast. Please try again." },
-        { status: 500 },
-      );
+      console.error("[qr-broadcast] RPC error:", rpcError.message, rpcError.details, rpcError.hint);
+      // Classify the error so the client sees something actionable.
+      const msg = rpcError.message ?? ''
+      let clientError = "Failed to create broadcast. Please try again."
+      if (msg.includes('does not exist') || msg.includes('undefined function')) {
+        clientError = "Database setup incomplete — please apply migrations 091-093 to your Supabase project."
+      } else if (msg.includes('permission denied') || msg.includes('not found')) {
+        clientError = "Permission error: " + msg
+      } else if (msg.includes('violates')) {
+        clientError = "Database constraint error: " + msg
+      } else if (process.env.NODE_ENV !== 'production') {
+        // In development, surface the raw message to speed up debugging.
+        clientError = msg
+      }
+      return NextResponse.json({ error: clientError }, { status: 500 });
     }
 
     const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
