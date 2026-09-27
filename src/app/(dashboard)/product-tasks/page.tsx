@@ -454,7 +454,7 @@ export default function ProductTasksPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">Product Tasks</h1>
-                <p className="text-sm text-slate-400">Tasks linked to your product catalog</p>
+                {/* <p className="text-sm text-slate-400">Tasks linked to your product catalog</p> */}
               </div>
             </div>
             <button type="button" onClick={openCreate}
@@ -535,9 +535,9 @@ export default function ProductTasksPage() {
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
               Overdue
             </button>
-            <Link href="/products" className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors">
+            {/* <Link href="/products" className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors">
               <ExternalLink className="h-3.5 w-3.5" /> Products
-            </Link>
+            </Link> */}
           </div>
 
           {/* Table */}

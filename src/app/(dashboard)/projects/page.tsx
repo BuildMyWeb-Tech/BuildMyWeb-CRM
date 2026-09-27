@@ -241,7 +241,7 @@ export default function ProjectsPage() {
                 </div>
                 <div className="mt-3">
                   <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors">{p.name}</h3>
-                  <p className="mt-0.5 text-sm text-slate-500">{p.contact?.name || p.client_name || "No client linked"}</p>
+                  <p className="mt-0.5 text-sm text-slate-500">{p.contact?.name || p.client_name || ""}</p>
                   {p.description && (
                     <p className="mt-2 line-clamp-2 text-xs text-slate-500">{p.description}</p>
                   )}

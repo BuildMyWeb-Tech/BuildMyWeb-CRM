@@ -303,16 +303,14 @@ export function TaskForm({
           </div>
 
           <div className="grid gap-2">
-            <Label className="text-muted-foreground">Show date (optional — schedule for later)</Label>
+            <Label className="text-muted-foreground">Show date</Label>
             <Input
               type="date"
               value={showDate}
               onChange={(e) => setShowDate(e.target.value)}
               className="border-border bg-muted text-foreground"
             />
-            <p className="text-xs text-muted-foreground">
-              Hidden from the task list until this date — shows up under the &quot;Scheduled&quot; filter until then.
-            </p>
+            
           </div>
 
           <div className="grid gap-2">
