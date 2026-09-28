@@ -279,7 +279,7 @@ export default function MyPagesPage() {
                   dragSrcIdx === idx && "opacity-50",
                 )}
               >
-                <span className="max-w-40 truncate">{tab.title}</span>
+                <span className="max-w-40 truncate">{LABEL_MAP[tab.title] ?? tab.title}</span>
                 <span
                   role="button"
                   tabIndex={0}

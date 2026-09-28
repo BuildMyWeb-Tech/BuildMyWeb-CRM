@@ -2,16 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Package, Plus, Trash2, Pencil, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, ExternalLink, X, Eye, EyeOff,
+  Package, Plus, Trash2, ChevronUp, ChevronDown,
+  ChevronsUpDown, Loader2, X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
-import Link from "next/link";
 import { toast } from "sonner";
 import type { AccountMember } from "@/types";
 
-interface Product { id: string; project_name: string }
+interface Product { id: string; project_name: string; status?: string }
 interface Stage { id: string; name: string; position: number }
 
 interface ProductTask {
@@ -26,11 +25,11 @@ interface ProductTask {
   product_id: string | null;
   stage_id: string | null;
   created_at: string;
-  product?: { id: string; name: string } | null;
+  product?: { id: string; name: string; project_name?: string } | null;
   stage?: { id: string; name: string } | null;
 }
 
-type SortField = "title" | "priority" | "due_date" | "created_at";
+type SortField = "title" | "stage" | "priority" | "product" | "assignee" | "due_date";
 type SortDir = "asc" | "desc";
 
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -41,19 +40,47 @@ const PRIORITY_COLOR: Record<string, string> = {
   low: "text-blue-400 bg-blue-500/20 border-blue-500/30",
 };
 
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
-  if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 text-slate-600" />;
-  return sortDir === "asc" ? <ChevronUp className="h-3 w-3 text-blue-400" /> : <ChevronDown className="h-3 w-3 text-blue-400" />;
+const STAGE_COLOR: Record<string, string> = {
+  "in progress": "text-blue-400 bg-blue-500/20 border-blue-500/30",
+  "to do": "text-slate-400 bg-slate-500/20 border-slate-500/30",
+  "done": "text-green-400 bg-green-500/20 border-green-500/30",
+  "review": "text-purple-400 bg-purple-500/20 border-purple-500/30",
+};
+
+function stageColor(name: string) {
+  return STAGE_COLOR[name.toLowerCase()] ?? "text-slate-400 bg-slate-500/20 border-slate-500/30";
+}
+
+function ColHeader({
+  field, label, sortField, sortDir, onSort,
+}: {
+  field: SortField; label: string;
+  sortField: SortField; sortDir: SortDir;
+  onSort: (f: SortField) => void;
+}) {
+  const active = sortField === field;
+  return (
+    <button type="button" onClick={() => onSort(field)}
+      className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+      {label}
+      {active
+        ? sortDir === "asc"
+          ? <ChevronUp className="h-3 w-3 text-blue-400" />
+          : <ChevronDown className="h-3 w-3 text-blue-400" />
+        : <ChevronsUpDown className="h-3 w-3 text-slate-600" />}
+    </button>
+  );
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
 function ProductTaskModal({
-  open, onClose, onSaved,
+  open, onClose, onSaved, onDeleted,
   task, products, stages, members,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted: () => void;
   task: ProductTask | null;
   products: Product[];
   stages: Stage[];
@@ -69,6 +96,7 @@ function ProductTaskModal({
   const [dueDate, setDueDate] = useState("");
   const [showDate, setShowDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const assigneeRef = useRef<HTMLDivElement>(null);
 
@@ -116,11 +144,7 @@ function ProductTaskModal({
       };
       const url = isEdit ? `/api/product-tasks/${task!.id}` : "/api/product-tasks";
       const method = isEdit ? "PATCH" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         toast.error(err.error ?? "Could not save task");
@@ -129,14 +153,23 @@ function ProductTaskModal({
       const resData = await res.json().catch(() => ({}));
       if (resData?.auto_deleted) {
         toast.success("Task moved to Done and removed");
-        onClose();
-        onSaved();
-        return;
+        onClose(); onSaved(); return;
       }
       toast.success(isEdit ? "Task updated" : "Task created");
-      onClose();
-      onSaved();
+      onClose(); onSaved();
     } finally { setSaving(false); }
+  }
+
+  async function handleDelete() {
+    if (!task) return;
+    if (!window.confirm("Delete this task? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/product-tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("Could not delete task"); return; }
+      toast.success("Task deleted");
+      onClose(); onDeleted();
+    } finally { setDeleting(false); }
   }
 
   function toggleAssignee(userId: string) {
@@ -151,7 +184,6 @@ function ProductTaskModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg rounded-2xl border border-[#2a3045] bg-[#1a1f2e] shadow-2xl overflow-y-auto max-h-[90vh]">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2a3045] px-6 py-4">
           <h2 className="text-base font-semibold text-white">{isEdit ? "Edit Task" : "New Product Task"}</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-[#2a3045] hover:text-white transition-colors">
@@ -160,108 +192,70 @@ function ProductTaskModal({
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          {/* Task name */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Task name</label>
-            <input
-              autoFocus
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+            <input autoFocus type="text" value={title} onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }}
               placeholder="Enter task title"
-              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
-            />
+              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-teal-500 focus:outline-none" />
           </div>
 
-          {/* Product + Stage */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">Product (optional)</label>
-              <select
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none"
-              >
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">Product</label>
+              <select value={productId} onChange={(e) => setProductId(e.target.value)}
+                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
                 <option value="__none__">None</option>
                 {products.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
               </select>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Stage</label>
-              <select
-                value={stageId}
-                onChange={(e) => setStageId(e.target.value)}
-                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none"
-              >
+              <select value={stageId} onChange={(e) => setStageId(e.target.value)}
+                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
                 <option value="__none__">None</option>
                 {sortedStages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Instructions / Brief */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Instructions / Brief</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4}
               placeholder="Add instructions or brief..."
-              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none resize-none"
-            />
+              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none resize-none" />
           </div>
 
-          {/* Priority */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Priority</label>
             <div className="flex gap-2">
               {["urgent", "high", "medium", "low"].map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPriority(p)}
-                  className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                    priority === p
-                      ? PRIORITY_COLOR[p]
-                      : "border-[#2a3045] bg-[#0f1117] text-slate-500 hover:text-slate-300"
-                  }`}
-                >
+                <button key={p} type="button" onClick={() => setPriority(p)}
+                  className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-semibold capitalize transition-colors ${priority === p ? PRIORITY_COLOR[p] : "border-[#2a3045] bg-[#0f1117] text-slate-500 hover:text-slate-300"}`}>
                   {p}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Assignees */}
           <div className="relative" ref={assigneeRef}>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Assignees</label>
-            <button
-              type="button"
-              onClick={() => setShowAssigneePicker((v) => !v)}
-              className="w-full flex items-center justify-between rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 hover:border-teal-500/50 focus:outline-none"
-            >
+            <button type="button" onClick={() => setShowAssigneePicker((v) => !v)}
+              className="w-full flex items-center justify-between rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 hover:border-teal-500/50 focus:outline-none">
               <span className="flex flex-wrap gap-1">
                 {selectedAssignees.length > 0
                   ? selectedAssignees.map((m) => (
-                    <span key={m.user_id} className="flex items-center gap-1 rounded-full bg-teal-500/20 px-2 py-0.5 text-[11px] text-teal-300">
-                      {m.full_name}
-                    </span>
+                    <span key={m.user_id} className="flex items-center gap-1 rounded-full bg-teal-500/20 px-2 py-0.5 text-[11px] text-teal-300">{m.full_name}</span>
                   ))
-                  : <span className="text-slate-600">Unassigned</span>
-                }
+                  : <span className="text-slate-600">Unassigned</span>}
               </span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
             </button>
             {showAssigneePicker && (
               <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-lg border border-[#2a3045] bg-[#1a1f2e] shadow-xl">
                 {members.map((m) => (
-                  <button
-                    key={m.user_id}
-                    type="button"
-                    onClick={() => toggleAssignee(m.user_id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-[#2a3045] transition-colors"
-                  >
+                  <button key={m.user_id} type="button" onClick={() => toggleAssignee(m.user_id)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-[#2a3045] transition-colors">
                     <span className={`flex h-4 w-4 items-center justify-center rounded border text-[9px] ${assigneeIds.includes(m.user_id) ? "border-teal-500 bg-teal-500 text-white" : "border-[#3a4055]"}`}>
                       {assigneeIds.includes(m.user_id) ? "✓" : ""}
                     </span>
@@ -272,40 +266,39 @@ function ProductTaskModal({
             )}
           </div>
 
-          {/* Target date + Show date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Target date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none"
-              />
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none" />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Show date (optional)</label>
-              <input
-                type="date"
-                value={showDate}
-                onChange={(e) => setShowDate(e.target.value)}
-                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none"
-              />
+              <input type="date" value={showDate} onChange={(e) => setShowDate(e.target.value)}
+                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none" />
             </div>
           </div>
           <p className="text-[11px] text-slate-600">Show date — task stays hidden from the main list until this date.</p>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-[#2a3045] px-6 py-4">
-          <button type="button" onClick={onClose}
-            className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSave} disabled={saving || !title.trim()}
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50 transition-colors">
-            {saving ? "Saving…" : isEdit ? "Save changes" : "Create task"}
-          </button>
+        <div className="flex items-center justify-between border-t border-[#2a3045] px-6 py-4">
+          {isEdit ? (
+            <button type="button" onClick={handleDelete} disabled={deleting}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors">
+              <Trash2 className="h-3.5 w-3.5" />
+              {deleting ? "Deleting…" : "Delete Task"}
+            </button>
+          ) : <div />}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose}
+              className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+              Cancel
+            </button>
+            <button type="button" onClick={handleSave} disabled={saving || !title.trim()}
+              className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50 transition-colors">
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Create task"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -317,42 +310,20 @@ export default function ProductTasksPage() {
   const { accountId } = useAuth();
   const [tasks, setTasks] = useState<ProductTask[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sortField, setSortField] = useState<SortField>(() => {
-    if (typeof window !== "undefined") return (localStorage.getItem("pt-sort-field") as SortField) ?? "created_at";
-    return "created_at";
-  });
-  const [sortDir, setSortDir] = useState<SortDir>(() => {
-    if (typeof window !== "undefined") return (localStorage.getItem("pt-sort-dir") as SortDir) ?? "desc";
-    return "desc";
-  });
-  const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("due_date");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"current" | "scheduled" | "all">("current");
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-
-  const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("pt-hidden-rows") ?? "[]")); } catch { return new Set(); }
-  });
-  function persistHidden(fn: (prev: Set<string>) => Set<string>) {
-    setHiddenRows((prev) => {
-      const next = fn(prev);
-      try { localStorage.setItem("pt-hidden-rows", JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  }
-
-  // Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<ProductTask | null>(null);
-
-  // Supporting data
   const [products, setProducts] = useState<Product[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [members, setMembers] = useState<AccountMember[]>([]);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
     if (!accountId) return;
@@ -375,16 +346,14 @@ export default function ProductTasksPage() {
       supabase.from("pipeline_stages").select("id, name, position").order("position"),
     ]);
     if (membersRes?.members) setMembers(membersRes.members);
-    if (productsRes?.products) setProducts(productsRes.products.map((p: { id: string; project_name: string }) => ({ id: p.id, project_name: p.project_name })));
+    if (productsRes?.products) {
+      setProducts(productsRes.products.map((p: { id: string; project_name: string; status?: string }) => ({
+        id: p.id, project_name: p.project_name, status: p.status,
+      })));
+    }
     if (stagesData.data) {
-      // Deduplicate by name — pipeline_stages has one row per stage per pipeline,
-      // so the same name (e.g. "To Do") appears multiple times across projects.
       const seen = new Set<string>();
-      setStages(stagesData.data.filter((s) => {
-        if (seen.has(s.name)) return false;
-        seen.add(s.name);
-        return true;
-      }));
+      setStages(stagesData.data.filter((s) => { if (seen.has(s.name)) return false; seen.add(s.name); return true; }));
     }
   }, [accountId]);
 
@@ -392,20 +361,22 @@ export default function ProductTasksPage() {
   useEffect(() => { loadSupporting(); }, [loadSupporting]);
 
   function toggleSort(field: SortField) {
-    const newDir = sortField === field && sortDir === "asc" ? "desc" : "asc";
-    setSortField(field);
-    setSortDir(newDir);
-    localStorage.setItem("pt-sort-field", field);
-    localStorage.setItem("pt-sort-dir", newDir);
+    if (sortField === field) {
+      setSortDir((d) => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  function getMemberName(uid: string) {
+    return members.find((m) => m.user_id === uid)?.full_name ?? "Unknown";
   }
 
   const filtered = (tasks ?? [])
     .filter((t) => {
-      // View mode filter
       if (viewMode === "current" && t.show_date && t.show_date > todayStr) return false;
       if (viewMode === "scheduled" && !(t.show_date && t.show_date > todayStr)) return false;
-      // all = no show_date filter
-      if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
       if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
       if (personFilter !== "all") {
         const ids = t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [];
@@ -425,21 +396,41 @@ export default function ProductTasksPage() {
         return dir * a.due_date.localeCompare(b.due_date);
       }
       if (sortField === "title") return dir * a.title.localeCompare(b.title);
-      return dir * a.created_at.localeCompare(b.created_at);
+      if (sortField === "stage") {
+        const as = a.stage?.name ?? "";
+        const bs = b.stage?.name ?? "";
+        return dir * as.localeCompare(bs);
+      }
+      if (sortField === "product") {
+        const ap = (a.product as { project_name?: string } | null)?.project_name ?? "";
+        const bp = (b.product as { project_name?: string } | null)?.project_name ?? "";
+        return dir * ap.localeCompare(bp);
+      }
+      if (sortField === "assignee") {
+        const aid = a.assignee_user_ids?.[0] ?? a.assignee_user_id ?? "";
+        const bid = b.assignee_user_ids?.[0] ?? b.assignee_user_id ?? "";
+        return dir * getMemberName(aid).localeCompare(getMemberName(bid));
+      }
+      return 0;
     });
-
-  async function handleDelete(id: string) {
-    if (!window.confirm("Delete this task?")) return;
-    const res = await fetch(`/api/product-tasks/${id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Could not delete"); return; }
-    load(); toast.success("Task deleted");
-  }
 
   function openCreate() { setEditTask(null); setModalOpen(true); }
   function openEdit(task: ProductTask) { setEditTask(task); setModalOpen(true); }
 
-  // Only show products that appear in at least one task in the filter dropdown
   const productsWithTasks = products.filter((p) => (tasks ?? []).some((t) => t.product_id === p.id));
+
+  // Stat counts
+  const allTasks = tasks ?? [];
+  const inProgressCount = allTasks.filter((t) => (t.stage as { name?: string } | null)?.name?.toLowerCase().includes("progress")).length;
+  const dueTodayCount = allTasks.filter((t) => t.due_date === todayStr).length;
+  const overdueCount = allTasks.filter((t) => t.due_date && t.due_date < todayStr).length;
+
+  const statCards = [
+    { label: "Total Tasks", value: allTasks.length, color: "text-white" },
+    { label: "In Progress", value: inProgressCount, color: "text-blue-400" },
+    { label: "Due Today", value: dueTodayCount, color: "text-yellow-400" },
+    { label: "Overdue", value: overdueCount, color: "text-red-400" },
+  ];
 
   return (
     <>
@@ -448,6 +439,7 @@ export default function ProductTasksPage() {
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           onSaved={load}
+          onDeleted={load}
           task={editTask}
           products={products}
           stages={stages}
@@ -455,78 +447,54 @@ export default function ProductTasksPage() {
         />
       )}
 
-      <div className="min-h-screen bg-[#0f1117]">
-        <div className="p-6 space-y-5">
+      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
+        {/* ── Main content ── */}
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-500/20">
-                <Package className="h-5 w-5 text-teal-400" />
-              </div>
-              <div>
+          <div className="shrink-0 px-6 pt-6 pb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-teal-500/10 p-2">
+                  <Package className="h-5 w-5 text-teal-400" />
+                </div>
                 <h1 className="text-2xl font-bold text-white">Product Tasks</h1>
-                {/* <p className="text-sm text-slate-400">Tasks linked to your product catalog</p> */}
               </div>
+              <button type="button" onClick={openCreate}
+                className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 transition-colors">
+                <Plus className="h-4 w-4" /> New Task
+              </button>
             </div>
-            <button type="button" onClick={openCreate}
-              className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 transition-colors">
-              <Plus className="h-4 w-4" /> New Task
-            </button>
           </div>
 
           {/* Stat cards */}
-          {tasks !== null && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 w-full">
-              {(() => {
-                const allT = tasks ?? [];
-                const inProgress = allT.filter((t) => {
-                  const stageName = (t.stage as { name?: string } | null)?.name?.toLowerCase() ?? "";
-                  return stageName.includes("progress");
-                }).length;
-                const today = new Date().toISOString().slice(0, 10);
-                const dueToday = allT.filter((t) => t.due_date === today).length;
-                const overdue = allT.filter((t) => t.due_date && t.due_date < today).length;
-                return (
-                  <>
-                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-                      <p className="text-2xl font-bold text-white">{allT.length}</p>
-                      <p className="text-sm text-slate-400">Total Tasks</p>
-                    </div>
-                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-                      <p className="text-2xl font-bold text-blue-400">{inProgress}</p>
-                      <p className="text-sm text-slate-400">In Progress</p>
-                    </div>
-                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-                      <p className="text-2xl font-bold text-yellow-400">{dueToday}</p>
-                      <p className="text-sm text-slate-400">Due Today</p>
-                    </div>
-                    <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
-                      <p className="text-2xl font-bold text-red-400">{overdue}</p>
-                      <p className="text-sm text-slate-400">Overdue</p>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* View mode tabs */}
-          <div className="flex items-center gap-1 rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-1 w-fit">
-            {(["current", "scheduled", "all"] as const).map((mode) => (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)}
-                className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${viewMode === mode ? "bg-teal-600 text-white" : "text-slate-400 hover:text-white"}`}>
-                {mode === "current" ? "Current Tasks" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
-              </button>
+          <div className="shrink-0 grid grid-cols-4 gap-4 px-6 pb-4">
+            {statCards.map((card) => (
+              <div key={card.label} className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                <p className={`text-2xl font-bold ${card.color}`}>
+                  {loading ? <span className="inline-block h-7 w-8 animate-pulse rounded bg-white/10" /> : card.value}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">{card.label}</p>
+              </div>
             ))}
           </div>
 
+          {/* View mode tabs */}
+          <div className="shrink-0 px-6 pb-3">
+            <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
+              {(["current", "scheduled", "all"] as const).map((mode) => (
+                <button key={mode} type="button" onClick={() => setViewMode(mode)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-slate-200"}`}>
+                  {mode === "current" ? "Current Tasks" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Filter bar */}
-          <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
-            <input type="text" placeholder="Search tasks..." value={search} onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 min-w-[180px] max-w-xs rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none" />
+          <div className="shrink-0 flex flex-wrap items-center gap-2 px-6 pb-3">
             <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
-              <option value="all">All Priority</option>
+              <option value="all">Priority: All</option>
               <option value="urgent">Urgent</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
@@ -534,128 +502,160 @@ export default function ProductTasksPage() {
             </select>
             <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
-              <option value="all">All People</option>
+              <option value="all">People: All</option>
               {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
             </select>
             <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
-              <option value="all">All Products</option>
+              <option value="all">Product: All</option>
               {productsWithTasks.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
             </select>
             <button type="button" onClick={() => setOverdueOnly((v) => !v)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
               Overdue
             </button>
-            {/* <Link href="/products" className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors">
-              <ExternalLink className="h-3.5 w-3.5" /> Products
-            </Link> */}
           </div>
 
           {/* Table */}
-          {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 text-center gap-3">
-              <Package className="h-10 w-10 text-slate-700" />
-              <p className="text-slate-500 text-sm">{search || priorityFilter !== "all" || personFilter !== "all" || productFilter !== "all" || overdueOnly ? "No tasks match this filter." : "No product tasks yet."}</p>
-              <button type="button" onClick={openCreate}
-                className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-4 py-2 text-sm text-slate-300 hover:border-teal-500/50 transition-colors">
-                <Plus className="h-4 w-4" /> Create first task
-              </button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
-                    <th className="w-8 px-2 py-2.5" />
-                    {(["title", "priority", "due_date"] as SortField[]).map((f) => (
-                      <th key={f} className="px-4 py-2.5 font-medium">
-                        <button type="button" onClick={() => toggleSort(f)}
-                          className="flex items-center gap-1 hover:text-slate-300 transition-colors">
-                          {f === "due_date" ? "Due Date" : f.charAt(0).toUpperCase() + f.slice(1)}
-                          <SortIcon field={f} sortField={sortField} sortDir={sortDir} />
-                        </button>
+          <div className="flex-1 overflow-auto px-6 pb-6">
+            {loading ? (
+              <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#2a3045] py-20 text-center gap-3">
+                <Package className="h-10 w-10 text-slate-700" />
+                <p className="text-slate-500 text-sm">No product tasks match this filter.</p>
+                <button type="button" onClick={openCreate}
+                  className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-4 py-2 text-sm text-slate-300 hover:border-teal-500/50 transition-colors">
+                  <Plus className="h-4 w-4" /> Create task
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-[#2a3045]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
+                      <th className="w-8 px-3 py-3" />
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="title" label="Task" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
-                    ))}
-                    <th className="px-4 py-2.5 font-medium">Product</th>
-                    <th className="px-4 py-2.5 font-medium">Stage</th>
-                    <th className="px-4 py-2.5 font-medium">Assignees</th>
-                    <th className="px-4 py-2.5 font-medium w-0" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.filter((t) => !hiddenRows.has(t.id)).map((task) => {
-                    const isOverdue = task.due_date && task.due_date < todayStr;
-                    const isToday = task.due_date === todayStr;
-                    return (
-                      <tr key={task.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
-                        <td className="px-2 py-2.5">
-                          <button type="button" title="Hide row" onClick={() => persistHidden((p) => { const n = new Set(p); n.add(task.id); return n; })}
-                            className="text-slate-700 hover:text-slate-400 transition-colors"><Eye className="h-3 w-3" /></button>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-white">{task.title}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>
-                            {task.priority}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {task.due_date ? (
-                            <span className={`text-xs font-medium ${isOverdue ? "text-red-400" : isToday ? "text-amber-400" : "text-slate-400"}`}>
-                              {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="stage" label="Stage" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="priority" label="Priority" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="product" label="Product" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="assignee" label="Assignee" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="due_date" label="Target Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((task) => {
+                      const isOverdue = task.due_date && task.due_date < todayStr;
+                      const isToday = task.due_date === todayStr;
+                      const assigneeNames = (task.assignee_user_ids?.length
+                        ? task.assignee_user_ids
+                        : task.assignee_user_id ? [task.assignee_user_id] : []
+                      ).map((uid) => getMemberName(uid)).filter(Boolean);
+                      const stageName = task.stage?.name ?? "";
+                      const productName = (task.product as { project_name?: string } | null)?.project_name ?? "";
+
+                      return (
+                        <tr key={task.id}
+                          onClick={() => openEdit(task)}
+                          className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors cursor-pointer">
+                          <td className="px-3 py-3">
+                            <span className="block h-1.5 w-1.5 rounded-full bg-teal-500/40 mx-auto" />
+                          </td>
+                          <td className="px-4 py-3 font-medium text-white max-w-xs">
+                            <span className="line-clamp-1">{task.title}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {stageName ? (
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageColor(stageName)}`}>
+                                {stageName}
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>
+                              {task.priority}
                             </span>
-                          ) : <span className="text-slate-600">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{(task.product as { project_name?: string } | null)?.project_name ?? <span className="text-slate-600">—</span>}</td>
-                        <td className="px-4 py-3 text-xs text-slate-500">{task.stage?.name ?? <span className="text-slate-600">—</span>}</td>
-                        <td className="px-4 py-3">
-                          {(task.assignee_user_ids ?? []).length > 0 ? (
-                            <div className="flex items-center gap-1">
-                              {(task.assignee_user_ids ?? []).slice(0, 3).map((uid) => {
-                                const m = members.find((m) => m.user_id === uid);
-                                return (
-                                  <span key={uid} title={m?.full_name ?? uid}
-                                    className="flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/20 text-[9px] font-bold text-teal-300">
-                                    {(m?.full_name ?? "?").charAt(0).toUpperCase()}
-                                  </span>
-                                );
-                              })}
-                              {(task.assignee_user_ids ?? []).length > 3 && (
-                                <span className="text-[10px] text-slate-500">+{(task.assignee_user_ids ?? []).length - 3}</span>
-                              )}
-                            </div>
-                          ) : <span className="text-slate-600">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => openEdit(task)}
-                              className="flex items-center gap-1 rounded border border-[#2a3045] px-2 py-1 text-[11px] text-slate-400 hover:text-white transition-colors">
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button type="button" onClick={() => handleDelete(task.id)}
-                              className="flex items-center gap-1 rounded border border-[#2a3045] px-2 py-1 text-[11px] text-slate-400 hover:text-red-400 hover:border-red-500/30 transition-colors">
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {hiddenRows.size > 0 && (
-                    <tr><td colSpan={8} className="px-4 py-2">
-                      <button type="button" onClick={() => persistHidden(() => new Set())}
-                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors">
-                        <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — show all
-                      </button>
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">
+                            {productName || <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-300">
+                            {assigneeNames.length > 0
+                              ? assigneeNames.join(", ")
+                              : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            {task.due_date ? (
+                              <span className={`text-xs font-medium ${isOverdue ? "text-red-400" : isToday ? "text-amber-400" : "text-slate-400"}`}>
+                                {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Right sidebar — Products ── */}
+        <div className="w-64 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Package className="h-4 w-4 text-teal-400" />
+              <h2 className="text-sm font-semibold text-white">Products</h2>
             </div>
-          )}
+
+            {(["active", "inactive", "archived"] as const).map((status) => {
+              const group = products.filter((p) => (p.status ?? "active") === status);
+              if (group.length === 0) return null;
+              const taskCountMap = new Map<string, number>();
+              for (const t of (tasks ?? [])) {
+                if (t.product_id) taskCountMap.set(t.product_id, (taskCountMap.get(t.product_id) ?? 0) + 1);
+              }
+              return (
+                <div key={status}>
+                  <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wider text-slate-600 capitalize">{status}</p>
+                  <div className="space-y-0.5">
+                    {group.map((p) => (
+                      <button key={p.id} type="button"
+                        onClick={() => setProductFilter(productFilter === p.id ? "all" : p.id)}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition-colors text-left ${productFilter === p.id ? "bg-teal-500/10 text-teal-300" : "hover:bg-[#0f1117] text-slate-300 hover:text-white"}`}>
+                        <span className="h-5 w-5 shrink-0 rounded bg-teal-500/20 flex items-center justify-center text-[9px] font-bold text-teal-300">
+                          {p.project_name.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="flex-1 truncate text-xs">{p.project_name}</span>
+                        <span className="shrink-0 text-[11px] font-medium text-slate-500">
+                          {taskCountMap.get(p.id) ?? 0}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            {products.length === 0 && (
+              <p className="text-xs text-slate-600 text-center py-3">No products</p>
+            )}
+          </div>
         </div>
       </div>
     </>
