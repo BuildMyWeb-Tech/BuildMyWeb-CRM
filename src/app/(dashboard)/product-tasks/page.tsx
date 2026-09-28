@@ -310,13 +310,27 @@ export default function ProductTasksPage() {
   const { accountId } = useAuth();
   const [tasks, setTasks] = useState<ProductTask[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sortField, setSortField] = useState<SortField>("due_date");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [personFilter, setPersonFilter] = useState("all");
-  const [productFilter, setProductFilter] = useState("all");
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [viewMode, setViewMode] = useState<"current" | "scheduled" | "all">("current");
+  const [sortField, setSortField] = useState<SortField>(() => {
+    try { return (localStorage.getItem("pt-sort-field") as SortField) || "due_date"; } catch { return "due_date"; }
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() => {
+    try { return (localStorage.getItem("pt-sort-dir") as SortDir) || "asc"; } catch { return "asc"; }
+  });
+  const [priorityFilter, setPriorityFilter] = useState(() => {
+    try { return localStorage.getItem("pt-priority") || "all"; } catch { return "all"; }
+  });
+  const [personFilter, setPersonFilter] = useState(() => {
+    try { return localStorage.getItem("pt-person") || "all"; } catch { return "all"; }
+  });
+  const [productFilter, setProductFilter] = useState(() => {
+    try { return localStorage.getItem("pt-product") || "all"; } catch { return "all"; }
+  });
+  const [overdueOnly, setOverdueOnly] = useState(() => {
+    try { return localStorage.getItem("pt-overdue") === "1"; } catch { return false; }
+  });
+  const [viewMode, setViewMode] = useState<"current" | "scheduled" | "all">(() => {
+    try { return (localStorage.getItem("pt-view") as "current" | "scheduled" | "all") || "current"; } catch { return "current"; }
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<ProductTask | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -360,12 +374,21 @@ export default function ProductTasksPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadSupporting(); }, [loadSupporting]);
 
+  function setPriorityFilterPersisted(v: string) { setPriorityFilter(v); try { localStorage.setItem("pt-priority", v); } catch {} }
+  function setPersonFilterPersisted(v: string) { setPersonFilter(v); try { localStorage.setItem("pt-person", v); } catch {} }
+  function setProductFilterPersisted(v: string) { setProductFilter(v); try { localStorage.setItem("pt-product", v); } catch {} }
+  function setOverduePersisted(v: boolean) { setOverdueOnly(v); try { localStorage.setItem("pt-overdue", v ? "1" : "0"); } catch {} }
+  function setViewModePersisted(v: "current" | "scheduled" | "all") { setViewMode(v); try { localStorage.setItem("pt-view", v); } catch {} }
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
-      setSortDir((d) => d === "asc" ? "desc" : "asc");
+      const next: SortDir = sortDir === "asc" ? "desc" : "asc";
+      setSortDir(next);
+      try { localStorage.setItem("pt-sort-dir", next); } catch {}
     } else {
       setSortField(field);
       setSortDir("asc");
+      try { localStorage.setItem("pt-sort-field", field); localStorage.setItem("pt-sort-dir", "asc"); } catch {}
     }
   }
 
@@ -478,21 +501,28 @@ export default function ProductTasksPage() {
             ))}
           </div>
 
-          {/* View mode tabs */}
-          <div className="shrink-0 px-6 pb-3">
+          {/* View mode tabs + count */}
+          <div className="shrink-0 px-6 pb-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
               {(["current", "scheduled", "all"] as const).map((mode) => (
-                <button key={mode} type="button" onClick={() => setViewMode(mode)}
+                <button key={mode} type="button" onClick={() => setViewModePersisted(mode)}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-slate-200"}`}>
                   {mode === "current" ? "Current Tasks" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
                 </button>
               ))}
             </div>
+            {!loading && tasks !== null && (
+              <p className="text-xs text-slate-500 shrink-0">
+                {filtered.length === tasks.length
+                  ? `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`
+                  : <><span className="font-medium text-slate-300">{filtered.length}</span> of {tasks.length} tasks — filtered</>}
+              </p>
+            )}
           </div>
 
           {/* Filter bar */}
           <div className="shrink-0 flex flex-wrap items-center gap-2 px-6 pb-3">
-            <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
+            <select value={priorityFilter} onChange={(e) => setPriorityFilterPersisted(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
               <option value="all">Priority: All</option>
               <option value="urgent">Urgent</option>
@@ -500,17 +530,17 @@ export default function ProductTasksPage() {
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
-            <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}
+            <select value={personFilter} onChange={(e) => setPersonFilterPersisted(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
               <option value="all">People: All</option>
               {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
             </select>
-            <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)}
+            <select value={productFilter} onChange={(e) => setProductFilterPersisted(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
               <option value="all">Product: All</option>
               {productsWithTasks.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
             </select>
-            <button type="button" onClick={() => setOverdueOnly((v) => !v)}
+            <button type="button" onClick={() => setOverduePersisted(!overdueOnly)}
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
               Overdue
             </button>

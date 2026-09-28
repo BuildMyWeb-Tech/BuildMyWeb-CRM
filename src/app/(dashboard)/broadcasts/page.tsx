@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Broadcast } from '@/types';
+import { Broadcast, BroadcastStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -157,13 +157,13 @@ export default function BroadcastsPage() {
 
       // ── Optimistic update: flip status in local state immediately ─────────
       // The UI shows the correct status right away; DB writes happen after.
-      const updatedLocally = currentData.map((b: Broadcast) => {
+      const updatedLocally: Broadcast[] = currentData.map((b: Broadcast) => {
         if (b.status !== 'sending') return b;
-        if (readyToFinalize.some((r: Broadcast) => r.id === b.id)) {
-          return { ...b, status: b.sent_count === 0 ? 'failed' : 'sent' };
-        }
-        if (abandonedIds.has(b.id)) {
-          return { ...b, status: b.sent_count === 0 ? 'failed' : 'sent' };
+        const shouldFinalize =
+          readyToFinalize.some((r: Broadcast) => r.id === b.id) || abandonedIds.has(b.id);
+        if (shouldFinalize) {
+          const finalStatus: BroadcastStatus = b.sent_count === 0 ? 'failed' : 'sent';
+          return { ...b, status: finalStatus };
         }
         return b;
       });

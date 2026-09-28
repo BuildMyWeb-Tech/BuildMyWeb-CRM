@@ -13,6 +13,7 @@ import { CRM_MODULES, GLOBAL_NAV_ITEMS } from "@/lib/modules";
 // ---------------------------------------------------------------------------
 const PAGE_REGISTRY: Record<string, React.ComponentType> = {
   "/overview": dynamic(() => import("@/app/(dashboard)/overview/page")),
+  "/my-work": dynamic(() => import("@/app/(dashboard)/my-work/page")),
   "/dashboard": dynamic(() => import("@/app/(dashboard)/dashboard/page")),
   "/business-dashboard": dynamic(() => import("@/app/(dashboard)/business-dashboard/page")),
   "/clients": dynamic(() => import("@/app/(dashboard)/clients/page")),
@@ -58,6 +59,7 @@ const ALL_PAGES = [
   ...CRM_MODULES.flatMap((mod) =>
     mod.items.map((i) => ({ href: i.href, label: i.labelKey, group: mod.labelKey })),
   ),
+  { href: "/my-work", label: "myWork", group: "Personal" },
   { href: "/routine", label: "routine", group: "Personal" },
   { href: "/notifications", label: "notifications", group: "Personal" },
   { href: "/daily-tasks", label: "dailyTasksTodo", group: "Personal" },
