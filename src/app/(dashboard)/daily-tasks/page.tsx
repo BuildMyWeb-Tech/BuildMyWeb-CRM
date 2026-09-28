@@ -80,11 +80,10 @@ export default function DailyTasksPage() {
       setStats({ total: tasks.length, inProgress, pending, overdue });
 
       const { data: projectsData } = await supabase
-        .from("projects")
-        .select("*")
-        .eq("account_id", accountId)
-        .eq("status", "active")
-        .order("name");
+  .from("projects")
+  .select("*")
+  .eq("account_id", accountId)
+  .order("name");
 
       if (projectsData) {
         setProjects(projectsData.map((p) => ({ ...p, task_count: projectCountMap[p.id] ?? 0 })));
@@ -212,70 +211,103 @@ export default function DailyTasksPage() {
       <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
-          {/* Clients section */}
-          {clients.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="h-4 w-4 text-purple-400" />
-                <h2 className="text-sm font-semibold text-white">Clients</h2>
-              </div>
-              <div className="space-y-1">
-                {(["active","inactive","completed","archived"] as const).map((status) => {
-                  const group = clients.filter((c) => c.status === status);
-                  if (group.length === 0) return null;
-                  return (
-                    <div key={status} className="mb-2">
-                      <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wider text-slate-600 capitalize">{status}</p>
-                      {group.map((c) => (
-                        <Link key={c.id} href={"/clients/" + c.id}
-                          className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[#0f1117] transition-colors group">
-                          <span className="h-5 w-5 shrink-0 rounded bg-purple-500/20 flex items-center justify-center text-[9px] font-bold text-purple-300">
-                            {c.name.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">{c.name}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          
 
+         
           {/* Projects section */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Folder className="h-4 w-4 text-blue-400" />
-              <h2 className="text-sm font-semibold text-white">Projects</h2>
-            </div>
-            <div className="space-y-1">
-              {loading ? (
-                <div className="flex items-center justify-center py-4">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+<div>
+  <div className="flex items-center gap-2 mb-3">
+    <Folder className="h-4 w-4 text-blue-400" />
+    <h2 className="text-sm font-semibold text-white">Projects</h2>
+  </div>
+
+  <div className="space-y-2">
+    {loading ? (
+      <div className="flex items-center justify-center py-4">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+      </div>
+    ) : projects.length === 0 ? (
+      <p className="text-xs text-slate-600 text-center py-3">
+        No projects
+      </p>
+    ) : (
+      (["active", "inactive", "completed", "archived"] as const).map(
+        (status) => {
+          const group = projects.filter(
+            (project) => project.status === status
+          );
+
+          if (group.length === 0) return null;
+
+          const isActive = status === "active";
+
+          return (
+            <details
+              key={status}
+              open={isActive}
+              className="group/status"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-1 py-1.5 hover:bg-[#0f1117]">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      status === "active"
+                        ? "bg-green-400"
+                        : status === "inactive"
+                        ? "bg-yellow-400"
+                        : status === "completed"
+                        ? "bg-blue-400"
+                        : "bg-slate-500"
+                    }`}
+                  />
+
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 capitalize">
+                    {status}
+                  </span>
+
+                  <span className="text-[9px] font-medium text-slate-600">
+                    {group.length}
+                  </span>
                 </div>
-              ) : projects.length === 0 ? (
-                <p className="text-xs text-slate-600 text-center py-3">No active projects</p>
-              ) : (
-                projects.map((project, idx) => (
+
+                <span className="text-[10px] text-slate-600 transition-transform group-open/status:rotate-180">
+                  ▼
+                </span>
+              </summary>
+
+              <div className="mt-1 space-y-1">
+                {group.map((project, idx) => (
                   <Link
                     key={project.id}
                     href={`/projects/${project.id}`}
                     className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[#0f1117] transition-colors group"
                   >
-                    <span className={`h-5 w-5 shrink-0 rounded ${getProjectColor(idx)} flex items-center justify-center text-[9px] font-bold text-white`}>
+                    <span
+                      className={`h-5 w-5 shrink-0 rounded ${getProjectColor(
+                        idx
+                      )} flex items-center justify-center text-[9px] font-bold text-white`}
+                    >
                       {project.name.charAt(0).toUpperCase()}
                     </span>
+
                     <span className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">
                       {project.name}
                     </span>
-                    <span className="shrink-0 text-[11px] font-medium text-slate-500">
+
+                    {/* Task count */}
+                    <span className="shrink-0 rounded-md bg-[#252b3d] px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
                       {project.task_count}
                     </span>
                   </Link>
-                ))
-              )}
-            </div>
-          </div>
+                ))}
+              </div>
+            </details>
+          );
+        }
+      )
+    )}
+  </div>
+</div>
 
         </div>
       </div>
