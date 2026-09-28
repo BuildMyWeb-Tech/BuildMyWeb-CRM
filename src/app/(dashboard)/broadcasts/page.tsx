@@ -80,112 +80,140 @@ export default function BroadcastsPage() {
       if (fetchError) throw fetchError;
 
       const currentData = data ?? [];
+      const sendingBroadcasts = currentData.filter((b: Broadcast) => b.status === 'sending');
 
-      // Auto-finalize broadcasts stuck in "sending" — happens when the
-      // browser tab closed before Step 5 of the send hook ran, or when
-      // the QR worker finishes all jobs but doesn't flip the parent row.
-      const sendingIds = currentData
-        .filter((b: Broadcast) => b.status === 'sending')
+      if (sendingBroadcasts.length === 0) {
+        setBroadcasts(currentData);
+        return;
+      }
+
+      const sendingIds = sendingBroadcasts.map((b: Broadcast) => b.id);
+
+      // Check which sending broadcasts still have pending recipients.
+      const { data: pendingRows } = await supabase
+        .from('broadcast_recipients')
+        .select('broadcast_id')
+        .in('broadcast_id', sendingIds)
+        .eq('status', 'pending');
+
+      const stillPendingSet = new Set(
+        (pendingRows ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
+      );
+
+      // ── Case A: no pending recipients → finalize immediately ─────────────
+      const readyToFinalize = sendingBroadcasts.filter(
+        (b: Broadcast) => !stillPendingSet.has(b.id),
+      );
+
+      // ── Case B: QR worker offline → all outbox rows stuck at 0 attempts ──
+      // Use 5-minute threshold so fresh broadcasts get caught on next poll
+      // rather than waiting an hour. The worker picks up in seconds when
+      // it IS running, so 5 min is a safe signal that it is offline.
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const qrStuckIds = sendingBroadcasts
+        .filter((b: Broadcast) => b.provider === 'qr' && stillPendingSet.has(b.id))
         .map((b: Broadcast) => b.id);
 
-      if (sendingIds.length > 0) {
-        // Which sending broadcasts still have at least one pending recipient?
-        const { data: pendingRows } = await supabase
-          .from('broadcast_recipients')
+      let abandonedIds = new Set<string>();
+      if (qrStuckIds.length > 0) {
+        // Find outbox rows that are still untouched after 5 minutes.
+        const { data: untouched } = await supabase
+          .from('whatsapp_message_outbox')
           .select('broadcast_id')
-          .in('broadcast_id', sendingIds)
-          .eq('status', 'pending');
+          .in('broadcast_id', qrStuckIds)
+          .eq('status', 'pending')
+          .eq('attempts', 0)
+          .lt('created_at', fiveMinutesAgo);
 
-        const stillPending = new Set(
-          (pendingRows ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
+        // Also confirm no row for that broadcast has attempts > 0
+        // (worker started but stalled mid-send — don't cancel those).
+        const candidateIds = new Set(
+          (untouched ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
         );
 
-        // Case 1: no pending recipients left — finalize now.
-        const toFinalize = currentData.filter(
-          (b: Broadcast) => b.status === 'sending' && !stillPending.has(b.id),
-        );
-
-        // Case 2: QR broadcasts where the worker was offline — all outbox
-        // rows are still pending with 0 attempts and are older than 1 hour.
-        // Detect these and mark recipients + broadcast as failed.
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        const qrSendingIds = currentData
-          .filter((b: Broadcast) => b.status === 'sending' && b.provider === 'qr' && stillPending.has(b.id))
-          .map((b: Broadcast) => b.id);
-
-        if (qrSendingIds.length > 0) {
-          const { data: abandonedOutbox } = await supabase
+        if (candidateIds.size > 0) {
+          const { data: activeRows } = await supabase
             .from('whatsapp_message_outbox')
             .select('broadcast_id')
-            .in('broadcast_id', qrSendingIds)
-            .eq('status', 'pending')
-            .eq('attempts', 0)
-            .lt('created_at', oneHourAgo);
+            .in('broadcast_id', [...candidateIds])
+            .gt('attempts', 0);
 
-          // A broadcast is "abandoned" if ALL its outbox rows are untouched.
-          // We identify broadcasts where at least one abandoned row exists,
-          // then verify no rows with attempts > 0 exist for that broadcast.
-          const abandonedBroadcastIds = new Set(
-            (abandonedOutbox ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
+          const activeSet = new Set(
+            (activeRows ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
           );
 
-          for (const broadcastId of abandonedBroadcastIds) {
-            // Mark pending outbox rows as failed.
+          // Only abandon if NO row has been attempted at all.
+          for (const id of candidateIds) {
+            if (!activeSet.has(id)) abandonedIds.add(id);
+          }
+        }
+      }
+
+      // Nothing to finalize — just render what we have.
+      if (readyToFinalize.length === 0 && abandonedIds.size === 0) {
+        setBroadcasts(currentData);
+        return;
+      }
+
+      // ── Optimistic update: flip status in local state immediately ─────────
+      // The UI shows the correct status right away; DB writes happen after.
+      const updatedLocally = currentData.map((b: Broadcast) => {
+        if (b.status !== 'sending') return b;
+        if (readyToFinalize.some((r: Broadcast) => r.id === b.id)) {
+          return { ...b, status: b.sent_count === 0 ? 'failed' : 'sent' };
+        }
+        if (abandonedIds.has(b.id)) {
+          return { ...b, status: b.sent_count === 0 ? 'failed' : 'sent' };
+        }
+        return b;
+      });
+      setBroadcasts(updatedLocally);
+
+      // ── Persist to DB (fire-and-forget, errors logged only) ───────────────
+      void (async () => {
+        try {
+          // Case A: finalize broadcasts with no pending recipients.
+          for (const b of readyToFinalize) {
+            const finalStatus = b.sent_count === 0 ? 'failed' : 'sent';
+            await supabase
+              .from('broadcasts')
+              .update({ status: finalStatus, updated_at: new Date().toISOString() })
+              .eq('id', b.id)
+              .eq('status', 'sending');
+          }
+
+          // Case B: mark abandoned QR broadcasts failed.
+          for (const broadcastId of abandonedIds) {
             await supabase
               .from('whatsapp_message_outbox')
-              .update({ status: 'failed', error: 'QR worker was offline — message never attempted', processed_at: new Date().toISOString() })
+              .update({
+                status: 'failed',
+                error: 'QR worker offline — message never attempted',
+                processed_at: new Date().toISOString(),
+              })
               .eq('broadcast_id', broadcastId)
               .eq('status', 'pending')
               .eq('attempts', 0);
 
-            // Mark pending broadcast_recipients as failed.
             await supabase
               .from('broadcast_recipients')
               .update({ status: 'failed' })
               .eq('broadcast_id', broadcastId)
               .eq('status', 'pending');
 
-            // Flip the broadcast itself.
             const bc = currentData.find((b: Broadcast) => b.id === broadcastId);
             const finalStatus = bc && bc.sent_count > 0 ? 'sent' : 'failed';
             await supabase
               .from('broadcasts')
-              .update({ status: finalStatus })
+              .update({ status: finalStatus, updated_at: new Date().toISOString() })
               .eq('id', broadcastId)
               .eq('status', 'sending');
           }
-
-          if (abandonedBroadcastIds.size > 0) {
-            const { data: refreshed } = await supabase
-              .from('broadcasts')
-              .select('*')
-              .order('created_at', { ascending: false });
-            setBroadcasts(refreshed ?? []);
-            return;
-          }
+        } catch (dbErr) {
+          console.error('[broadcasts] auto-finalize DB write failed:', dbErr);
         }
+      })();
 
-        for (const b of toFinalize) {
-          // sent_count = COUNT(sent|delivered|read|replied); 0 means nothing got through
-          const finalStatus = b.sent_count === 0 ? 'failed' : 'sent';
-          await supabase
-            .from('broadcasts')
-            .update({ status: finalStatus })
-            .eq('id', b.id)
-            .eq('status', 'sending'); // guard against race
-        }
-
-        if (toFinalize.length > 0) {
-          const { data: refreshed } = await supabase
-            .from('broadcasts')
-            .select('*')
-            .order('created_at', { ascending: false });
-          setBroadcasts(refreshed ?? []);
-          return;
-        }
-      }
-
-      setBroadcasts(currentData);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {

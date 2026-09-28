@@ -182,7 +182,7 @@ export default function BroadcastDetailPage() {
 
       if (bcError) throw bcError;
 
-      // Auto-finalize if stuck in "sending" with no more pending recipients.
+      // Auto-finalize if stuck in "sending".
       if (bc?.status === 'sending') {
         const { count: pendingCount } = await supabase
           .from('broadcast_recipients')
@@ -191,49 +191,57 @@ export default function BroadcastDetailPage() {
           .eq('status', 'pending');
 
         if ((pendingCount ?? 0) === 0) {
+          // Case A: all recipients are in a terminal state — finalize now.
           const finalStatus = bc.sent_count === 0 ? 'failed' : 'sent';
-          await supabase
+          bc.status = finalStatus; // optimistic
+          void supabase
             .from('broadcasts')
-            .update({ status: finalStatus })
+            .update({ status: finalStatus, updated_at: new Date().toISOString() })
             .eq('id', broadcastId)
             .eq('status', 'sending');
-          bc.status = finalStatus;
         } else if (bc.provider === 'qr') {
-          // Detect abandoned QR broadcasts: worker was offline — outbox rows
-          // never touched (attempts = 0) and older than 1 hour.
-          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-          const { count: abandonedCount } = await supabase
+          // Case B: QR worker was offline — 5-minute threshold so the detail
+          // page catches abandoned broadcasts on the first or second poll.
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+          const { data: untouched } = await supabase
             .from('whatsapp_message_outbox')
-            .select('id', { count: 'exact', head: true })
+            .select('id')
             .eq('broadcast_id', broadcastId)
             .eq('status', 'pending')
             .eq('attempts', 0)
-            .lt('created_at', oneHourAgo);
+            .lt('created_at', fiveMinutesAgo)
+            .limit(1);
 
-          if ((abandonedCount ?? 0) > 0) {
-            // Mark outbox rows failed
-            await supabase
+          if (untouched && untouched.length > 0) {
+            // Confirm no row has been attempted (worker didn't stall mid-send).
+            const { count: activeCount } = await supabase
               .from('whatsapp_message_outbox')
-              .update({ status: 'failed', error: 'QR worker was offline — message never attempted', processed_at: new Date().toISOString() })
+              .select('id', { count: 'exact', head: true })
               .eq('broadcast_id', broadcastId)
-              .eq('status', 'pending')
-              .eq('attempts', 0);
+              .gt('attempts', 0);
 
-            // Mark pending recipients failed
-            await supabase
-              .from('broadcast_recipients')
-              .update({ status: 'failed' })
-              .eq('broadcast_id', broadcastId)
-              .eq('status', 'pending');
-
-            // Flip broadcast status
-            const finalStatus = bc.sent_count > 0 ? 'sent' : 'failed';
-            await supabase
-              .from('broadcasts')
-              .update({ status: finalStatus })
-              .eq('id', broadcastId)
-              .eq('status', 'sending');
-            bc.status = finalStatus;
+            if ((activeCount ?? 0) === 0) {
+              const finalStatus = bc.sent_count > 0 ? 'sent' : 'failed';
+              bc.status = finalStatus; // optimistic — UI updates before DB write
+              void (async () => {
+                await supabase
+                  .from('whatsapp_message_outbox')
+                  .update({ status: 'failed', error: 'QR worker offline — message never attempted', processed_at: new Date().toISOString() })
+                  .eq('broadcast_id', broadcastId)
+                  .eq('status', 'pending')
+                  .eq('attempts', 0);
+                await supabase
+                  .from('broadcast_recipients')
+                  .update({ status: 'failed' })
+                  .eq('broadcast_id', broadcastId)
+                  .eq('status', 'pending');
+                await supabase
+                  .from('broadcasts')
+                  .update({ status: finalStatus, updated_at: new Date().toISOString() })
+                  .eq('id', broadcastId)
+                  .eq('status', 'sending');
+              })();
+            }
           }
         }
       }
