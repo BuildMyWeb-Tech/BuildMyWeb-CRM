@@ -198,6 +198,43 @@ export default function BroadcastDetailPage() {
             .eq('id', broadcastId)
             .eq('status', 'sending');
           bc.status = finalStatus;
+        } else if (bc.provider === 'qr') {
+          // Detect abandoned QR broadcasts: worker was offline — outbox rows
+          // never touched (attempts = 0) and older than 1 hour.
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+          const { count: abandonedCount } = await supabase
+            .from('whatsapp_message_outbox')
+            .select('id', { count: 'exact', head: true })
+            .eq('broadcast_id', broadcastId)
+            .eq('status', 'pending')
+            .eq('attempts', 0)
+            .lt('created_at', oneHourAgo);
+
+          if ((abandonedCount ?? 0) > 0) {
+            // Mark outbox rows failed
+            await supabase
+              .from('whatsapp_message_outbox')
+              .update({ status: 'failed', error: 'QR worker was offline — message never attempted', processed_at: new Date().toISOString() })
+              .eq('broadcast_id', broadcastId)
+              .eq('status', 'pending')
+              .eq('attempts', 0);
+
+            // Mark pending recipients failed
+            await supabase
+              .from('broadcast_recipients')
+              .update({ status: 'failed' })
+              .eq('broadcast_id', broadcastId)
+              .eq('status', 'pending');
+
+            // Flip broadcast status
+            const finalStatus = bc.sent_count > 0 ? 'sent' : 'failed';
+            await supabase
+              .from('broadcasts')
+              .update({ status: finalStatus })
+              .eq('id', broadcastId)
+              .eq('status', 'sending');
+            bc.status = finalStatus;
+          }
         }
       }
 

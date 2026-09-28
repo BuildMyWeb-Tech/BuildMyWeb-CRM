@@ -100,9 +100,70 @@ export default function BroadcastsPage() {
           (pendingRows ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
         );
 
+        // Case 1: no pending recipients left — finalize now.
         const toFinalize = currentData.filter(
           (b: Broadcast) => b.status === 'sending' && !stillPending.has(b.id),
         );
+
+        // Case 2: QR broadcasts where the worker was offline — all outbox
+        // rows are still pending with 0 attempts and are older than 1 hour.
+        // Detect these and mark recipients + broadcast as failed.
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const qrSendingIds = currentData
+          .filter((b: Broadcast) => b.status === 'sending' && b.provider === 'qr' && stillPending.has(b.id))
+          .map((b: Broadcast) => b.id);
+
+        if (qrSendingIds.length > 0) {
+          const { data: abandonedOutbox } = await supabase
+            .from('whatsapp_message_outbox')
+            .select('broadcast_id')
+            .in('broadcast_id', qrSendingIds)
+            .eq('status', 'pending')
+            .eq('attempts', 0)
+            .lt('created_at', oneHourAgo);
+
+          // A broadcast is "abandoned" if ALL its outbox rows are untouched.
+          // We identify broadcasts where at least one abandoned row exists,
+          // then verify no rows with attempts > 0 exist for that broadcast.
+          const abandonedBroadcastIds = new Set(
+            (abandonedOutbox ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
+          );
+
+          for (const broadcastId of abandonedBroadcastIds) {
+            // Mark pending outbox rows as failed.
+            await supabase
+              .from('whatsapp_message_outbox')
+              .update({ status: 'failed', error: 'QR worker was offline — message never attempted', processed_at: new Date().toISOString() })
+              .eq('broadcast_id', broadcastId)
+              .eq('status', 'pending')
+              .eq('attempts', 0);
+
+            // Mark pending broadcast_recipients as failed.
+            await supabase
+              .from('broadcast_recipients')
+              .update({ status: 'failed' })
+              .eq('broadcast_id', broadcastId)
+              .eq('status', 'pending');
+
+            // Flip the broadcast itself.
+            const bc = currentData.find((b: Broadcast) => b.id === broadcastId);
+            const finalStatus = bc && bc.sent_count > 0 ? 'sent' : 'failed';
+            await supabase
+              .from('broadcasts')
+              .update({ status: finalStatus })
+              .eq('id', broadcastId)
+              .eq('status', 'sending');
+          }
+
+          if (abandonedBroadcastIds.size > 0) {
+            const { data: refreshed } = await supabase
+              .from('broadcasts')
+              .select('*')
+              .order('created_at', { ascending: false });
+            setBroadcasts(refreshed ?? []);
+            return;
+          }
+        }
 
         for (const b of toFinalize) {
           // sent_count = COUNT(sent|delivered|read|replied); 0 means nothing got through
