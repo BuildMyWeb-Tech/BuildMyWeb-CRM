@@ -78,7 +78,53 @@ export default function BroadcastsPage() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setBroadcasts(data ?? []);
+
+      const currentData = data ?? [];
+
+      // Auto-finalize broadcasts stuck in "sending" — happens when the
+      // browser tab closed before Step 5 of the send hook ran, or when
+      // the QR worker finishes all jobs but doesn't flip the parent row.
+      const sendingIds = currentData
+        .filter((b: Broadcast) => b.status === 'sending')
+        .map((b: Broadcast) => b.id);
+
+      if (sendingIds.length > 0) {
+        // Which sending broadcasts still have at least one pending recipient?
+        const { data: pendingRows } = await supabase
+          .from('broadcast_recipients')
+          .select('broadcast_id')
+          .in('broadcast_id', sendingIds)
+          .eq('status', 'pending');
+
+        const stillPending = new Set(
+          (pendingRows ?? []).map((r: { broadcast_id: string }) => r.broadcast_id),
+        );
+
+        const toFinalize = currentData.filter(
+          (b: Broadcast) => b.status === 'sending' && !stillPending.has(b.id),
+        );
+
+        for (const b of toFinalize) {
+          // sent_count = COUNT(sent|delivered|read|replied); 0 means nothing got through
+          const finalStatus = b.sent_count === 0 ? 'failed' : 'sent';
+          await supabase
+            .from('broadcasts')
+            .update({ status: finalStatus })
+            .eq('id', b.id)
+            .eq('status', 'sending'); // guard against race
+        }
+
+        if (toFinalize.length > 0) {
+          const { data: refreshed } = await supabase
+            .from('broadcasts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          setBroadcasts(refreshed ?? []);
+          return;
+        }
+      }
+
+      setBroadcasts(currentData);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {

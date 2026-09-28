@@ -181,6 +181,26 @@ export default function BroadcastDetailPage() {
         .single();
 
       if (bcError) throw bcError;
+
+      // Auto-finalize if stuck in "sending" with no more pending recipients.
+      if (bc?.status === 'sending') {
+        const { count: pendingCount } = await supabase
+          .from('broadcast_recipients')
+          .select('id', { count: 'exact', head: true })
+          .eq('broadcast_id', broadcastId)
+          .eq('status', 'pending');
+
+        if ((pendingCount ?? 0) === 0) {
+          const finalStatus = bc.sent_count === 0 ? 'failed' : 'sent';
+          await supabase
+            .from('broadcasts')
+            .update({ status: finalStatus })
+            .eq('id', broadcastId)
+            .eq('status', 'sending');
+          bc.status = finalStatus;
+        }
+      }
+
       setBroadcast(bc);
 
       const { data: recs, error: recsError } = await supabase

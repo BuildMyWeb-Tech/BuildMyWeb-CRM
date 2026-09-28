@@ -14,8 +14,42 @@
  *     errors are logged server-side only.
  */
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
+
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+// Mirror of flagBroadcastReplyIfAny in the Meta webhook, but scoped
+// to QR broadcasts so replies received via the Baileys worker also
+// advance the broadcast's replied_count.
+async function flagQrBroadcastReply(accountId: string, contactId: string) {
+  try {
+    const admin = adminClient()
+    const { data: recs, error } = await admin
+      .from('broadcast_recipients')
+      .select('id, status, broadcast_id, broadcasts!inner(account_id, provider)')
+      .eq('contact_id', contactId)
+      .eq('broadcasts.account_id', accountId)
+      .in('status', ['sent', 'delivered', 'read'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error || !recs || recs.length === 0) return
+
+    await admin
+      .from('broadcast_recipients')
+      .update({ status: 'replied', replied_at: new Date().toISOString() })
+      .eq('id', recs[0].id)
+  } catch (err) {
+    console.error('[internal/dispatch] flagQrBroadcastReply failed:', err)
+  }
+}
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? ''
 
@@ -101,6 +135,10 @@ export async function POST(request: Request) {
           console.error('[internal/whatsapp/dispatch] automation failed:', err)
         )
       }
+
+      // Mark the most recent broadcast recipient as "replied" if this
+      // inbound is from a contact that received a QR broadcast.
+      await flagQrBroadcastReply(accountId, contactId)
     } catch (err) {
       console.error('[internal/whatsapp/dispatch] dispatch error:', err)
     }
