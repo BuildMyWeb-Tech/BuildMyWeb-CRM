@@ -250,7 +250,7 @@ export default function ClientsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {/* Total Clients */}
           <div className="bg-[#1a1f2e] border border-[#2a3045] rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
