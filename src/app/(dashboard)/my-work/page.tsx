@@ -136,35 +136,48 @@ export default function MyWorkPage() {
       const uid = user.id;
       const nowStr = new Date().toISOString().slice(0, 10);
 
-      const [ptRes, pdRes, clRes] = await Promise.all([
-        supabase
-          .from("project_tasks")
-          .select("id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids")
-          .eq("account_id", accountId)
-          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`)
-          // Only current tasks: show_date is null (no schedule) or on/before today
-          .or(`show_date.is.null,show_date.lte.${nowStr}`),
-        supabase
-          .from("product_tasks")
-          .select("id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids")
-          .eq("account_id", accountId)
-          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`)
-          // Only current tasks: show_date is null (no schedule) or on/before today
-          .or(`show_date.is.null,show_date.lte.${nowStr}`),
-        supabase
-          .from("client_leads")
+      // Split show_date filter into two explicit queries to avoid
+      // PostgREST chained-or ambiguity: one for null, one for lte today.
+      const ptSelect = "id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      const pdSelect = "id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
+      const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
+
+      const [ptNull, ptToday, pdNull, pdToday, clRes] = await Promise.all([
+        // Project tasks: no show_date (always current)
+        supabase.from("project_tasks").select(ptSelect)
+          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
+        // Project tasks: show_date is today or earlier
+        supabase.from("project_tasks").select(ptSelect)
+          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr),
+        // Product tasks: no show_date
+        supabase.from("product_tasks").select(pdSelect)
+          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
+        // Product tasks: show_date is today or earlier
+        supabase.from("product_tasks").select(pdSelect)
+          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr),
+        // Client leads (no show_date concept)
+        supabase.from("client_leads")
           .select("id, title, status, next_follow_up_at, allocated_user_id, allocated_user_ids")
           .eq("account_id", accountId)
           .or(`allocated_user_id.eq.${uid},allocated_user_ids.cs.{${uid}}`),
       ]);
 
-      const normPt = (ptRes.data ?? []).map((t: Record<string, unknown>) => ({
+      // Merge and deduplicate by id (a task with show_date=today matches both queries)
+      const mergedPt = [...(ptNull.data ?? []), ...(ptToday.data ?? [])];
+      const seenPt = new Set<string>();
+      const ptData = mergedPt.filter((t) => { if (seenPt.has(t.id)) return false; seenPt.add(t.id); return true; });
+
+      const mergedPd = [...(pdNull.data ?? []), ...(pdToday.data ?? [])];
+      const seenPd = new Set<string>();
+      const pdData = mergedPd.filter((t) => { if (seenPd.has(t.id)) return false; seenPd.add(t.id); return true; });
+
+      const normPt = ptData.map((t: Record<string, unknown>) => ({
         ...t,
         stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,
         project: Array.isArray(t.project) ? (t.project[0] ?? null) : t.project,
       })) as ProjectTask[];
 
-      const normPd = (pdRes.data ?? []).map((t: Record<string, unknown>) => ({
+      const normPd = pdData.map((t: Record<string, unknown>) => ({
         ...t,
         stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,
         product: Array.isArray(t.product) ? (t.product[0] ?? null) : t.product,
