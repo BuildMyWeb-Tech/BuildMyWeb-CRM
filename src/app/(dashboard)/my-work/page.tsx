@@ -12,6 +12,7 @@ import Link from "next/link";
 interface ProjectTask {
   id: string; title: string;
   show_date: string | null;
+  due_date: string | null;
   stage?: { name: string } | null;
   project?: { id: string; name: string } | null;
   assignee_user_id: string | null; assignee_user_ids: string[];
@@ -138,17 +139,19 @@ export default function MyWorkPage() {
 
       // Split show_date filter into two explicit queries to avoid
       // PostgREST chained-or ambiguity: one for null, one for lte today.
-      const ptSelect = "id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      const ptSelect = "id, title, show_date, due_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
       const pdSelect = "id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
       const [ptNull, ptToday, pdNull, pdToday, clRes] = await Promise.all([
-        // Project tasks: no show_date (always current)
+        // Project tasks: no show_date (always current) AND due_date not in future
         supabase.from("project_tasks").select(ptSelect)
-          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
-        // Project tasks: show_date is today or earlier
+          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null)
+          .or(`due_date.is.null,due_date.lte.${nowStr}`),
+        // Project tasks: show_date is today or earlier AND due_date not in future
         supabase.from("project_tasks").select(ptSelect)
-          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr),
+          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr)
+          .or(`due_date.is.null,due_date.lte.${nowStr}`),
         // Product tasks: no show_date
         supabase.from("product_tasks").select(pdSelect)
           .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
