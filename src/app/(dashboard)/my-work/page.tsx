@@ -12,7 +12,6 @@ import Link from "next/link";
 interface ProjectTask {
   id: string; title: string;
   show_date: string | null;
-  due_date: string | null;
   stage?: { name: string } | null;
   project?: { id: string; name: string } | null;
   assignee_user_id: string | null; assignee_user_ids: string[];
@@ -113,8 +112,8 @@ export default function MyWorkPage() {
   // Per-column overdue filter
   const [clOverdue, setClOverdue] = useState(false);
 
-  // Per-column sort
-  const [ptSort, setPtSort] = useState<"title" | "project" | "stage">("title");
+  // Per-column sort — project tasks: sort by project only (no task-title sort)
+  const [ptSort, setPtSort] = useState<"project" | "stage">("project");
   const [ptDir, setPtDir] = useState<SortDir>("asc");
   const [pdSort, setPdSort] = useState<"title" | "stage">("title");
   const [pdDir, setPdDir] = useState<SortDir>("asc");
@@ -139,19 +138,17 @@ export default function MyWorkPage() {
 
       // Split show_date filter into two explicit queries to avoid
       // PostgREST chained-or ambiguity: one for null, one for lte today.
-      const ptSelect = "id, title, show_date, due_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      const ptSelect = "id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
       const pdSelect = "id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
       const [ptNull, ptToday, pdNull, pdToday, clRes] = await Promise.all([
-        // Project tasks: no show_date (always current) AND due_date not in future
+        // Project tasks: no show_date (always current)
         supabase.from("project_tasks").select(ptSelect)
-          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null)
-          .or(`due_date.is.null,due_date.lte.${nowStr}`),
-        // Project tasks: show_date is today or earlier AND due_date not in future
+          .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
+        // Project tasks: show_date is today or earlier
         supabase.from("project_tasks").select(ptSelect)
-          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr)
-          .or(`due_date.is.null,due_date.lte.${nowStr}`),
+          .eq("account_id", accountId).or(assigneeFilter).lte("show_date", nowStr),
         // Product tasks: no show_date
         supabase.from("product_tasks").select(pdSelect)
           .eq("account_id", accountId).or(assigneeFilter).is("show_date", null),
@@ -200,9 +197,8 @@ export default function MyWorkPage() {
   const visiblePt = (projectTasks ?? [])
     .sort((a, b) => {
       const d = ptDir === "asc" ? 1 : -1;
-      if (ptSort === "project") return d * (a.project?.name ?? "").localeCompare(b.project?.name ?? "");
       if (ptSort === "stage") return d * (a.stage?.name ?? "").localeCompare(b.stage?.name ?? "");
-      return d * a.title.localeCompare(b.title);
+      return d * (a.project?.name ?? "").localeCompare(b.project?.name ?? "");
     });
 
   const visiblePd = (productTasks ?? [])
@@ -287,8 +283,11 @@ export default function MyWorkPage() {
                 <thead className="sticky top-0 z-10 bg-[#0f1117] border-b border-[#2a3045]">
                   <tr>
                     <th className="px-4 py-2 text-left">
-                      <SortBtn label="Task" active={ptSort === "title"} dir={ptDir}
-                        onClick={() => toggle("title", ptSort, ptDir, setPtSort, setPtDir)} />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Task</span>
+                        <SortBtn label="Project" active={ptSort === "project"} dir={ptDir}
+                          onClick={() => toggle("project", ptSort, ptDir, setPtSort, setPtDir)} />
+                      </div>
                     </th>
                     <th className="px-3 py-2 text-left">
                       <SortBtn label="Stage" active={ptSort === "stage"} dir={ptDir}
