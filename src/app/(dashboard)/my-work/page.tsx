@@ -141,12 +141,16 @@ export default function MyWorkPage() {
           .from("project_tasks")
           .select("id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids")
           .eq("account_id", accountId)
-          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`),
+          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`)
+          // Only current tasks: show_date is null (no schedule) or on/before today
+          .or(`show_date.is.null,show_date.lte.${nowStr}`),
         supabase
           .from("product_tasks")
           .select("id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids")
           .eq("account_id", accountId)
-          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`),
+          .or(`assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`)
+          // Only current tasks: show_date is null (no schedule) or on/before today
+          .or(`show_date.is.null,show_date.lte.${nowStr}`),
         supabase
           .from("client_leads")
           .select("id, title, status, next_follow_up_at, allocated_user_id, allocated_user_ids")
@@ -166,9 +170,8 @@ export default function MyWorkPage() {
         product: Array.isArray(t.product) ? (t.product[0] ?? null) : t.product,
       })) as ProductTask[];
 
-      // Only show tasks whose show_date is today or earlier (or null = always show)
-      setProjectTasks(normPt.filter((t) => !t.show_date || t.show_date <= nowStr));
-      setProductTasks(normPd.filter((t) => !t.show_date || t.show_date <= nowStr));
+      setProjectTasks(normPt);
+      setProductTasks(normPd);
       setLeads(clRes.data ?? []);
     } finally {
       setLoading(false);
