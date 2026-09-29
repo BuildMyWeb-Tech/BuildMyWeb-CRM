@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2 } from 'lucide-react';
+import { Radio, Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -65,9 +65,24 @@ export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [qrOffline, setQrOffline] = useState(false);
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function checkQrWorker() {
+    try {
+      const supabase = createClient();
+      const { data: qrAccount } = await supabase
+        .from('whatsapp_accounts')
+        .select('connection_state')
+        .eq('provider', 'qr')
+        .maybeSingle();
+      setQrOffline(!!qrAccount && qrAccount.connection_state !== 'CONNECTED');
+    } catch {
+      // ignore — non-critical diagnostic
+    }
+  }
 
   async function fetchBroadcasts() {
     try {
@@ -223,6 +238,7 @@ export default function BroadcastsPage() {
 
   useEffect(() => {
     fetchBroadcasts();
+    checkQrWorker();
   }, []);
 
   const anySending = useMemo(
@@ -287,6 +303,17 @@ export default function BroadcastsPage() {
 
   return (
     <div className="space-y-6">
+      {/* QR worker offline warning */}
+      {qrOffline && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            Your WhatsApp QR connection is offline. New QR broadcasts will be queued but won&apos;t deliver until you reconnect in{' '}
+            <a href="/whatsapp-connect" className="underline hover:text-amber-300">WhatsApp Connect</a>.
+          </span>
+        </div>
+      )}
+
       {/* Top indeterminate progress bar: only visible while a broadcast
           is mid-send. Pure CSS animation so no extra deps. */}
       {anySending && (

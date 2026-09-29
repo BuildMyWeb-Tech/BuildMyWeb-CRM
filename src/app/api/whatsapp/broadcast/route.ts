@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       template_name,
       template_language,
       template_params,
+      broadcast_id,
     } = body
 
     // Normalize to a list of {phone, params} regardless of shape.
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (qrAccount?.connection_state === 'CONNECTED') {
-      return handleQrBroadcast(supabase, accountId, qrAccount.id, recipients)
+      return handleQrBroadcast(supabase, accountId, qrAccount.id, recipients, broadcast_id as string | undefined)
     }
 
     const { data: config, error: configError } = await supabase
@@ -280,6 +281,7 @@ async function handleQrBroadcast(
   accountId: string,
   waAccountId: string,
   recipients: NewRecipient[],
+  broadcastId?: string,
 ): Promise<NextResponse> {
   const results: BroadcastResult[] = []
   let sentCount = 0
@@ -302,16 +304,18 @@ async function handleQrBroadcast(
     }
 
     const idempotencyKey = randomUUID()
+    const outboxRow: Record<string, unknown> = {
+      account_id: accountId,
+      whatsapp_account_id: waAccountId,
+      recipient: sanitized,
+      message_type: 'text',
+      payload: { text },
+      idempotency_key: idempotencyKey,
+    }
+    if (broadcastId) outboxRow.broadcast_id = broadcastId
     const { error } = await supabase
       .from('whatsapp_message_outbox')
-      .insert({
-        account_id: accountId,
-        whatsapp_account_id: waAccountId,
-        recipient: sanitized,
-        message_type: 'text',
-        payload: { text },
-        idempotency_key: idempotencyKey,
-      })
+      .insert(outboxRow)
 
     if (error) {
       results.push({ phone: recipient.phone, status: 'failed', error: error.message })
