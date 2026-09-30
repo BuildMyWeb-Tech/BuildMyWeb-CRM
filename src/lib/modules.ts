@@ -79,6 +79,7 @@ export interface CrmModule {
 // Global links that sit above every module (not module-specific:
 // Dashboard aggregates all modules' data, Notifications spans them).
 export const GLOBAL_NAV_ITEMS: ModuleNavItem[] = [
+  { href: "/my-work", labelKey: "myWork", icon: Rows3, minRole: "viewer" },
   { href: "/business-dashboard", labelKey: "businessDashboard", icon: LayoutDashboard, minRole: "viewer" },
   { href: "/my-pages", labelKey: "myPages", icon: LayoutGrid, minRole: "viewer" },
 ];

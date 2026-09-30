@@ -23,6 +23,19 @@ export async function POST(request: Request) {
 
     const admin = supabaseAdmin()
 
+    // Check QR worker liveness (heartbeat within 2 min = alive)
+    const { data: qrAccount } = await admin
+      .from('whatsapp_accounts')
+      .select('connection_state, last_heartbeat_at')
+      .eq('account_id', accountId)
+      .eq('provider', 'qr')
+      .maybeSingle()
+    const workerOffline =
+      !qrAccount ||
+      qrAccount.connection_state !== 'CONNECTED' ||
+      !qrAccount.last_heartbeat_at ||
+      new Date(qrAccount.last_heartbeat_at).getTime() < Date.now() - 2 * 60 * 1000
+
     // Verify the broadcast belongs to this account and is failed
     const { data: broadcast, error: bErr } = await admin
       .from('broadcasts')
@@ -105,6 +118,7 @@ export async function POST(request: Request) {
       retried: retriedCount,
       attempt: retryCount + 1,
       max_retries: MAX_RETRIES,
+      workerOffline,
     })
   } catch (error) {
     console.error('[broadcast-retry] error:', error)

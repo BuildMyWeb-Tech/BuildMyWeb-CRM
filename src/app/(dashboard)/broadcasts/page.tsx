@@ -87,11 +87,16 @@ export default function BroadcastsPage() {
         toast.error(payload?.error ?? 'Retry failed');
         return;
       }
-      toast.success(`Retrying broadcast — ${payload.retried} message${payload.retried !== 1 ? 's' : ''} queued (attempt ${payload.attempt}/${payload.max_retries})`);
-      // Optimistically update status in list
+      if (payload?.workerOffline) {
+        toast.warning(`${payload.retried} message${payload.retried !== 1 ? 's' : ''} queued (attempt ${payload.attempt}/${payload.max_retries}) — WhatsApp worker is offline. Reconnect in WhatsApp Connect for messages to deliver.`);
+      } else {
+        toast.success(`Retrying broadcast — ${payload.retried} message${payload.retried !== 1 ? 's' : ''} queued (attempt ${payload.attempt}/${payload.max_retries})`);
+      }
+      // Optimistically update status in list and refresh worker state
       setBroadcasts((prev) =>
         prev.map((b) => b.id === broadcastId ? { ...b, status: 'sending' as BroadcastStatus } : b),
       );
+      if (payload?.workerOffline) setQrOffline(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unexpected error');
     } finally {
@@ -104,10 +109,18 @@ export default function BroadcastsPage() {
       const supabase = createClient();
       const { data: qrAccount } = await supabase
         .from('whatsapp_accounts')
-        .select('connection_state')
+        .select('connection_state, last_heartbeat_at')
         .eq('provider', 'qr')
         .maybeSingle();
-      setQrOffline(!!qrAccount && qrAccount.connection_state !== 'CONNECTED');
+      if (!qrAccount) {
+        setQrOffline(false);
+        return;
+      }
+      const notConnected = qrAccount.connection_state !== 'CONNECTED';
+      const staleHeartbeat =
+        !qrAccount.last_heartbeat_at ||
+        new Date(qrAccount.last_heartbeat_at).getTime() < Date.now() - 2 * 60 * 1000;
+      setQrOffline(notConnected || staleHeartbeat);
     } catch {
       // ignore — non-critical diagnostic
     }
