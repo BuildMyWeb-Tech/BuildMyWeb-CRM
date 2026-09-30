@@ -13,11 +13,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { Radio, Plus, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 
 /**
  * Poll cadence while any broadcast is sending. Kept modest so we don't
@@ -66,9 +67,37 @@ export default function BroadcastsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [qrOffline, setQrOffline] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function retryBroadcast(e: React.MouseEvent, broadcastId: string) {
+    e.stopPropagation(); // don't navigate to detail
+    if (retryingId) return;
+    setRetryingId(broadcastId);
+    try {
+      const res = await fetch('/api/whatsapp/broadcast/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ broadcast_id: broadcastId }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(payload?.error ?? 'Retry failed');
+        return;
+      }
+      toast.success(`Retrying broadcast — ${payload.retried} message${payload.retried !== 1 ? 's' : ''} queued (attempt ${payload.attempt}/${payload.max_retries})`);
+      // Optimistically update status in list
+      setBroadcasts((prev) =>
+        prev.map((b) => b.id === broadcastId ? { ...b, status: 'sending' as BroadcastStatus } : b),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unexpected error');
+    } finally {
+      setRetryingId(null);
+    }
+  }
 
   async function checkQrWorker() {
     try {
@@ -402,6 +431,7 @@ export default function BroadcastsPage() {
                 <TableHead className="hidden text-muted-foreground lg:table-cell">{t('table.read')}</TableHead>
                 <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
                 <TableHead className="hidden text-muted-foreground sm:table-cell">{t('table.date')}</TableHead>
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -451,6 +481,22 @@ export default function BroadcastsPage() {
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {new Date(broadcast.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      {broadcast.status === 'failed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs text-orange-400 border-orange-500/30 hover:bg-orange-500/10"
+                          disabled={retryingId === broadcast.id}
+                          onClick={(e) => retryBroadcast(e, broadcast.id)}
+                        >
+                          {retryingId === broadcast.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <RefreshCw className="h-3 w-3" />}
+                          Retry
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );

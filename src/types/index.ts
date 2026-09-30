@@ -1027,6 +1027,7 @@ export interface Broadcast {
   media_filename?: string | null;
   media_mimetype?: string | null;
   send_interval_ms?: number;
+  retry_count?: number;
   created_at: string;
 }
 

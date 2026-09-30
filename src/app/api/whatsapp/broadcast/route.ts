@@ -311,6 +311,7 @@ async function handleQrBroadcast(
       message_type: 'text',
       payload: { text },
       idempotency_key: idempotencyKey,
+      max_attempts: 5,
     }
     if (broadcastId) outboxRow.broadcast_id = broadcastId
     const { error } = await supabase
