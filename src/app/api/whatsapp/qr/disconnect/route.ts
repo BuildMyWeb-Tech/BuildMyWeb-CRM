@@ -16,11 +16,20 @@ export async function POST() {
   try {
     const { supabase, accountId } = await requireRole('admin')
 
+    const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('whatsapp_accounts')
       .update({
-        disconnect_requested_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        disconnect_requested_at: now,
+        // Force state immediately so the UI reflects the disconnect even
+        // when the worker is offline and cannot act on disconnect_requested_at.
+        connection_state: 'LOGGED_OUT',
+        status: 'disconnected',
+        qr_data_uri: null,
+        qr_generated_at: null,
+        worker_instance_id: null,
+        last_heartbeat_at: null,
+        updated_at: now,
       })
       .eq('account_id', accountId)
       .eq('provider', 'qr')

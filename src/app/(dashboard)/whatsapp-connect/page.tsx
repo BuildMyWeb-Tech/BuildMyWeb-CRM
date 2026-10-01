@@ -273,6 +273,8 @@ export default function WhatsAppConnectPage() {
   }, [pageState])
 
   useEffect(() => {
+    // Poll while not connected — covers qr/connecting/logged_out/reconnecting states
+    // so the QR code appears as soon as the worker generates one.
     if (pageState === 'connected') return
     const id = setInterval(fetchStatus, 3000)
     return () => clearInterval(id)
@@ -309,6 +311,8 @@ export default function WhatsAppConnectPage() {
     try {
       await fetch('/api/whatsapp/qr/disconnect', { method: 'POST' })
       await fetchStatus()
+      // Auto-open pair dialog so user can immediately scan a new QR
+      setPairOpen(true)
     } finally {
       setActionBusy(false)
     }

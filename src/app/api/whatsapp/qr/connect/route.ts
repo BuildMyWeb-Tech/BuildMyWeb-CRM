@@ -25,6 +25,28 @@ export async function POST() {
       .maybeSingle()
 
     if (existing) {
+      // If the account exists but is logged-out/disconnected, reset it so
+      // the worker generates a fresh QR on next startup.
+      const needsReset = ['LOGGED_OUT', 'DISCONNECTED', 'ERROR'].includes(
+        existing.connection_state as string,
+      )
+      if (needsReset) {
+        const now = new Date().toISOString()
+        const { error: resetErr } = await supabaseAdmin()
+          .from('whatsapp_accounts')
+          .update({
+            connection_state: 'DISCONNECTED',
+            status: 'disconnected',
+            qr_data_uri: null,
+            qr_generated_at: null,
+            disconnect_requested_at: null,
+            last_error: null,
+            reconnect_attempts: 0,
+            updated_at: now,
+          })
+          .eq('id', existing.id)
+        if (resetErr) console.warn('[qr/connect] reset error:', resetErr.message)
+      }
       return NextResponse.json({ account: existing, created: false })
     }
 
