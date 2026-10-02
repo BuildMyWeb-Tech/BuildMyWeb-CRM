@@ -17,6 +17,7 @@
  *   → (CRM QR UI scans) → CONNECTED → session saved to DB
  */
 import 'dotenv/config'
+import { createServer } from 'node:http'
 
 import { config } from './config.js'
 import { logger } from './logger.js'
@@ -27,6 +28,16 @@ import { ConnectionManager } from './connection/manager.js'
 import { InboxRepository } from './inbox/repository.js'
 import { OutboxConsumer } from './outbox/consumer.js'
 import { Heartbeat } from './health/heartbeat.js'
+
+// Render Web Services require an open port. This minimal HTTP server
+// satisfies that requirement and doubles as a health-check endpoint.
+const PORT = parseInt(process.env['PORT'] ?? '10000', 10)
+createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ status: 'ok', worker: process.env['WHATSAPP_WORKER_ID'] ?? 'worker' }))
+}).listen(PORT, () => {
+  logger.info('health_server_listening', { port: PORT })
+})
 
 async function main() {
   logger.info('worker_started', {
