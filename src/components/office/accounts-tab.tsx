@@ -222,6 +222,21 @@ export function AccountsTab() {
         toast.error(data?.error ?? "Could not save payment.");
         return;
       }
+      // Auto-create invoice when a new payment is recorded as paid
+      if (!editingId && paymentStatus === "paid") {
+        const clientName = clients.find((c) => c.id === formClientId)?.name ?? "";
+        await fetch("/api/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_name: clientName,
+            amount: Number(amount),
+            status: "paid",
+            issue_date: receivedDate || new Date().toISOString().slice(0, 10),
+            notes: [serviceDescription.trim(), notes.trim()].filter(Boolean).join(" — ") || null,
+          }),
+        }).catch(() => null);
+      }
       setDialogOpen(false);
       loadPayments();
       toast.success(editingId ? "Payment updated." : "Payment recorded.");
@@ -253,16 +268,31 @@ export function AccountsTab() {
     (sum, p) => sum + (p.allocations ?? []).filter((a) => a.recipient_type === "company").reduce((s, a) => s + Number(a.amount), 0),
     0,
   );
-  const perPersonTotals = new Map<string, number>();
+  type LeaderEntry = { key: string; name: string; total: number; type: "team_member" | "outsource"; role?: string };
+  const leaderMap = new Map<string, LeaderEntry>();
   for (const p of allPayments) {
     for (const a of p.allocations ?? []) {
       if (a.recipient_type === "team_member" && a.recipient_user_id) {
-        perPersonTotals.set(a.recipient_user_id, (perPersonTotals.get(a.recipient_user_id) ?? 0) + Number(a.amount));
+        const key = `m:${a.recipient_user_id}`;
+        const prev = leaderMap.get(key);
+        leaderMap.set(key, {
+          key, type: "team_member",
+          name: members.find((m) => m.user_id === a.recipient_user_id)?.full_name ?? "Unknown",
+          total: (prev?.total ?? 0) + Number(a.amount),
+        });
+      } else if (a.recipient_type === "outsource" && a.outsource_name) {
+        const key = `o:${a.outsource_name}`;
+        const prev = leaderMap.get(key);
+        leaderMap.set(key, {
+          key, type: "outsource",
+          name: a.outsource_name,
+          role: (a as { outsource_role?: string }).outsource_role ?? undefined,
+          total: (prev?.total ?? 0) + Number(a.amount),
+        });
       }
     }
   }
-  const leaderboard = [...perPersonTotals.entries()]
-    .map(([userId, total]) => ({ userId, total, name: members.find((m) => m.user_id === userId)?.full_name ?? "Unknown" }))
+  const leaderboard = [...leaderMap.values()]
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
 
@@ -358,8 +388,15 @@ export function AccountsTab() {
             ) : (
               <div className="flex flex-col gap-1">
                 {leaderboard.map((l) => (
-                  <div key={l.userId} className="flex items-center justify-between text-sm">
-                    <span className="truncate text-foreground">{l.name}</span>
+                  <div key={l.key} className="flex items-center justify-between text-sm gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-foreground">{l.name}</span>
+                      {l.type === "outsource" && (
+                        <span className="shrink-0 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-400">
+                          {l.role ? l.role : "Outsource"}
+                        </span>
+                      )}
+                    </div>
                     <span className="shrink-0 text-muted-foreground">{formatCurrency(l.total)}</span>
                   </div>
                 ))}

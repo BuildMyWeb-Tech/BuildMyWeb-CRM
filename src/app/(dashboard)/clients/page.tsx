@@ -229,12 +229,15 @@ export default function ClientsPage() {
   const archivedCount = allClients.filter((c) => c.status === "archived").length;
   const completedCount = allClients.filter((c) => c.status === "completed").length;
 
-  const visibleClients = allClients.filter((c) => {
-    const matchesStatus = statusFilter === "all" || c.status === statusFilter;
-    const matchesSearch =
-      !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const STATUS_ORDER: Record<string, number> = { active: 0, inactive: 1, archived: 2, completed: 3 };
+  const visibleClients = allClients
+    .filter((c) => {
+      const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+      const matchesSearch =
+        !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesStatus && matchesSearch;
+    })
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
 
   return (
     <div className="flex min-h-screen bg-[#0f1117]">

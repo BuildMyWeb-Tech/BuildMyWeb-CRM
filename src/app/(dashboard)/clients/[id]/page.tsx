@@ -27,7 +27,7 @@ import type {
 } from "@/types";
 import { toast } from "sonner";
 
-type C360Tab = "overview" | "projects" | "tasks" | "files" | "payments" | "notes" | "info" | "scope";
+type C360Tab = "overview" | "projects" | "tasks" | "files" | "payments" | "notes" | "info";
 
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived", "completed"];
 const STATUS_STYLE: Record<ClientStatus, string> = {
@@ -101,6 +101,12 @@ export default function ClientDetailPage() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [payments, setPayments] = useState<ClientPayment[] | null>(null);
   const [notes, setNotes] = useState<ClientNote[] | null>(null);
+  const [clientTasks, setClientTasks] = useState<Array<{
+    id: string; title: string; priority: string; due_date: string | null;
+    show_date: string | null; assignee_user_ids: string[];
+    stage?: { name: string } | null; project?: { id: string; name: string } | null;
+  }> | null>(null);
+  const [clientTasksLoading, setClientTasksLoading] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
 
@@ -159,7 +165,27 @@ export default function ClientDetailPage() {
         .then((r) => r.ok ? r.json() : null)
         .then((d) => setNotes(d?.notes ?? []));
     }
-  }, [tab, params.id, projects, payments, notes]);
+    if (tab === "tasks" && clientTasks === null && !clientTasksLoading) {
+      setClientTasksLoading(true);
+      fetch(`/api/projects?client_id=${params.id}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then(async (d) => {
+          const projs: Project[] = d?.projects ?? [];
+          if (projs.length === 0) { setClientTasks([]); return; }
+          const results = await Promise.all(
+            projs.map((p) => fetch(`/api/projects/${p.id}`).then((r) => r.ok ? r.json() : null))
+          );
+          const allTasks = results.flatMap((r) =>
+            (r?.tasks ?? []).map((t: { id: string; title: string; priority: string; due_date: string | null; show_date: string | null; assignee_user_ids: string[]; stage?: { name: string } | null }) => ({
+              ...t,
+              project: { id: r.project?.id, name: r.project?.name },
+            }))
+          );
+          setClientTasks(allTasks);
+        })
+        .finally(() => setClientTasksLoading(false));
+    }
+  }, [tab, params.id, projects, payments, notes, clientTasks, clientTasksLoading]);
 
   async function saveField(field: InfoField, value: string) {
     if (!client) return;
@@ -403,11 +429,11 @@ export default function ClientDetailPage() {
       <div className="mt-4 flex items-center gap-0 overflow-x-auto border-b border-border scrollbar-none">
         <TabButton active={tab === "overview"} onClick={() => setTab("overview")} icon={Globe}>Overview</TabButton>
         <TabButton active={tab === "projects"} onClick={() => setTab("projects")} icon={Briefcase}>Projects</TabButton>
+        <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")} icon={FileText}>Tasks</TabButton>
         <TabButton active={tab === "files"} onClick={() => setTab("files")} icon={Folder}>Files</TabButton>
         <TabButton active={tab === "payments"} onClick={() => setTab("payments")} icon={CreditCard}>Payments</TabButton>
         <TabButton active={tab === "notes"} onClick={() => setTab("notes")} icon={StickyNote}>Notes</TabButton>
         <TabButton active={tab === "info"} onClick={() => setTab("info")} icon={FileText}>Info</TabButton>
-        <TabButton active={tab === "scope"} onClick={() => setTab("scope")} icon={Briefcase}>Scope</TabButton>
       </div>
 
       {/* ── Overview ────────────────────────────────────────────────── */}
@@ -486,6 +512,86 @@ export default function ClientDetailPage() {
                   </div>
                 </Link>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tasks ───────────────────────────────────────────────────── */}
+      {tab === "tasks" && (
+        <div className="mt-4">
+          {clientTasksLoading || clientTasks === null ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : clientTasks.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border py-14 text-center text-sm text-muted-foreground">
+              No tasks found across this client&apos;s projects.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">Task</th>
+                    <th className="px-4 py-3 font-medium">Project</th>
+                    <th className="px-4 py-3 font-medium">Stage</th>
+                    <th className="px-4 py-3 font-medium">Priority</th>
+                    <th className="px-4 py-3 font-medium">Due Date</th>
+                    <th className="px-4 py-3 font-medium">Show Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientTasks.map((t) => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const isOverdue = t.due_date && t.due_date < today;
+                    const PRIORITY_STYLE: Record<string, string> = {
+                      urgent: "bg-red-500/15 text-red-400",
+                      high: "bg-orange-500/15 text-orange-400",
+                      medium: "bg-yellow-500/15 text-yellow-400",
+                      low: "bg-blue-500/15 text-blue-400",
+                    };
+                    return (
+                      <tr key={t.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium text-foreground max-w-xs">
+                          <span className="line-clamp-1">{t.title}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {t.project ? (
+                            <Link href={`/projects/${t.project.id}`} className="text-primary hover:underline text-xs">
+                              {t.project.name}
+                            </Link>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {t.stage?.name ? (
+                            <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {t.stage.name}
+                            </span>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_STYLE[t.priority] ?? ""}`}>
+                            {t.priority}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {t.due_date ? (
+                            <span className={`text-xs font-medium ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
+                              {new Date(t.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                            </span>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {t.show_date ? (
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(t.show_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                            </span>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -830,21 +936,6 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* ── Scope of Work ───────────────────────────────────────────── */}
-      {tab === "scope" && accountId && user && (
-        <div className="mt-4">
-          <ScopeOfWorkSection
-            accountId={accountId}
-            currentUserId={user.id}
-            clientId={client.id}
-            items={scopeItems}
-            isAdmin={canManageMembers}
-            canEdit={canEditInfo}
-            canCreate={canCreateScope}
-            onChanged={load}
-          />
-        </div>
-      )}
     </div>
   );
 }

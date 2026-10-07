@@ -29,7 +29,7 @@ interface ProductTask {
   stage?: { id: string; name: string } | null;
 }
 
-type SortField = "title" | "stage" | "priority" | "product" | "assignee" | "due_date";
+type SortField = "title" | "stage" | "priority" | "product" | "assignee" | "due_date" | "show_date";
 type SortDir = "asc" | "desc";
 
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
@@ -98,7 +98,10 @@ function ProductTaskModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const assigneeRef = useRef<HTMLDivElement>(null);
+  const productRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -115,6 +118,8 @@ function ProductTaskModal({
     setTitle(task?.title ?? "");
     setDescription(task?.description ?? "");
     setProductId(task?.product_id ?? "__none__");
+    const existingProduct = products.find((p) => p.id === (task?.product_id ?? "__none__"));
+    setProductSearch(existingProduct?.project_name ?? "");
     setStageId(task?.stage_id ?? "__none__");
     setPriority(task?.priority ?? "medium");
     setAssigneeIds(
@@ -123,7 +128,7 @@ function ProductTaskModal({
     );
     setDueDate(task?.due_date ?? "");
     setShowDate(task?.show_date ?? "");
-  }, [open, task]);
+  }, [open, task, products]);
 
   if (!open) return null;
 
@@ -203,11 +208,34 @@ function ProductTaskModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Product</label>
-              <select value={productId} onChange={(e) => setProductId(e.target.value)}
-                className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
-                <option value="__none__">None</option>
-                {products.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
-              </select>
+              <div ref={productRef} className="relative">
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(e) => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
+                  onFocus={() => setShowProductDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
+                  placeholder="Search product…"
+                  className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
+                />
+                {showProductDropdown && (
+                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-[#2a3045] bg-[#1a1f2e] shadow-xl max-h-48 overflow-y-auto">
+                    <button type="button" onMouseDown={() => { setProductId("__none__"); setProductSearch(""); setShowProductDropdown(false); }}
+                      className="w-full px-3 py-2 text-left text-sm text-slate-500 hover:bg-[#2a3045] transition-colors">
+                      None
+                    </button>
+                    {products.filter((p) => p.project_name.toLowerCase().includes(productSearch.toLowerCase())).map((p) => (
+                      <button key={p.id} type="button" onMouseDown={() => { setProductId(p.id); setProductSearch(p.project_name); setShowProductDropdown(false); }}
+                        className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[#2a3045] ${productId === p.id ? "text-teal-400" : "text-slate-300"}`}>
+                        {p.project_name}
+                      </button>
+                    ))}
+                    {products.filter((p) => p.project_name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-slate-600">No products found</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">Stage</label>
@@ -434,6 +462,12 @@ export default function ProductTasksPage() {
         const bid = b.assignee_user_ids?.[0] ?? b.assignee_user_id ?? "";
         return dir * getMemberName(aid).localeCompare(getMemberName(bid));
       }
+      if (sortField === "show_date") {
+        if (!a.show_date && !b.show_date) return 0;
+        if (!a.show_date) return 1;
+        if (!b.show_date) return -1;
+        return dir * a.show_date.localeCompare(b.show_date);
+      }
       return 0;
     });
 
@@ -585,6 +619,9 @@ export default function ProductTasksPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="due_date" label="Target Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
+                      <th className="px-4 py-3 font-medium">
+                        <ColHeader field="show_date" label="Show Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -632,6 +669,13 @@ export default function ProductTasksPage() {
                             {task.due_date ? (
                               <span className={`text-xs font-medium ${isOverdue ? "text-red-400" : isToday ? "text-amber-400" : "text-slate-400"}`}>
                                 {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-4 py-3">
+                            {task.show_date ? (
+                              <span className="text-xs font-medium text-slate-400">
+                                {new Date(task.show_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                               </span>
                             ) : <span className="text-slate-600">—</span>}
                           </td>

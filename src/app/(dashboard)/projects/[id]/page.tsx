@@ -38,6 +38,8 @@ export default function ProjectDetailPage() {
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [taskViewMode, setTaskViewMode] = useState<"current" | "scheduled" | "all">("current");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [memberFilter, setMemberFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
 
   const load = useCallback(() => {
     Promise.all([
@@ -201,12 +203,17 @@ export default function ProjectDetailPage() {
         const waitingId = stageNameOf("waiting");
         const overdueTasks = tasks.filter((t) => (t as unknown as { due_date?: string }).due_date && (t as unknown as { due_date: string }).due_date < todayStr);
 
-        // Filter tasks for board based on view mode
+        // Filter tasks for board based on view mode + person + priority
         const filteredTasks = tasks.filter((t) => {
           const sd = (t as unknown as { show_date?: string }).show_date;
           if (taskViewMode === "current" && sd && sd > todayStr) return false;
           if (taskViewMode === "scheduled" && !(sd && sd > todayStr)) return false;
           if (overdueOnly && !((t as unknown as { due_date?: string }).due_date && (t as unknown as { due_date: string }).due_date < todayStr)) return false;
+          if (memberFilter !== "all") {
+            const ids = t.assignee_user_ids?.length ? t.assignee_user_ids : t.assignee_user_id ? [t.assignee_user_id] : [];
+            if (!ids.includes(memberFilter)) return false;
+          }
+          if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
           return true;
         });
 
@@ -230,7 +237,7 @@ export default function ProjectDetailPage() {
               ))}
             </div>
 
-            {/* View mode + overdue controls */}
+            {/* View mode + overdue + member + priority controls */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
                 {(["current", "scheduled", "all"] as const).map((mode) => (
@@ -244,6 +251,25 @@ export default function ProjectDetailPage() {
                 className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}>
                 Overdue ({overdueTasks.length})
               </button>
+              <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}
+                className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground focus:outline-none">
+                <option value="all">People: All</option>
+                {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
+              </select>
+              <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
+                className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground focus:outline-none">
+                <option value="all">Priority: All</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              {(memberFilter !== "all" || priorityFilter !== "all") && (
+                <button type="button" onClick={() => { setMemberFilter("all"); setPriorityFilter("all"); }}
+                  className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Clear filters
+                </button>
+              )}
             </div>
 
             <div className="mt-4">
