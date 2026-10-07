@@ -161,7 +161,7 @@ export function AccountsTab() {
             recipient_user_id: a.recipient_user_id ?? "",
             role_label: a.role_label ?? "",
             outsource_name: a.recipient_type === "outsource" ? (a.role_label ?? "") : "",
-            outsource_role: (a as { outsource_role?: string }).outsource_role ?? "",
+            outsource_role: a.outsource_role ?? "",
             amount: String(a.amount),
           }))
         : [emptyAllocation()],
@@ -286,7 +286,7 @@ export function AccountsTab() {
         leaderMap.set(key, {
           key, type: "outsource",
           name: a.outsource_name,
-          role: (a as { outsource_role?: string }).outsource_role ?? undefined,
+          role: a.outsource_role ?? undefined,
           total: (prev?.total ?? 0) + Number(a.amount),
         });
       }
