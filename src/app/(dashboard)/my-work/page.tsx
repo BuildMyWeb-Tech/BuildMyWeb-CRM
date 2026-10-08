@@ -223,25 +223,25 @@ export default function MyWorkPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#0f1117]">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#0f1117]">
       {/* Header */}
-      <div className="shrink-0 px-6 pt-5 pb-4 flex items-center justify-between border-b border-[#2a3045]">
+      <div className="shrink-0 px-4 pt-4 pb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#2a3045] sm:px-6 sm:pt-5">
         <div>
           <h1 className="text-xl font-bold text-white">My Work</h1>
           <p className="text-xs text-slate-500 mt-0.5">Tasks assigned to you across all modules</p>
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span><span className="font-semibold text-white">{(projectTasks ?? []).length}</span> project tasks</span>
-          <span><span className="font-semibold text-white">{(productTasks ?? []).length}</span> product tasks</span>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          <span><span className="font-semibold text-white">{(projectTasks ?? []).length}</span> project</span>
+          <span><span className="font-semibold text-white">{(productTasks ?? []).length}</span> product</span>
           <span><span className="font-semibold text-white">{(leads ?? []).length}</span> enquiries</span>
         </div>
       </div>
 
-      {/* 3-column layout */}
-      <div className="flex flex-1 overflow-hidden divide-x divide-[#2a3045]">
+      {/* 3-column layout — stacks on mobile */}
+      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-[#2a3045]">
 
         {/* ── Column 1: Project Tasks ── */}
-        <div className="flex w-1/3 flex-col overflow-hidden">
+        <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
           <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
             <div className="flex items-center gap-2">
               <div className="rounded-md bg-teal-500/10 p-1.5">
@@ -321,7 +321,7 @@ export default function MyWorkPage() {
         </div>
 
         {/* ── Column 2: Product Tasks ── */}
-        <div className="flex w-1/3 flex-col overflow-hidden">
+        <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
           <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
             <div className="flex items-center gap-2">
               <div className="rounded-md bg-purple-500/10 p-1.5">
@@ -398,7 +398,7 @@ export default function MyWorkPage() {
         </div>
 
         {/* ── Column 3: Client Enquiry ── */}
-        <div className="flex w-1/3 flex-col overflow-hidden">
+        <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
           <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
             <div className="flex items-center gap-2">
               <div className="rounded-md bg-blue-500/10 p-1.5">

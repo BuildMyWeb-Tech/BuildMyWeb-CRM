@@ -196,7 +196,7 @@ export default function MessagesPage() {
   const selectedMember = members.find((m) => m.user_id === selectedUserId);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-background">
       {/* ── Sidebar: conversation list ── */}
       <div className="flex w-64 flex-col border-r border-border bg-card shrink-0">
         <div className="border-b border-border px-4 py-3">

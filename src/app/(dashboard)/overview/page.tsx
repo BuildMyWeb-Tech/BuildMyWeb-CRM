@@ -921,7 +921,7 @@ export default function OverviewPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
       {ptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">

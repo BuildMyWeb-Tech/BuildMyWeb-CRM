@@ -87,7 +87,7 @@ export default function ProjectChatHubPage() {
   const selected = (projects ?? []).find((p) => p.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden rounded-xl border border-border bg-card">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden rounded-xl border border-border bg-card">
       {/* ── Sidebar ─────────────────────────────────────────────── */}
       <div className="flex w-64 shrink-0 flex-col border-r border-border">
         <div className="flex items-center gap-2 border-b border-border px-3 py-3">

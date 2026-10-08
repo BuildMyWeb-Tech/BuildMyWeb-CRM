@@ -900,7 +900,6 @@ export interface PaymentAllocation {
   recipient_type: PaymentRecipientType;
   recipient_user_id: string | null;
   role_label: string | null;
-  outsource_name: string | null;
   outsource_role: string | null;
   amount: number;
   created_at: string;

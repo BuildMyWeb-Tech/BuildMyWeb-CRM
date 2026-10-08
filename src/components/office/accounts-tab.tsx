@@ -280,12 +280,12 @@ export function AccountsTab() {
           name: members.find((m) => m.user_id === a.recipient_user_id)?.full_name ?? "Unknown",
           total: (prev?.total ?? 0) + Number(a.amount),
         });
-      } else if (a.recipient_type === "outsource" && a.outsource_name) {
-        const key = `o:${a.outsource_name}`;
+      } else if (a.recipient_type === "outsource" && a.role_label) {
+        const key = `o:${a.role_label}`;
         const prev = leaderMap.get(key);
         leaderMap.set(key, {
           key, type: "outsource",
-          name: a.outsource_name,
+          name: a.role_label,
           role: a.outsource_role ?? undefined,
           total: (prev?.total ?? 0) + Number(a.amount),
         });

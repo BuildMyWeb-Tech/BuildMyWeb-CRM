@@ -116,7 +116,7 @@ export default function LeadFinderPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#0f1117]">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#0f1117]">
       {/* Header */}
       <div className="shrink-0 px-6 pt-6 pb-4 border-b border-[#2a3045]">
         <div className="flex items-center gap-3 mb-1">

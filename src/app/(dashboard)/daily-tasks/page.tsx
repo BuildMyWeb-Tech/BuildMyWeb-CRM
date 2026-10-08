@@ -142,22 +142,21 @@ export default function DailyTasksPage() {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
+    <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
       {/* ── Main content ── */}
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Header */}
-        <div className="shrink-0 px-6 pt-6 pb-4">
+        <div className="shrink-0 px-4 pt-4 pb-4 sm:px-6 sm:pt-6">
           <div className="flex items-center gap-2.5 mb-1">
             <div className="rounded-lg bg-blue-500/10 p-2">
               <ListTodo className="h-5 w-5 text-blue-400" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Project Tasks</h1>
+            <h1 className="text-xl font-bold text-white sm:text-2xl">Project Tasks</h1>
           </div>
-        
         </div>
 
         {/* Stat cards */}
-        <div className="shrink-0 grid grid-cols-4 gap-4 px-6 pb-4">
+        <div className="shrink-0 grid grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-4 sm:px-6">
           {statCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -181,7 +180,7 @@ export default function DailyTasksPage() {
         </div>
 
         {/* View mode tabs */}
-        <div className="shrink-0 px-6 pb-3">
+        <div className="shrink-0 px-4 pb-3 sm:px-6">
           <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
             {VIEW_TABS.map((tab) => (
               <button
@@ -202,13 +201,13 @@ export default function DailyTasksPage() {
         </div>
 
         {/* Tasks table */}
-        <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="flex-1 overflow-auto px-4 pb-6 sm:px-6">
           <UnifiedTasksView viewMode={viewMode} />
         </div>
       </div>
 
       {/* ── Right sidebar ── */}
-      <div className="w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+      <div className="hidden lg:flex w-72 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
           

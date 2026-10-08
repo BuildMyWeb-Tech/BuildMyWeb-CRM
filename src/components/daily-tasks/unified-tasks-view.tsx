@@ -322,19 +322,17 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   const filteredTasks = unifiedRows
     .filter((t) => {
       const isFutureScheduled = !!t.showDateValue && t.showDateValue > todayStr;
-      if (effectiveShowScheduled) return isFutureScheduled;
-      if (effectiveShowAll) return true;
-      // Hidden until its show date arrives — only visible under "Scheduled" tab.
-      if (isFutureScheduled) return false;
+      if (effectiveShowScheduled) {
+        if (!isFutureScheduled) return false;
+      } else if (!effectiveShowAll) {
+        // "current" mode: hide tasks scheduled for the future
+        if (isFutureScheduled) return false;
+      }
+      // Apply all user filters in every view mode
       if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
       if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
       if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
       if (assigneeFilter.size > 0 && !t.assigneeUserIds.some((id) => assigneeFilter.has(id))) return false;
-      // Stage chips are built from the Daily Tasks pipeline's own
-      // stages only — a project task's stage lives on a different
-      // pipeline entirely, so it can never match one of these chips.
-      // Filtering by stage therefore narrows to daily-task rows only,
-      // which is the correct behavior given the chips shown, not a bug.
       if (stageFilter.size > 0 && !stageFilter.has(t.stageId)) return false;
       if (!matchesDatePreset(t.dateValue, datePreset)) return false;
       if (overdueOnly && !matchesDatePreset(t.dateValue, "overdue")) return false;

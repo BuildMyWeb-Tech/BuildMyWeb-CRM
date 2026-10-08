@@ -219,7 +219,7 @@ export default function MyPagesPage() {
   }, {});
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col bg-background">
+    <div className="flex h-[calc(100vh-7.5rem)] lg:h-[calc(100vh-3.5rem)] flex-col bg-background">
       {/* ── Header ── */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-6 py-4">
         <div className="rounded-lg bg-primary/10 p-2">

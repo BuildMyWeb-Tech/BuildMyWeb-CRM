@@ -191,7 +191,7 @@ export default function FutureClientsPage() {
             )}
           </div>
         ) : viewMode === "list" ? (
-          <div className="overflow-hidden rounded-xl border border-[#2a3045]">
+          <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#2a3045] bg-[#1a1f2e]">

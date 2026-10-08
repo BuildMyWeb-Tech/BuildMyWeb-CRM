@@ -264,17 +264,17 @@ export default function ClientLeadsPage() {
         onSaved={load}
       />
 
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
+      <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
         {/* ── Main content ── */}
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
           {/* Header */}
-          <div className="shrink-0 px-6 pt-6 pb-4">
-            <div className="flex items-center justify-between">
+          <div className="shrink-0 px-4 pt-4 pb-4 sm:px-6 sm:pt-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-lg bg-blue-500/10 p-2">
                   <UserPlus className="h-5 w-5 text-blue-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-white">Client Enquiry</h1>
+                <h1 className="text-xl font-bold text-white sm:text-2xl">Client Enquiry</h1>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5">
@@ -371,8 +371,8 @@ export default function ClientLeadsPage() {
                 )}
               </div>
             ) : viewMode === "table" ? (
-              <div className="overflow-hidden rounded-xl border border-[#2a3045]">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
+                <table className="w-full min-w-[600px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
                       <th className="w-10 px-4 py-3">
@@ -519,7 +519,7 @@ export default function ClientLeadsPage() {
         </div>
 
         {/* ── Right sidebar — Status groups ── */}
-        <div className="w-56 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+        <div className="hidden lg:flex w-56 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <UserPlus className="h-4 w-4 text-blue-400" />
