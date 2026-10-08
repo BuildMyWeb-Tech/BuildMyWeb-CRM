@@ -202,7 +202,23 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         .eq("account_id", accountId),
     ])
       .then(async ([pipelineRes, membersRows, clientsData, projectsData, projectTasksRes]) => {
-        const pipelineRow = pipelineRes.data as Pipeline | null;
+        let pipelineRow = pipelineRes.data as Pipeline | null;
+
+        // Auto-create the Daily Tasks pipeline via server API if missing for this account
+        if (!pipelineRow) {
+          await fetch("/api/daily-tasks/setup", { method: "POST" }).catch((e) =>
+            console.error("[unified-tasks] setup failed:", e)
+          );
+          // Re-fetch the pipeline now that it's been created
+          const { data: newPipelineRow } = await supabase
+            .from("pipelines")
+            .select("*")
+            .eq("account_id", accountId)
+            .eq("name", "Daily Tasks")
+            .maybeSingle();
+          pipelineRow = newPipelineRow as Pipeline | null;
+        }
+
         setPipeline(pipelineRow);
         setMembers(membersRows);
         if (clientsData) setClients(clientsData.clients ?? []);
@@ -222,7 +238,19 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
               .eq("account_id", accountId)
               .order("target_date", { ascending: true, nullsFirst: false }),
           ]);
-          setStages(stagesRes.data ?? []);
+          const loadedStages = stagesRes.data ?? [];
+          // If stages are empty (pipeline exists but stages weren't seeded), fix via server API
+          if (loadedStages.length === 0) {
+            await fetch("/api/daily-tasks/setup", { method: "POST" }).catch(() => null);
+            const { data: reloadedStages } = await supabase
+              .from("pipeline_stages")
+              .select("*")
+              .eq("pipeline_id", pipelineRow.id)
+              .order("position", { ascending: true });
+            setStages(reloadedStages ?? []);
+          } else {
+            setStages(loadedStages);
+          }
           setTasks((tasksRes.data ?? []) as DailyTask[]);
         }
       })
