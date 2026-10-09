@@ -194,7 +194,7 @@ export default function BusinessDashboardPage() {
         </div>
 
         {/* Extra KPI row — time, expenses, reviews */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: "Hours This Month", value: `${d.totalHoursThisMonth.toFixed(1)}h`, sub: "tracked", color: "text-teal-400", href: "/time-tracker" },
             { label: "Expenses This Month", value: fmt(d.totalExpensesThisMonth), sub: "business costs", color: "text-red-400", href: "/expenses" },

@@ -298,7 +298,7 @@ export default function ClientLeadsPage() {
           </div>
 
           {/* Stat cards */}
-          <div className="shrink-0 grid grid-cols-4 gap-4 px-6 pb-4">
+          <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 sm:px-6 pb-4">
             {statCards.map((card) => (
               <div key={card.label} className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
                 <p className={`text-2xl font-bold ${card.color}`}>

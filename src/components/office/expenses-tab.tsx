@@ -181,7 +181,7 @@ export function ExpensesTab() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="rounded-xl border border-border overflow-x-auto">
             {loading ? (
               <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : expenses.length === 0 ? (

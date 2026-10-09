@@ -228,7 +228,7 @@ export default function ProjectDetailPage() {
 
         return (
           <>
-            <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {STAT_CARDS.map((s) => (
                 <div key={s.label} className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
                   <p className={`text-xl font-bold ${s.color}`}>{s.count}</p>

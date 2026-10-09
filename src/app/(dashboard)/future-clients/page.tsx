@@ -151,7 +151,7 @@ export default function FutureClientsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/20 mb-3">
               <Users className="h-4 w-4 text-purple-400" />

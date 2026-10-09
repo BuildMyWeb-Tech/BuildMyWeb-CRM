@@ -183,7 +183,7 @@ export function AiAssistant() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-4 top-14 z-50 w-96 rounded-xl border border-border bg-card shadow-2xl">
+          <div className="absolute right-4 top-14 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-2xl">
             {/* Header */}
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15">

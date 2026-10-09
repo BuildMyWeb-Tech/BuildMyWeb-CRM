@@ -223,10 +223,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         setMembers(membersRows);
         if (clientsData) setClients(clientsData.clients ?? []);
         const allProjectTasks = (projectTasksRes.data ?? []) as ProjectTask[];
-        if (projectsData) {
-          const projectIdsWithTasks = new Set(allProjectTasks.map((t) => t.project_id));
-          setProjects((projectsData.projects ?? []).filter((p: { id: string }) => projectIdsWithTasks.has(p.id)));
-        }
+        if (projectsData) setProjects((projectsData.projects ?? []) as Project[]);
         setProjectTasks(allProjectTasks);
 
         if (pipelineRow) {
@@ -273,6 +270,20 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   }
 
   const projectClientById = useMemo(() => new Map(projects.map((p) => [p.id, p.client_id])), [projects]);
+
+  // Client IDs of the currently-selected projects. Lets the project filter
+  // also match daily tasks that are linked to the same client (they appear
+  // in the "Client / Project" column under that client name, so filtering
+  // by project should include them too).
+  const selectedProjectClientIds = useMemo(() => {
+    if (projectFilter.size === 0) return new Set<string>();
+    const ids = new Set<string>();
+    for (const pid of projectFilter) {
+      const cid = projectClientById.get(pid);
+      if (cid) ids.add(cid);
+    }
+    return ids;
+  }, [projectFilter, projectClientById]);
 
   const unifiedRows: UnifiedRow[] = useMemo(() => {
     const dailyRows: UnifiedRow[] = tasks.map((t) => ({
@@ -357,7 +368,11 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         if (isFutureScheduled) return false;
       }
       // Apply all user filters in every view mode
-      if (projectFilter.size > 0 && (!t.projectId || !projectFilter.has(t.projectId))) return false;
+      if (projectFilter.size > 0) {
+        const matchesProject = !!t.projectId && projectFilter.has(t.projectId);
+        const matchesClient = !!t.clientId && selectedProjectClientIds.has(t.clientId);
+        if (!matchesProject && !matchesClient) return false;
+      }
       if (clientFilter.size > 0 && (!t.clientId || !clientFilter.has(t.clientId))) return false;
       if (priorityFilter.size > 0 && !priorityFilter.has(t.priority)) return false;
       if (assigneeFilter.size > 0 && !t.assigneeUserIds.some((id) => assigneeFilter.has(id))) return false;
