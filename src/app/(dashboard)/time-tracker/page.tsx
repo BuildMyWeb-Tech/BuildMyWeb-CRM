@@ -107,12 +107,23 @@ function Modal({ open, onClose, onSaved, initial }: {
   );
 }
 
+// ── Project budget helper ──────────────────────────────────────────────────────
+
+const BUDGET_KEY = "time-tracker-budgets";
+function loadBudgets(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(BUDGET_KEY) ?? "{}"); } catch { return {}; }
+}
+function saveBudgets(b: Record<string, number>) {
+  try { localStorage.setItem(BUDGET_KEY, JSON.stringify(b)); } catch { /* ignore */ }
+}
+
 export default function TimeTrackerPage() {
   const { accountId } = useAuth();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<FormState | null>(null);
+  const [budgets, setBudgets] = useState<Record<string, number>>({});
   const today = new Date();
   const [month, setMonth] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
 
@@ -126,6 +137,9 @@ export default function TimeTrackerPage() {
   }, [accountId, month]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load budgets from localStorage (client-only)
+  useEffect(() => { setBudgets(loadBudgets()); }, []);
 
   async function del(id: string) {
     if (!confirm("Delete this time entry?")) return;
@@ -263,23 +277,72 @@ export default function TimeTrackerPage() {
             )}
           </div>
 
-          {/* By client */}
-          {topClients.length > 0 && (
-            <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4 space-y-3 self-start">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hours by Client</p>
-              {topClients.map(([name, hrs]) => (
-                <div key={name}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300 truncate">{name}</span>
-                    <span className="text-teal-400 font-medium ml-2">{fmt(hrs)}</span>
+          {/* By client + budget */}
+          <div className="space-y-4">
+            {topClients.length > 0 && (
+              <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hours by Client</p>
+                {topClients.map(([name, hrs]) => (
+                  <div key={name}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-300 truncate">{name}</span>
+                      <span className="text-teal-400 font-medium ml-2">{fmt(hrs)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-[#2a3045] overflow-hidden">
+                      <div className="h-full rounded-full bg-teal-500" style={{ width: `${(hrs / totalHours) * 100}%` }} />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-[#2a3045] overflow-hidden">
-                    <div className="h-full rounded-full bg-teal-500" style={{ width: `${(hrs / totalHours) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+
+            {/* Project budget tracker */}
+            {topClients.length > 0 && (
+              <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Budget Tracker</p>
+                <p className="text-[10px] text-slate-600">Set hour budgets per client to track progress</p>
+                {topClients.map(([name, logged]) => {
+                  const budget = budgets[name] ?? 0;
+                  const pct = budget > 0 ? Math.min(100, (logged / budget) * 100) : 0;
+                  const over = budget > 0 && logged > budget;
+                  return (
+                    <div key={name} className="space-y-1">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-300 truncate max-w-[120px]">{name}</span>
+                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                          <span className={over ? "text-red-400" : "text-slate-400"}>{fmt(logged)}</span>
+                          <span className="text-slate-600">/</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={budget || ""}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              const next = { ...budgets, [name]: val };
+                              setBudgets(next);
+                              saveBudgets(next);
+                            }}
+                            placeholder="—"
+                            className="w-12 bg-transparent text-slate-400 text-right text-xs focus:outline-none focus:text-white placeholder:text-slate-600"
+                          />
+                          <span className="text-slate-600 text-[10px]">h</span>
+                        </div>
+                      </div>
+                      {budget > 0 && (
+                        <div className="h-1.5 rounded-full bg-[#2a3045] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${over ? "bg-red-500" : pct > 80 ? "bg-amber-500" : "bg-teal-500"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

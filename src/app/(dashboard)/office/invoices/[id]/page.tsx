@@ -278,50 +278,142 @@ export default function InvoiceDetailPage() {
         <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${f(item.line_total)}</td>
       </tr>`).join("");
 
+    const disc = invoice.discount_amount || 0;
+    const tax = invoice.tax_amount || 0;
+    const paymentRows = payments.map((p) => `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;">${fd(p.payment_date)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;">${METHOD_LABEL[p.payment_method] || p.payment_method}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;">${p.reference || "—"}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;">${f(p.amount)}</td>
+    </tr>`).join("");
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${invoice.invoice_number}</title>
 <style>
-  body{font-family:Arial,sans-serif;color:#111827;margin:0;padding:40px;font-size:14px;}
-  h1{margin:0;font-size:24px;} h2{margin:0;font-size:16px;color:#6b7280;}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;}
-  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151;}
-  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:24px;}
-  .meta-row{font-size:13px;} .meta-label{color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;background:#fff;font-size:13px;}
+  @page{margin:0;size:A4;}
+  @media print{body{margin:0;}.no-print{display:none!important;}}
+  .page{max-width:794px;margin:0 auto;padding:40px 48px 80px;}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;}
+  .logo{font-size:22px;font-weight:800;color:#1e3a5f;letter-spacing:-0.5px;}
+  .logo-sub{font-size:9px;color:#6b7280;letter-spacing:.5px;text-transform:uppercase;margin-top:2px;}
+  .doc-type{font-size:18px;font-weight:800;color:#1e3a5f;letter-spacing:1px;text-align:right;}
+  .doc-web{font-size:10px;color:#6b7280;text-align:right;}
+  .accent{height:5px;background:linear-gradient(to right,#f59e0b,#f97316);margin-bottom:28px;}
+  .title{font-size:30px;font-weight:800;color:#0f172a;text-transform:uppercase;line-height:1.1;margin-bottom:5px;}
+  .subtitle{font-size:12px;color:#64748b;margin-bottom:18px;}
+  .meta-row{display:flex;border:1px solid #e2e8f0;margin-bottom:16px;}
+  .mc{flex:1;padding:8px 12px;border-right:1px solid #e2e8f0;}
+  .mc:last-child{border-right:none;}
+  .ml{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;}
+  .mv{font-size:12px;font-weight:600;color:#1e293b;margin-top:2px;}
+  .dbar{background:#1e3a5f;color:#fff;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:28px;}
+  .dbar-item{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .sec{margin-bottom:24px;}
+  .sec-hdr{display:flex;align-items:center;gap:10px;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:14px;}
+  .sec-num{width:26px;height:26px;background:#1e3a5f;border-radius:50%;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .sec-title{font-size:15px;font-weight:700;color:#0f172a;}
   table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-  thead tr{background:#f9fafb;} th{padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:2px solid #e5e7eb;}
-  th:last-child,td:last-child{text-align:right;}
-  .totals{display:flex;justify-content:flex-end;} .totals-inner{width:220px;}
-  .totals-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#6b7280;}
-  .totals-total{display:flex;justify-content:space-between;padding:8px 0;font-weight:700;font-size:15px;border-top:2px solid #111827;}
-  .note{margin-top:24px;padding:12px;background:#f9fafb;border-radius:8px;font-size:13px;color:#374151;}
-  @media print{body{padding:24px;} @page{margin:1.5cm;}}
+  thead tr{background:#f8fafc;}
+  th{padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;border-bottom:2px solid #e2e8f0;}
+  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+  .tar{text-align:right;}
+  .totals-box{display:flex;justify-content:flex-end;margin-bottom:20px;}
+  .totals-inner{width:240px;}
+  .tr{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#64748b;}
+  .total-bar{display:flex;justify-content:space-between;background:#1e3a5f;color:#fff;padding:10px 16px;font-size:14px;font-weight:700;margin-top:6px;}
+  .total-lbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;opacity:.8;align-self:center;}
+  .paid-bar{display:flex;justify-content:space-between;background:#166534;color:#fff;padding:10px 16px;font-size:14px;font-weight:700;}
+  .note-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px;font-size:12px;color:#475569;margin-bottom:20px;}
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:32px;}
+  .sig-label{font-size:10px;text-transform:uppercase;font-weight:700;color:#64748b;margin-bottom:8px;}
+  .sig-line{border-bottom:1px solid #cbd5e1;margin-bottom:16px;}
+  .sig-name{font-size:12px;font-weight:600;color:#1e293b;}
+  .sig-date{font-size:12px;color:#64748b;margin-top:6px;}
+  .contact-box{margin-top:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;}
+  .contact-name{font-size:12px;font-weight:700;color:#1e3a5f;}
+  .contact-info{font-size:11px;color:#64748b;line-height:1.8;margin-top:4px;}
+  .footer{position:fixed;bottom:0;left:0;right:0;padding:10px 48px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;background:#fff;}
+  .footer-text{font-size:10px;color:#94a3b8;}
 </style></head><body>
-<div class="header">
-  <div><h1>INVOICE</h1><h2>${invoice.client_name}</h2></div>
-  <div style="text-align:right;">
-    <div style="font-size:20px;font-weight:700;font-family:monospace;">${invoice.invoice_number}</div>
-    <div class="badge" style="margin-top:6px;">${STATUS_META[invoice.status]?.label ?? invoice.status}</div>
+<div class="page">
+  <div class="hdr">
+    <div><div class="logo">BuildMyWeb</div><div class="logo-sub">Where Imagination Meets Innovation</div></div>
+    <div><div class="doc-type">INVOICE</div><div class="doc-web">buildmyweb.info</div></div>
+  </div>
+  <div class="accent"></div>
+  <div class="title">${invoice.client_name}</div>
+  <div class="subtitle">Invoice — ${invoice.invoice_number}</div>
+  <div class="meta-row">
+    <div class="mc"><div class="ml">Invoice No</div><div class="mv">${invoice.invoice_number}</div></div>
+    <div class="mc"><div class="ml">Issue Date</div><div class="mv">${fd(invoice.issue_date)}</div></div>
+    <div class="mc"><div class="ml">Due Date</div><div class="mv">${fd(invoice.due_date)}</div></div>
+    ${invoice.po_number ? `<div class="mc"><div class="ml">PO Number</div><div class="mv">${invoice.po_number}</div></div>` : `<div class="mc"><div class="ml">Currency</div><div class="mv">${currency}</div></div>`}
+  </div>
+  <div class="dbar">
+    <div class="dbar-item">Total: ${f(total)}</div>
+    <div class="dbar-item">Paid: ${f(paid)}</div>
+    <div class="dbar-item">Balance Due: ${f(balance)}</div>
+  </div>
+  ${sortedItems.length > 0 ? `
+  <div class="sec">
+    <div class="sec-hdr"><div class="sec-num">1</div><div class="sec-title">Services &amp; Items</div></div>
+    <table>
+      <thead><tr>
+        <th>Description</th>
+        <th class="tar" style="width:70px;">Qty</th>
+        <th class="tar" style="width:100px;">Rate</th>
+        <th class="tar" style="width:70px;">Disc%</th>
+        <th class="tar" style="width:70px;">Tax%</th>
+        <th class="tar" style="width:110px;">Total</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <div class="totals-box"><div class="totals-inner">
+      <div class="tr"><span>Subtotal</span><span>${f(invoice.subtotal || total)}</span></div>
+      ${disc > 0 ? `<div class="tr" style="color:#d97706;"><span>Discount</span><span>-${f(disc)}</span></div>` : ""}
+      ${tax > 0 ? `<div class="tr"><span>Tax</span><span>${f(tax)}</span></div>` : ""}
+      <div class="total-bar"><span class="total-lbl">Total Amount</span><span>${f(total)}</span></div>
+    </div></div>
+  </div>` : ""}
+  ${payments.length > 0 ? `
+  <div class="sec">
+    <div class="sec-hdr"><div class="sec-num">${sortedItems.length > 0 ? "2" : "1"}</div><div class="sec-title">Payment History</div></div>
+    <table>
+      <thead><tr><th>Date</th><th>Method</th><th>Reference</th><th class="tar">Amount</th></tr></thead>
+      <tbody>
+        ${paymentRows}
+        <tr><td colspan="3" style="padding:9px 12px;font-weight:600;">Total Paid</td><td class="tar" style="padding:9px 12px;font-weight:700;">${f(paid)}</td></tr>
+      </tbody>
+    </table>
+    ${balance > 0
+      ? `<div style="background:#1e3a5f;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;font-weight:700;font-size:14px;"><span>BALANCE DUE</span><span>${f(balance)}</span></div>`
+      : `<div class="paid-bar"><span>FULLY PAID</span><span>${f(paid)}</span></div>`}
+  </div>` : ""}
+  ${invoice.customer_note || invoice.notes ? `<div class="note-box"><strong>Note:</strong> ${invoice.customer_note || invoice.notes}</div>` : ""}
+  <div class="sig-grid">
+    <div>
+      <div class="sig-label">For Client</div>
+      <div class="sig-line"></div>
+      <div class="sig-date">Signature: ____________________</div>
+      <div class="sig-date" style="margin-top:8px;">Date: ____________________</div>
+    </div>
+    <div>
+      <div class="sig-label">For BuildMyWeb</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">Authorized: Ajai Kumar E</div>
+      <div class="sig-date" style="margin-top:6px;">Date: ____________________</div>
+    </div>
+  </div>
+  <div class="contact-box">
+    <div class="contact-name">BuildMyWeb</div>
+    <div class="contact-info">Where Imagination Meets Innovation<br>Email: buildmyweb2024@gmail.com &nbsp;|&nbsp; Phone: +91 93440 95727 / +91 93855 73581<br>Website: www.buildmyweb.info</div>
   </div>
 </div>
-<div class="meta">
-  <div class="meta-row"><div class="meta-label">Issue Date</div>${fd(invoice.issue_date)}</div>
-  <div class="meta-row"><div class="meta-label">Due Date</div>${fd(invoice.due_date)}</div>
-  ${invoice.po_number ? `<div class="meta-row"><div class="meta-label">PO Number</div>${invoice.po_number}</div>` : ""}
-  <div class="meta-row"><div class="meta-label">Currency</div>${currency}</div>
+<div class="footer">
+  <div class="footer-text">BuildMyWeb | Where Imagination Meets Innovation | buildmyweb.info</div>
+  <div class="footer-text">Invoice ${invoice.invoice_number}</div>
 </div>
-${sortedItems.length > 0 ? `
-<table><thead><tr>
-  <th>Description</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Rate</th>
-  <th style="text-align:right;width:70px;">Disc%</th><th style="text-align:right;width:70px;">Tax%</th><th style="text-align:right;width:100px;">Total</th>
-</tr></thead><tbody>${itemRows}</tbody></table>` : ""}
-<div class="totals"><div class="totals-inner">
-  <div class="totals-row"><span>Subtotal</span><span>${f(invoice.subtotal || total)}</span></div>
-  ${(invoice.discount_amount || 0) > 0 ? `<div class="totals-row" style="color:#d97706;"><span>Discount</span><span>-${f(invoice.discount_amount)}</span></div>` : ""}
-  ${(invoice.tax_amount || 0) > 0 ? `<div class="totals-row"><span>Tax</span><span>${f(invoice.tax_amount)}</span></div>` : ""}
-  <div class="totals-total"><span>Total</span><span>${f(total)}</span></div>
-  ${paid > 0 ? `<div class="totals-row" style="color:#16a34a;"><span>Paid</span><span>-${f(paid)}</span></div>` : ""}
-  ${balance > 0 ? `<div class="totals-row" style="font-weight:600;color:#d97706;"><span>Balance Due</span><span>${f(balance)}</span></div>` : ""}
-</div></div>
-${invoice.customer_note || invoice.notes ? `<div class="note"><strong>Note:</strong> ${invoice.customer_note || invoice.notes}</div>` : ""}
 </body></html>`;
 
     const win = window.open("", "_blank");

@@ -592,6 +592,41 @@ export default function InvoicesPage() {
             ))}
           </div>
 
+          {/* Aging Report */}
+          {all.length > 0 && (() => {
+            const today = new Date();
+            const aging = { current: 0, d30: 0, d60: 0, d90: 0 };
+            for (const inv of all) {
+              if (["paid","cancelled","void"].includes(inv.status)) continue;
+              const bal = inv.balance_due ?? 0;
+              if (!bal) continue;
+              const due = inv.due_date ? new Date(inv.due_date + "T00:00:00") : null;
+              if (!due || due >= today) { aging.current += bal; continue; }
+              const days = Math.floor((today.getTime() - due.getTime()) / 86400000);
+              if (days <= 30) aging.d30 += bal;
+              else if (days <= 60) aging.d60 += bal;
+              else aging.d90 += bal;
+            }
+            return (
+              <div className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">Aging Report — Outstanding Balances</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Current (Not Due)", amount: aging.current, color: "text-blue-400", bg: "bg-blue-500/10" },
+                    { label: "1–30 Days Overdue", amount: aging.d30, color: "text-amber-400", bg: "bg-amber-500/10" },
+                    { label: "31–60 Days Overdue", amount: aging.d60, color: "text-orange-400", bg: "bg-orange-500/10" },
+                    { label: "60+ Days Overdue", amount: aging.d90, color: "text-red-400", bg: "bg-red-500/10" },
+                  ].map((bucket) => (
+                    <div key={bucket.label} className={`rounded-lg ${bucket.bg} p-3`}>
+                      <p className="text-[10px] text-slate-500 mb-1">{bucket.label}</p>
+                      <p className={`text-base font-bold ${bucket.color}`}>{fmt(bucket.amount)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px] max-w-xs">

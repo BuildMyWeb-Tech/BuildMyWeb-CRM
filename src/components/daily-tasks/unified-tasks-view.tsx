@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, Clock, Eye, EyeOff, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, Clock, Eye, EyeOff, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,6 +79,8 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTask | null>(null);
   const [doneActionLoading, setDoneActionLoading] = useState(false);
   const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try { return new Set(JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "[]")); } catch { return new Set(); }
@@ -658,7 +660,16 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
             <table className="w-full min-w-[540px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-2 py-2 font-medium w-8" />
+                  <th className="px-2 py-2 font-medium w-8">
+                    <input type="checkbox"
+                      checked={filteredTasks.filter((t) => !hiddenRows.has(t.id)).length > 0 && filteredTasks.filter((t) => !hiddenRows.has(t.id)).every((t) => selectedIds.has(t.id))}
+                      onChange={(e) => {
+                        const visible = filteredTasks.filter((t) => !hiddenRows.has(t.id));
+                        setSelectedIds(e.target.checked ? new Set(visible.map((t) => t.id)) : new Set());
+                      }}
+                      className="rounded border-[#2a3045] accent-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-3 py-2 font-medium">
                     <button type="button" onClick={() => toggleSort("title")} className="flex items-center gap-1 hover:text-foreground">
                       Task
@@ -721,11 +732,24 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                       className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                     >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" title="Hide row"
-                          onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify([...n])); return n; }); }}
-                          className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <input type="checkbox"
+                            checked={selectedIds.has(task.id)}
+                            onChange={(e) => {
+                              setSelectedIds((prev) => {
+                                const n = new Set(prev);
+                                e.target.checked ? n.add(task.id) : n.delete(task.id);
+                                return n;
+                              });
+                            }}
+                            className="rounded border-[#2a3045] accent-blue-500 cursor-pointer"
+                          />
+                          <button type="button" title="Hide row"
+                            onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify([...n])); return n; }); }}
+                            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-foreground">
                         <span className={isDone ? "line-through text-muted-foreground" : ""}>{task.title}</span>
@@ -792,6 +816,45 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
           </div>
         )}
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border border-[#2a3045] bg-[#1a1f2e] px-4 py-3 shadow-2xl">
+          <CheckSquare className="h-4 w-4 text-blue-400 shrink-0" />
+          <span className="text-sm font-medium text-white">{selectedIds.size} selected</span>
+          <div className="w-px h-5 bg-[#2a3045]" />
+          <button
+            type="button"
+            onClick={async () => {
+              if (!window.confirm(`Delete ${selectedIds.size} selected task(s)? This cannot be undone.`)) return;
+              setBulkDeleting(true);
+              let ok = 0, fail = 0;
+              const selected = filteredTasks.filter((t) => selectedIds.has(t.id));
+              await Promise.all(selected.map(async (task) => {
+                const url = task.kind === "daily" ? `/api/daily-tasks/${task.id}` : `/api/project-tasks/${task.id}`;
+                const res = await fetch(url, { method: "DELETE" });
+                if (res.ok) ok++; else fail++;
+              }));
+              setBulkDeleting(false);
+              setSelectedIds(new Set());
+              if (ok > 0) toast.success(`${ok} task${ok !== 1 ? "s" : ""} deleted.`);
+              if (fail > 0) toast.error(`${fail} task${fail !== 1 ? "s" : ""} could not be deleted.`);
+              load();
+            }}
+            disabled={bulkDeleting}
+            className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+          >
+            {bulkDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-slate-500 hover:text-white transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Done-task action modal */}
       {doneModalTask && (
