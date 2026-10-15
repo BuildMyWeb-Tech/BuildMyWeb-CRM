@@ -16,7 +16,11 @@ export async function GET(request: Request) {
       .eq('account_id', ctx.accountId)
       .order('expense_date', { ascending: false })
 
-    if (month) query = query.gte('expense_date', `${month}-01`).lte('expense_date', `${month}-31`)
+    if (month) {
+      const [y, m] = month.split('-').map(Number)
+      const lastDay = new Date(y, m, 0).getDate()
+      query = query.gte('expense_date', `${month}-01`).lte('expense_date', `${month}-${String(lastDay).padStart(2, '0')}`)
+    }
     if (category && category !== 'all') query = query.eq('category', category)
 
     const { data, error } = await query

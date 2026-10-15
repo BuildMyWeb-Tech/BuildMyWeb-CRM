@@ -51,7 +51,9 @@ export async function POST(request: Request) {
         .maybeSingle()
       const lastNum = last?.invoice_number?.match(/(\d+)$/)
       const nextNum = lastNum ? (parseInt(lastNum[1]) + 1) : 1
-      invoiceNumber = `INV-${String(nextNum).padStart(5, '0')}`
+      // Append a random suffix to avoid duplicates from concurrent requests
+      const suffix = Math.random().toString(36).slice(2, 5).toUpperCase()
+      invoiceNumber = `INV-${String(nextNum).padStart(5, '0')}-${suffix}`
     }
 
     // Calculate totals from items
@@ -120,7 +122,12 @@ export async function POST(request: Request) {
           position: i,
         }
       })
-      await ctx.supabase.from('invoice_items').insert(itemRows)
+      const { error: itemsErr } = await ctx.supabase.from('invoice_items').insert(itemRows)
+      if (itemsErr) {
+        // Rollback: delete the invoice so we don't leave a record with no items
+        await ctx.supabase.from('invoices').delete().eq('id', invoice.id)
+        return NextResponse.json({ error: 'Could not save line items' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ invoice }, { status: 201 })

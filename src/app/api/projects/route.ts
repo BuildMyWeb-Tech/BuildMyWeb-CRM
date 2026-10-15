@@ -58,6 +58,7 @@ async function backfillMissingClientProjects(
     )
     if (stagesError) {
       console.error('[projects] backfill stage seeding failed for client', client.id, stagesError)
+      await supabase.from('pipelines').delete().eq('id', pipeline.id)
       continue
     }
     // Re-check in case another request already created the project

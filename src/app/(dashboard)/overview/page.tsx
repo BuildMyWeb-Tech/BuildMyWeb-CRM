@@ -342,9 +342,10 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
           </thead>
           <tbody>
             {visible.map((f) => {
-              const fDate = f.next_follow_up_at ? new Date(f.next_follow_up_at) : null;
-              const isOverdueF = fDate ? fDate < new Date() : false;
-              const isTodayF = fDate ? fDate.toDateString() === new Date().toDateString() : false;
+              const fDateStr = f.next_follow_up_at ? f.next_follow_up_at.slice(0, 10) : null;
+              const todayDateStr = new Date().toISOString().slice(0, 10);
+              const isOverdueF = fDateStr ? fDateStr < todayDateStr : false;
+              const isTodayF = fDateStr ? fDateStr === todayDateStr : false;
               return (
                 <tr key={f.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                   <td className="px-2 py-2.5">
@@ -443,6 +444,9 @@ function EnquirySidebar({ enquiries, members, todayStr }: {
                 </p>
               </div>
             ))}
+            {overdueEnq.length > 5 && (
+              <div className="px-3 py-2 text-[10px] text-red-400/70">+{overdueEnq.length - 5} more overdue</div>
+            )}
           </div>
         </div>
       )}
@@ -491,11 +495,11 @@ function ProductTasksSidebar({ productTasks, allProducts }: { productTasks: Prod
   }, {});
 
   // Build rows from ALL products (A-Z) + a "No Product" row if tasks exist without product
-  const productRows: { name: string; count: number }[] = [
+  const productRows: { id: string; name: string; count: number }[] = [
     ...allProducts
-      .map((p) => ({ name: p.project_name, count: countMap[p.id] ?? 0 }))
+      .map((p) => ({ id: p.id, name: p.project_name, count: countMap[p.id] ?? 0 }))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    ...(countMap["__none__"] ? [{ name: "No Product", count: countMap["__none__"] }] : []),
+    ...(countMap["__none__"] ? [{ id: "__none__", name: "No Product", count: countMap["__none__"] }] : []),
   ];
 
   return (
@@ -521,7 +525,7 @@ function ProductTasksSidebar({ productTasks, allProducts }: { productTasks: Prod
           </div>
           <div className="divide-y divide-[#2a3045]">
             {productRows.map((p) => (
-              <div key={p.name} className="flex items-center justify-between px-3 py-2">
+              <div key={p.id} className="flex items-center justify-between px-3 py-2">
                 <p className="text-xs text-slate-300 truncate flex-1">{p.name}</p>
                 <span className="shrink-0 ml-2 text-[10px] font-bold text-teal-400">{p.count}</span>
               </div>
@@ -713,7 +717,6 @@ export default function OverviewPage() {
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
   useEffect(() => { loadMyWork(); }, [loadMyWork]);
-  useEffect(() => { loadMyWork(); }, [myWorkUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const todayStr = new Date().toISOString().slice(0, 10);
 

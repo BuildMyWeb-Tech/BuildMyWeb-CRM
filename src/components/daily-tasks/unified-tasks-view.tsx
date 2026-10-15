@@ -60,9 +60,9 @@ const PRIORITY_STYLE: Record<TaskPriority, string> = {
 };
 
 export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current" | "scheduled" | "all" }) {
-  const { accountId, user, canManageMembers, canSendMessages } = useAuth();
+  const { accountId, user, canManageMembers } = useAuth();
   const { canCreate: gridCanCreate } = usePagePermissions("daily_tasks");
-  const canCreateTask = canSendMessages && gridCanCreate;
+  const canCreateTask = gridCanCreate;
 
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);

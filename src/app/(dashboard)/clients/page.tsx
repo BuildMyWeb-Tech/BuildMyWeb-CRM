@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
@@ -103,10 +103,11 @@ export default function ClientsPage() {
     accountId ? `clients-list:${accountId}` : null,
     fetchClients,
   );
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    if (typeof window === "undefined") return "grid";
-    return window.localStorage.getItem("clients-view") === "list" ? "list" : "grid";
-  });
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  useEffect(() => {
+    const saved = localStorage.getItem("clients-view");
+    if (saved === "list") setViewMode("list");
+  }, []);
   const [statusFilter, setStatusFilter] = useState<"all" | ClientStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
 

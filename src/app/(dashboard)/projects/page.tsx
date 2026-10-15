@@ -36,14 +36,13 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>(() => {
-    if (typeof window === "undefined") return "all";
-    return (window.localStorage.getItem("projects-status-filter") as "all" | ProjectStatus) ?? "all";
-  });
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    if (typeof window === "undefined") return "grid";
-    return window.localStorage.getItem("projects-view") === "list" ? "list" : "grid";
-  });
+  const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  useEffect(() => {
+    const savedStatus = localStorage.getItem("projects-status-filter") as "all" | ProjectStatus | null;
+    if (savedStatus) setStatusFilter(savedStatus);
+    if (localStorage.getItem("projects-view") === "list") setViewMode("list");
+  }, []);
 
   async function loadProjects() {
     const res = await fetch("/api/projects");

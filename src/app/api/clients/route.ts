@@ -103,6 +103,7 @@ export async function POST(request: Request) {
       if (projectError) console.error('[clients] auto-project creation failed:', projectError)
     } else {
       console.error('[clients] auto-project stage seeding failed:', stagesError)
+      await ctx.supabase.from('pipelines').delete().eq('id', pipeline.id)
     }
   } else {
     console.error('[clients] auto-project pipeline creation failed:', pipelineError)
