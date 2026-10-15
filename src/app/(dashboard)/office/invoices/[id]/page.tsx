@@ -367,7 +367,7 @@ ${invoice.customer_note || invoice.notes ? `<div class="note"><strong>Note:</str
                 <p className="text-sm text-slate-400 mt-0.5">{invoice.client_name}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={handlePrint}
                 className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-2 text-sm text-slate-300 hover:text-white hover:border-slate-500 transition-colors">
                 <Download className="h-4 w-4" /> PDF

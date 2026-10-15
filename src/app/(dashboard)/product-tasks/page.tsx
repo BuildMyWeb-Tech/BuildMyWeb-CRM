@@ -536,7 +536,7 @@ export default function ProductTasksPage() {
           </div>
 
           {/* View mode tabs + count */}
-          <div className="shrink-0 px-4 pb-3 flex items-center justify-between gap-4 sm:px-6">
+          <div className="shrink-0 px-4 pb-3 flex flex-wrap items-center justify-between gap-4 sm:px-6">
             <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
               {(["current", "scheduled", "all"] as const).map((mode) => (
                 <button key={mode} type="button" onClick={() => setViewModePersisted(mode)}

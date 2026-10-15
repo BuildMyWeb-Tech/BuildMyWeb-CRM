@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
-  Folder, Users,
+  Folder,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,8 +29,10 @@ const PROJECT_COLORS = [
   "bg-pink-500", "bg-green-500", "bg-yellow-500", "bg-red-500",
 ];
 
-function getProjectColor(index: number) {
-  return PROJECT_COLORS[index % PROJECT_COLORS.length];
+function getProjectColor(nameOrId: string) {
+  let hash = 0;
+  for (let i = 0; i < nameOrId.length; i++) hash = (hash * 31 + nameOrId.charCodeAt(i)) >>> 0;
+  return PROJECT_COLORS[hash % PROJECT_COLORS.length];
 }
 
 type ViewMode = "current" | "scheduled" | "all";
@@ -45,7 +47,6 @@ export default function DailyTasksPage() {
   const { accountId } = useAuth();
   const [stats, setStats] = useState<TaskStats>({ total: 0, inProgress: 0, pending: 0, overdue: 0 });
   const [projects, setProjects] = useState<ProjectWithTaskCount[]>([]);
-  const [clients, setClients] = useState<{ id: string; name: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("current");
 
@@ -89,12 +90,6 @@ export default function DailyTasksPage() {
         setProjects(projectsData.map((p) => ({ ...p, task_count: projectCountMap[p.id] ?? 0 })));
       }
 
-      const { data: clientsData } = await supabase
-        .from("clients")
-        .select("id, name, status")
-        .eq("account_id", accountId)
-        .order("name");
-      if (clientsData) setClients(clientsData as { id: string; name: string; status: string }[]);
     } finally {
       setLoading(false);
     }
@@ -283,7 +278,7 @@ export default function DailyTasksPage() {
                   >
                     <span
                       className={`h-5 w-5 shrink-0 rounded ${getProjectColor(
-                        idx
+                        project.id
                       )} flex items-center justify-center text-[9px] font-bold text-white`}
                     >
                       {project.name.charAt(0).toUpperCase()}

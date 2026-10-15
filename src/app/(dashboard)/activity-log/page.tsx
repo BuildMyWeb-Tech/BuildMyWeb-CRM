@@ -126,7 +126,7 @@ export default function ActivityLogPage() {
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-3 py-2 font-medium">When</th>

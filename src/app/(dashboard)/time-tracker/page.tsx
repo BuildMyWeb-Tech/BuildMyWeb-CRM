@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Clock, Plus, Trash2, Pencil, Loader2, X, Timer } from "lucide-react";
+import { Clock, Plus, Trash2, Pencil, Loader2, X, Timer, Download } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 
@@ -134,11 +134,30 @@ export default function TimeTrackerPage() {
     toast.success("Deleted."); load();
   }
 
+  const [entrySearch, setEntrySearch] = useState("");
   const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
   const todayHours = entries.filter((e) => e.entry_date === today.toISOString().slice(0, 10)).reduce((s, e) => s + e.hours, 0);
+  // Daily avg uses days in the SELECTED month, not today's day-of-month
+  const [selYear, selMonth] = month.split("-").map(Number);
+  const daysInSelMonth = new Date(selYear, selMonth, 0).getDate();
+  const daysDenominator = month === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}` ? today.getDate() : daysInSelMonth;
   const byClient: Record<string, number> = {};
   for (const e of entries) { const k = e.client_name || "No Client"; byClient[k] = (byClient[k] ?? 0) + e.hours; }
   const topClients = Object.entries(byClient).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const filteredEntries = entrySearch
+    ? entries.filter((e) => (e.client_name ?? "").toLowerCase().includes(entrySearch.toLowerCase()) || (e.task_name ?? "").toLowerCase().includes(entrySearch.toLowerCase()))
+    : entries;
+
+  function exportCSV() {
+    const header = ["Date", "Client", "Task", "Hours", "Notes"];
+    const rows = entries.map((e) => [e.entry_date, e.client_name ?? "", e.task_name ?? "", String(e.hours), e.notes ?? ""]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `time-entries-${month}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <>
@@ -155,9 +174,15 @@ export default function TimeTrackerPage() {
               <p className="text-sm text-slate-400">Track how you spend your working hours</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none" />
+            {entries.length > 0 && (
+              <button onClick={exportCSV}
+                className="flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors">
+                <Download className="h-3.5 w-3.5" /> Export
+              </button>
+            )}
             <button onClick={() => { setEditEntry(null); setModalOpen(true); }}
               className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500">
               <Plus className="h-4 w-4" /> Log Time
@@ -170,7 +195,7 @@ export default function TimeTrackerPage() {
           {[
             { label: "This Month", value: fmt(totalHours), sub: `${entries.length} entries`, color: "text-teal-400", bg: "bg-teal-500/10" },
             { label: "Today", value: fmt(todayHours), sub: "logged today", color: "text-blue-400", bg: "bg-blue-500/10" },
-            { label: "Daily Avg", value: fmt(totalHours / Math.max(1, new Date().getDate())), sub: "hours/day", color: "text-purple-400", bg: "bg-purple-500/10" },
+            { label: "Daily Avg", value: fmt(totalHours / Math.max(1, daysDenominator)), sub: "hours/day", color: "text-purple-400", bg: "bg-purple-500/10" },
             { label: "Top Client", value: topClients[0]?.[0] ?? "—", sub: topClients[0] ? fmt(topClients[0][1]) : "no data", color: "text-amber-400", bg: "bg-amber-500/10" },
           ].map((c) => (
             <div key={c.label} className={`rounded-xl border border-[#2a3045] ${c.bg} p-4`}>
@@ -180,6 +205,18 @@ export default function TimeTrackerPage() {
             </div>
           ))}
         </div>
+
+        {entries.length > 0 && (
+          <div className="relative max-w-xs">
+            <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+            <input
+              placeholder="Search client or task…"
+              value={entrySearch}
+              onChange={(e) => setEntrySearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 placeholder:text-slate-600 focus:border-teal-500 focus:outline-none"
+            />
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
           {/* Entries table */}
@@ -195,7 +232,7 @@ export default function TimeTrackerPage() {
                 </button>
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[500px] text-sm">
                 <thead>
                   <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-[11px] uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3 text-left">Date</th>
@@ -206,7 +243,7 @@ export default function TimeTrackerPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((e) => (
+                  {filteredEntries.map((e) => (
                     <tr key={e.id} className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
                       <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(e.entry_date)}</td>
                       <td className="px-4 py-3 text-slate-300">{e.client_name || <span className="text-slate-600">—</span>}</td>

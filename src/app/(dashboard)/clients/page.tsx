@@ -35,6 +35,7 @@ import type { Client, ClientStatus } from "@/types";
 import { usePagePermissions } from "@/hooks/use-page-permissions";
 import { useCachedResource } from "@/hooks/use-cached-resource";
 import { useAuth } from "@/hooks/use-auth";
+import { useAccountMembers } from "@/hooks/use-account-members";
 import { toast } from "sonner";
 
 async function fetchClients(): Promise<Client[]> {
@@ -103,6 +104,7 @@ export default function ClientsPage() {
     accountId ? `clients-list:${accountId}` : null,
     fetchClients,
   );
+  const { members } = useAccountMembers();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   useEffect(() => {
     const saved = localStorage.getItem("clients-view");
@@ -110,6 +112,8 @@ export default function ClientsPage() {
   }, []);
   const [statusFilter, setStatusFilter] = useState<"all" | ClientStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"status" | "name" | "updated" | "client_since">("status");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -234,11 +238,16 @@ export default function ClientsPage() {
   const visibleClients = allClients
     .filter((c) => {
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
-      const matchesSearch =
-        !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchesSearch;
+      const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.interface_name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesOwner = ownerFilter === "all" || c.owner_user_id === ownerFilter;
+      return matchesStatus && matchesSearch && matchesOwner;
     })
-    .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+    .sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "updated") return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      if (sortBy === "client_since") return (b.client_since ?? "").localeCompare(a.client_since ?? "");
+      return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
+    });
 
   return (
     <div className="flex min-h-screen bg-[#0f1117]">
@@ -357,15 +366,25 @@ export default function ClientsPage() {
           </select>
 
           <select
+            value={ownerFilter}
+            onChange={(e) => setOwnerFilter(e.target.value)}
             className="px-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
           >
-            <option>All Owners</option>
+            <option value="all">All Owners</option>
+            {members.map((m) => (
+              <option key={m.user_id} value={m.user_id}>{m.full_name || m.email || m.user_id.slice(0, 8)}</option>
+            ))}
           </select>
 
           <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
             className="px-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-300 focus:outline-none focus:border-blue-500"
           >
-            <option>Recently Updated</option>
+            <option value="status">By Status</option>
+            <option value="updated">Recently Updated</option>
+            <option value="name">Name A–Z</option>
+            <option value="client_since">Client Since</option>
           </select>
 
           <div className="flex items-center rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5 ml-auto">
@@ -423,11 +442,11 @@ export default function ClientsPage() {
           </div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            {visibleClients.map((c, idx) => (
+            {visibleClients.map((c) => (
               <ClientCard
                 key={c.id}
                 client={c}
-                idx={idx}
+                members={members}
                 canUpdate={canUpdate}
                 canDelete={canDelete}
                 onEdit={(e) => openQuickEdit(c, e)}
@@ -644,21 +663,21 @@ export default function ClientsPage() {
 
 function ClientCard({
   client: c,
-  idx,
+  members,
   canUpdate,
   canDelete,
   onEdit,
   onDelete,
 }: {
   client: Client;
-  idx: number;
+  members: import("@/types").AccountMember[];
   canUpdate: boolean;
   canDelete: boolean;
   onEdit: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
 }) {
   const avatarColor = c.accent_color ? undefined : getAvatarColor(c.name);
-  const progressPct = Math.min(100, ((idx * 37 + 20) % 80) + 10); // deterministic fake progress
+  const ownerName = c.owner_user_id ? (members.find((m) => m.user_id === c.owner_user_id)?.full_name ?? "—") : "—";
 
   return (
     <Link href={`/clients/${c.id}`}>
@@ -692,7 +711,7 @@ function ClientCard({
         <div className="flex flex-col gap-1.5 mb-3 flex-1">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">Owner</span>
-            <span className="text-slate-300">—</span>
+            <span className="text-slate-300 truncate max-w-[130px]">{ownerName}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">Contact</span>
@@ -710,25 +729,16 @@ function ClientCard({
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">Next follow-up</span>
-            <span className="text-slate-300">—</span>
+            <span className={`truncate max-w-[130px] ${c.next_follow_up_at && c.next_follow_up_at.slice(0,10) < new Date().toISOString().slice(0,10) ? "text-red-400" : "text-slate-300"}`}>
+              {c.next_follow_up_at ? new Date(c.next_follow_up_at + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "—"}
+            </span>
           </div>
         </div>
 
-        {/* Footer: projects + progress */}
-        <div className="border-t border-[#2a3045] pt-3 mt-auto">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-slate-400">Projects <span className="text-blue-400">1 active</span></span>
-            <span className="text-slate-400">Est. Value <span className="text-slate-200">—</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full bg-[#2a3045]">
-              <div
-                className="h-full rounded-full bg-blue-500"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-slate-400 shrink-0">{progressPct}%</span>
-          </div>
+        {/* Footer: updated at */}
+        <div className="border-t border-[#2a3045] pt-2 mt-auto flex items-center justify-between text-[10px] text-slate-600">
+          <span>Updated {new Date(c.updated_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}</span>
+          {c.client_since && <span>Since {new Date(c.client_since + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}</span>}
         </div>
       </div>
     </Link>

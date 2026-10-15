@@ -28,7 +28,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-1 border-b border-border">
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto scrollbar-none">
         {TABS.map((t) => (
           <button
             key={t.id}

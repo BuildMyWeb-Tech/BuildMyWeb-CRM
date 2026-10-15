@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2, LayoutGrid, List as ListIcon, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,7 @@ export default function ProjectsPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     const savedStatus = localStorage.getItem("projects-status-filter") as "all" | ProjectStatus | null;
     if (savedStatus) setStatusFilter(savedStatus);
@@ -86,7 +87,11 @@ export default function ProjectsPage() {
     }
   }
 
-  const visibleProjects = (projects ?? []).filter((p) => statusFilter === "all" || p.status === statusFilter);
+  const visibleProjects = (projects ?? []).filter((p) => {
+    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+    const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.client_name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   const statCounts = {
     all: (projects ?? []).length,
@@ -106,7 +111,16 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold text-white">Projects</h1>
             <p className="mt-0.5 text-sm text-slate-400">Each project gets its own task board.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <input
+                placeholder="Search projects…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 text-sm bg-[#1a1f2e] border border-[#2a3045] rounded-lg text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-44"
+              />
+            </div>
             <div className="flex items-center rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5">
               <button type="button" onClick={() => { setViewMode("grid"); localStorage.setItem("projects-view","grid"); }}
                 className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${viewMode === "grid" ? "bg-[#2a3045] text-white" : "text-slate-400 hover:text-white"}`}>
@@ -226,6 +240,7 @@ export default function ProjectsPage() {
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
                       p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
                       : p.status === "inactive" ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
+                      : p.status === "completed" ? "border-teal-500/30 bg-teal-500/20 text-teal-400"
                       : "border-[#2a3045] bg-[#2a3045] text-slate-500"
                     }`}>{p.status}</span>
                     <DropdownMenu>

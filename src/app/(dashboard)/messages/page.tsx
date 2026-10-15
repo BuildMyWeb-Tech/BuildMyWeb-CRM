@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { AtSign, CheckCheck, Loader2, MessageSquare, Send } from "lucide-react";
+import { AtSign, CheckCheck, Loader2, MessageSquare, Send, ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { AccountMember, DirectMessage } from "@/types";
@@ -198,7 +198,7 @@ export default function MessagesPage() {
   return (
     <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-background">
       {/* ── Sidebar: conversation list ── */}
-      <div className="flex w-64 flex-col border-r border-border bg-card shrink-0">
+      <div className={`flex w-64 flex-col border-r border-border bg-card shrink-0 ${selectedUserId ? "hidden sm:flex" : "flex"}`}>
         <div className="border-b border-border px-4 py-3">
           <h1 className="font-semibold text-foreground flex items-center gap-2">
             <MessageSquare className="h-4 w-4" /> Messages
@@ -261,6 +261,9 @@ export default function MessagesPage() {
           <>
             {/* Header */}
             <div className="flex items-center gap-3 border-b border-border bg-card px-5 py-3">
+              <button type="button" onClick={() => setSelectedUserId(null)} className="sm:hidden text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <Avatar name={selectedMember?.full_name ?? "?"} />
               <div className="flex-1">
                 <p className="font-semibold text-foreground">{selectedMember?.full_name}</p>

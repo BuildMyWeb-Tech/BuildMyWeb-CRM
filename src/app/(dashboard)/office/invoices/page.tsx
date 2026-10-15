@@ -290,7 +290,7 @@ function InvoiceFormModal({
           {/* Section B – Client */}
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">Client</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Client Name *</label>
                 <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client or company name"
@@ -359,7 +359,7 @@ function InvoiceFormModal({
           </div>
 
           {/* Notes */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Customer Note (visible on invoice)</label>
               <textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} rows={3}

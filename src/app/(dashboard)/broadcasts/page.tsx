@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Radio, Plus, Loader2, AlertTriangle, RefreshCw, Search } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -39,6 +39,8 @@ export default function BroadcastsPage() {
   const [error, setError] = useState<string | null>(null);
   const [qrOffline, setQrOffline] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<BroadcastStatus | 'all'>('all');
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -362,7 +364,7 @@ export default function BroadcastsPage() {
             {t('subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"
@@ -383,6 +385,32 @@ export default function BroadcastsPage() {
           </GatedButton>
         </div>
       </div>
+
+      {broadcasts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              placeholder="Search broadcasts…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as BroadcastStatus | 'all')}
+            className="px-3 py-1.5 text-sm bg-card border border-border rounded-lg text-foreground focus:outline-none"
+          >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="sending">Sending</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="paused">Paused</option>
+          </select>
+        </div>
+      )}
 
       {broadcasts.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-border bg-card">
@@ -416,7 +444,11 @@ export default function BroadcastsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {broadcasts.map((broadcast) => {
+              {broadcasts.filter((b) => {
+                const matchesSearch = !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+                return matchesSearch && matchesStatus;
+              }).map((broadcast) => {
                 const status = getBroadcastStatus(broadcast.status);
                 return (
                   <TableRow
