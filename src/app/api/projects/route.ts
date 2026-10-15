@@ -23,13 +23,17 @@ const DEFAULT_STAGES = [
 //   already enforces agent+ access.
 // ============================================================
 
+// Throttle: only run the backfill once every 5 minutes per server
+// instance. The backfill makes 2-3 extra DB round-trips every GET,
+// but missing projects are rare after initial setup — re-checking
+// every single page load is wasteful.
+let lastBackfillAt = 0
+
 // Self-heals a gap from before this was reliable: POST /api/clients'
 // auto-project-creation is best-effort (see its comment), so a client
 // created while that step failed — or predating it entirely — has no
 // project row and silently never appears on any board or the Overview
-// side panel. Runs on every list load (cheap: a handful of rows per
-// account) rather than as a one-off backfill, so it self-corrects
-// going forward too, not just for today's gap.
+// side panel. Throttled to once per 5 minutes per server instance.
 async function backfillMissingClientProjects(
   supabase: Awaited<ReturnType<typeof getCurrentAccount>>['supabase'],
   accountId: string,
@@ -81,7 +85,8 @@ export async function GET(request: Request) {
     const ctx = await getCurrentAccount()
     const clientIdFilter = new URL(request.url).searchParams.get('client_id')
 
-    if (ctx.userId) {
+    if (ctx.userId && Date.now() - lastBackfillAt > 5 * 60 * 1000) {
+      lastBackfillAt = Date.now()
       await backfillMissingClientProjects(ctx.supabase, ctx.accountId, ctx.userId)
     }
 

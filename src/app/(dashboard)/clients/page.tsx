@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
@@ -228,14 +228,17 @@ export default function ClientsPage() {
   }
 
   const allClients = clients ?? [];
-  const totalCount = allClients.length;
-  const activeCount = allClients.filter((c) => c.status === "active").length;
-  const atRiskCount = allClients.filter((c) => c.status === "inactive").length;
-  const archivedCount = allClients.filter((c) => c.status === "archived").length;
-  const completedCount = allClients.filter((c) => c.status === "completed").length;
+
+  const { totalCount, activeCount, atRiskCount, archivedCount, completedCount } = useMemo(() => ({
+    totalCount: allClients.length,
+    activeCount: allClients.filter((c) => c.status === "active").length,
+    atRiskCount: allClients.filter((c) => c.status === "inactive").length,
+    archivedCount: allClients.filter((c) => c.status === "archived").length,
+    completedCount: allClients.filter((c) => c.status === "completed").length,
+  }), [allClients]);
 
   const STATUS_ORDER: Record<string, number> = { active: 0, inactive: 1, archived: 2, completed: 3 };
-  const visibleClients = allClients
+  const visibleClients = useMemo(() => allClients
     .filter((c) => {
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.interface_name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
@@ -247,7 +250,7 @@ export default function ClientsPage() {
       if (sortBy === "updated") return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
       if (sortBy === "client_since") return (b.client_since ?? "").localeCompare(a.client_since ?? "");
       return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
-    });
+    }), [allClients, statusFilter, searchQuery, ownerFilter, sortBy]);
 
   return (
     <div className="flex min-h-screen bg-[#0f1117]">

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
     let query = ctx.supabase
       .from('invoices')
-      .select('*, invoice_items(*), invoice_payments(*)')
+      .select('id, invoice_number, client_name, client_id, project_id, currency, status, issue_date, due_date, total_amount, paid_amount, balance_due, subtotal, discount_amount, tax_amount, amount, po_number, customer_note, internal_note, notes, created_at, updated_at, created_by, account_id, invoice_items(id, description, quantity, unit, unit_price, discount_pct, tax_pct, line_total, position)')
       .eq('account_id', ctx.accountId)
       .order('created_at', { ascending: false })
 
