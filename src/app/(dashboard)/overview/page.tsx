@@ -343,6 +343,7 @@ function FollowupsSection({ followups }: { followups: MyWorkFollowUp[] }) {
           <tbody>
             {visible.map((f) => {
               const fDateStr = f.next_follow_up_at ? f.next_follow_up_at.slice(0, 10) : null;
+              const fDate = fDateStr ? new Date(fDateStr) : null;
               const todayDateStr = new Date().toISOString().slice(0, 10);
               const isOverdueF = fDateStr ? fDateStr < todayDateStr : false;
               const isTodayF = fDateStr ? fDateStr === todayDateStr : false;
