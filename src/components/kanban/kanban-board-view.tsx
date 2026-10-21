@@ -130,6 +130,13 @@ export function KanbanBoardView() {
     window.localStorage.setItem("kanban-priority-filter", JSON.stringify([...next]));
   }
 
+  const DEFAULT_KANBAN_COLUMNS = [
+    { name: "To Do",       position: 1, color: "#94a3b8" },
+    { name: "In Progress", position: 2, color: "#60a5fa" },
+    { name: "Review",      position: 3, color: "#facc15" },
+    { name: "Done",        position: 4, color: "#22c55e" },
+  ];
+
   const load = useCallback(() => {
     if (!accountId) return;
     const supabase = createClient();
@@ -139,8 +146,19 @@ export function KanbanBoardView() {
       fetch("/api/projects").then((r) => (r.ok ? r.json() : null)),
       fetchAccountMembers(accountId),
     ])
-      .then(([statusesRes, tasksRes, projectsData, membersRows]) => {
-        const loadedStatuses = statusesRes.data ?? [];
+      .then(async ([statusesRes, tasksRes, projectsData, membersRows]) => {
+        let loadedStatuses = statusesRes.data ?? [];
+
+        // Auto-seed default columns for accounts that have none (new
+        // accounts created after migration 056, or before it ran).
+        if (loadedStatuses.length === 0) {
+          const { data: seeded } = await supabase
+            .from("kanban_common_statuses")
+            .insert(DEFAULT_KANBAN_COLUMNS.map((c) => ({ ...c, account_id: accountId })))
+            .select();
+          loadedStatuses = seeded ?? [];
+        }
+
         const loadedTasks = (tasksRes.data ?? []) as ProjectTask[];
         setStatuses(loadedStatuses);
         setTasks(loadedTasks);

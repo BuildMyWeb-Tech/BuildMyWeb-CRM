@@ -129,6 +129,7 @@ export async function POST(request: Request) {
   if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
   const clientContactId = typeof body.client_contact_id === 'string' ? body.client_contact_id : null
+  const clientId = typeof body.client_id === 'string' ? body.client_id : null
   const clientName = typeof body.client_name === 'string' ? body.client_name.trim() || null : null
   const description = typeof body.description === 'string' ? body.description : null
   const startDate = typeof body.start_date === 'string' ? body.start_date : null
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
     .insert({
       account_id: ctx.accountId,
       pipeline_id: pipeline.id,
+      client_id: clientId,
       client_contact_id: clientContactId,
       client_name: clientName,
       name,

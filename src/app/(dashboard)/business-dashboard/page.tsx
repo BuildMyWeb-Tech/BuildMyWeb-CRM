@@ -10,8 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 
-function fmt(n: number) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n ?? 0);
+function fmt(n: number, currency = "INR") {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(n ?? 0);
 }
 
 function fmtDate(d: string) {
@@ -40,7 +40,8 @@ interface DashData {
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 export default function BusinessDashboardPage() {
-  const { accountId } = useAuth();
+  const { accountId, defaultCurrency } = useAuth();
+  const currency = defaultCurrency || "INR";
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -172,14 +173,14 @@ export default function BusinessDashboardPage() {
         {/* 8 KPI cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "TOTAL REVENUE", value: fmt(d.totalRevenue), sub: "Lifetime total", color: "text-green-400", icon: IndianRupee, href: "/office/invoices" },
-            { label: "THIS MONTH", value: fmt(d.thisMonthRevenue), sub: "↑ Active pace", color: "text-green-400", icon: TrendingUp, href: "/office/invoices" },
+            { label: "TOTAL REVENUE", value: fmt(d.totalRevenue, currency), sub: "Lifetime total", color: "text-green-400", icon: IndianRupee, href: "/office/invoices" },
+            { label: "THIS MONTH", value: fmt(d.thisMonthRevenue, currency), sub: "↑ Active pace", color: "text-green-400", icon: TrendingUp, href: "/office/invoices" },
             { label: "ACTIVE CLIENTS", value: String(d.activeClients), sub: "Retainer & One-off", color: "text-white", icon: Users, href: "/clients" },
             { label: "ACTIVE PROJECTS", value: String(d.activeProjects), sub: "In workflow", color: "text-white", icon: KanbanSquare, href: "/projects" },
             { label: "PENDING TASKS", value: String(d.pendingTasks), sub: "To complete", color: "text-amber-400", icon: ListTodo, href: "/daily-tasks" },
-            { label: "OUTSTANDING PAYMENTS", value: fmt(d.outstandingPayments), sub: "Invoices issued", color: "text-red-400", icon: AlertCircle, href: "/office/invoices" },
+            { label: "OUTSTANDING PAYMENTS", value: fmt(d.outstandingPayments, currency), sub: "Invoices issued", color: "text-red-400", icon: AlertCircle, href: "/office/invoices" },
             { label: "COMPLETED PROJECTS", value: String(d.completedProjects), sub: "Delivered", color: "text-white", icon: CheckCircle2, href: "/projects" },
-            { label: "AVG PROJECT VALUE", value: fmt(d.avgProjectValue), sub: "Per client job", color: "text-white", icon: BarChart3, href: "/office/invoices" },
+            { label: "AVG PROJECT VALUE", value: fmt(d.avgProjectValue, currency), sub: "Per client job", color: "text-white", icon: BarChart3, href: "/office/invoices" },
           ].map((card) => (
             <Link key={card.label} href={card.href}
               className="rounded-xl bg-[#111827] border border-[#1e2435] p-4 hover:border-[#2a3555] hover:bg-[#141c2e] transition-all group">
@@ -197,7 +198,7 @@ export default function BusinessDashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: "Hours This Month", value: `${d.totalHoursThisMonth.toFixed(1)}h`, sub: "tracked", color: "text-teal-400", href: "/time-tracker" },
-            { label: "Expenses This Month", value: fmt(d.totalExpensesThisMonth), sub: "business costs", color: "text-red-400", href: "/expenses" },
+            { label: "Expenses This Month", value: fmt(d.totalExpensesThisMonth, currency), sub: "business costs", color: "text-red-400", href: "/expenses" },
             { label: "Avg Rating", value: d.avgRating > 0 ? `${d.avgRating.toFixed(1)}/5` : "—", sub: "client reviews", color: "text-amber-400", href: "/reviews" },
           ].map((c) => (
             <Link key={c.label} href={c.href}
@@ -224,7 +225,7 @@ export default function BusinessDashboardPage() {
                       style={{ width: maxMonth > 0 ? `${(m.amount / maxMonth) * 100}%` : "0%" }}
                     />
                   </div>
-                  <span className="text-xs text-slate-400 w-20 text-right">{fmt(m.amount)}</span>
+                  <span className="text-xs text-slate-400 w-20 text-right">{fmt(m.amount, currency)}</span>
                 </div>
               ))}
             </div>
@@ -257,7 +258,7 @@ export default function BusinessDashboardPage() {
                     {d.clientRevenue.map((c) => (
                       <div key={c.name} className="flex items-center justify-between">
                         <span className="text-xs text-slate-400 truncate max-w-[120px]">{c.name}</span>
-                        <span className="text-xs font-semibold text-green-400">{fmt(c.amount)}</span>
+                        <span className="text-xs font-semibold text-green-400">{fmt(c.amount, currency)}</span>
                       </div>
                     ))}
                   </div>

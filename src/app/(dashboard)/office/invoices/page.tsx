@@ -138,7 +138,7 @@ function InvoiceFormModal({
   const [clientName, setClientName] = useState("");
   const [currency, setCurrency] = useState("INR");
   const [status, setStatus] = useState<InvoiceStatus>("draft");
-  const [issueDate, setIssueDate] = useState("");
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [customerNote, setCustomerNote] = useState("");
@@ -703,7 +703,7 @@ export default function InvoicesPage() {
                           ) : "—"}
                         </td>
                         <td className="px-4 py-3 text-right font-medium text-white">{fmt(total, inv.currency)}</td>
-                        <td className="px-4 py-3 text-right text-green-400">{paid > 0 ? fmt(paid, inv.currency) : "—"}</td>
+                        <td className="px-4 py-3 text-right text-green-400">{paid > 0 ? fmt(paid, inv.currency) : <span className="text-slate-600">{fmt(0, inv.currency)}</span>}</td>
                         <td className="px-4 py-3 text-right">
                           <span className={balance > 0 ? "text-amber-400" : "text-slate-500"}>{fmt(balance, inv.currency)}</span>
                         </td>

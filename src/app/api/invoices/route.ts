@@ -39,6 +39,17 @@ export async function POST(request: Request) {
 
     const { items = [], ...invoiceBody } = body
 
+    // If client_id is provided but client_name is blank, look it up
+    let resolvedClientName = invoiceBody.client_name?.trim() || ''
+    if (!resolvedClientName && invoiceBody.client_id) {
+      const { data: clientRow } = await ctx.supabase
+        .from('clients')
+        .select('name')
+        .eq('id', invoiceBody.client_id)
+        .maybeSingle()
+      if (clientRow?.name) resolvedClientName = clientRow.name
+    }
+
     // Auto-generate invoice number if not provided
     let invoiceNumber = invoiceBody.invoice_number?.trim()
     if (!invoiceNumber) {
@@ -79,7 +90,7 @@ export async function POST(request: Request) {
         account_id: ctx.accountId,
         invoice_number: invoiceNumber,
         client_id: invoiceBody.client_id || null,
-        client_name: invoiceBody.client_name?.trim() || '',
+        client_name: resolvedClientName,
         project_id: invoiceBody.project_id || null,
         currency: invoiceBody.currency || 'INR',
         status: VALID_STATUSES.includes(invoiceBody.status) ? invoiceBody.status : 'draft',
@@ -95,6 +106,7 @@ export async function POST(request: Request) {
         po_number: invoiceBody.po_number || null,
         customer_note: invoiceBody.customer_note || null,
         internal_note: invoiceBody.internal_note || null,
+        notes: invoiceBody.notes || null,
         created_by: ctx.userId,
       })
       .select()

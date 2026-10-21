@@ -844,8 +844,8 @@ export default function OverviewPage() {
   }
 
   const myWorkUserName = myWorkUserId === user?.id
-    ? (profile?.full_name ?? "Me")
-    : (members.find((m) => m.user_id === myWorkUserId)?.full_name ?? "Team Member");
+    ? (profile?.full_name?.trim() || "Me")
+    : (members.find((m) => m.user_id === myWorkUserId)?.full_name?.trim() || "Team Member");
 
   // ── Product task CRUD ──────────────────────────────────────────────────────
   async function savePtModal() {
@@ -1034,7 +1034,7 @@ export default function OverviewPage() {
             value={globalUserId}
             onChange={setGlobalUserId}
             currentUserId={user?.id}
-            currentUserName={profile?.full_name ?? "Me"}
+            currentUserName={profile?.full_name?.trim() || "Me"}
             label="All People"
           />
         </div>
