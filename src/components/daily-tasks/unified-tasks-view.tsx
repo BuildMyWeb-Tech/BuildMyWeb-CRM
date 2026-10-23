@@ -874,11 +874,22 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
               if (!window.confirm(`Delete ${selectedIds.size} selected task(s)? This cannot be undone.`)) return;
               setBulkDeleting(true);
               let ok = 0, fail = 0;
+              const supabase = createClient();
               const selected = filteredTasks.filter((t) => selectedIds.has(t.id));
               await Promise.all(selected.map(async (task) => {
-                const url = task.kind === "daily" ? `/api/daily-tasks/${task.id}` : `/api/project-tasks/${task.id}`;
-                const res = await fetch(url, { method: "DELETE" });
-                if (res.ok) ok++; else fail++;
+                try {
+                  if (task.kind === "daily") {
+                    const linkId = task.daily?.linked_project_task_id;
+                    if (linkId) await supabase.from("project_tasks").delete().eq("id", linkId);
+                    const { error } = await supabase.from("daily_tasks").delete().eq("id", task.id);
+                    if (error) throw error;
+                  } else {
+                    await supabase.from("daily_tasks").delete().eq("linked_project_task_id", task.id);
+                    const { error } = await supabase.from("project_tasks").delete().eq("id", task.id);
+                    if (error) throw error;
+                  }
+                  ok++;
+                } catch { fail++; }
               }));
               setBulkDeleting(false);
               setSelectedIds(new Set());
