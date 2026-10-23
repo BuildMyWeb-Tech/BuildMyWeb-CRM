@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, Clock, Eye, EyeOff, Loader2, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, ChevronRight, Clock, Eye, EyeOff, Loader2, Layers, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +81,11 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
+  const [moveTaskRow, setMoveTaskRow] = useState<UnifiedRow | null>(null);
+  const [moveProjectSearch, setMoveProjectSearch] = useState("");
+  const [moveLoading, setMoveLoading] = useState(false);
   const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try { return new Set(JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "[]")); } catch { return new Set(); }
@@ -516,7 +521,10 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
               <SelectItem value="all">Project: All</SelectItem>
-              {projects.map((p) => (
+              {[...projects].sort((a, b) => {
+                const order: Record<string, number> = { active: 0, inactive: 1, hold_by_client: 2, in_discussion: 3, archived: 4, completed: 5 };
+                return (order[a.status] ?? 6) - (order[b.status] ?? 6);
+              }).map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
               ))}
             </SelectContent>
@@ -541,6 +549,10 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
               {scheduledCount}
             </span>
           )}
+        </Button>
+        <Button variant="outline" onClick={() => setProjectsPanelOpen((v) => !v)} className={projectsPanelOpen ? "border-primary bg-primary/10 text-primary" : ""}>
+          <Layers className="mr-1.5 h-3.5 w-3.5" />
+          Projects
         </Button>
         <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
@@ -621,7 +633,10 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
 
         {projects.length > 0 && (
           <FilterGroup label="Project">
-            {projects.map((p) => (
+            {[...projects].sort((a, b) => {
+              const order: Record<string, number> = { active: 0, inactive: 1, hold_by_client: 2, in_discussion: 3, archived: 4, completed: 5 };
+              return (order[a.status] ?? 6) - (order[b.status] ?? 6);
+            }).map((p) => (
               <FilterChip key={p.id} active={projectFilter.has(p.id)} onClick={() => toggleProjectFilter(p.id)}>
                 {p.name}
               </FilterChip>
@@ -649,6 +664,30 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
           </FilterGroup>
         )}
       </aside>
+
+      {/* Projects side panel */}
+      {projectsPanelOpen && (
+        <ProjectsPanel
+          projects={projects}
+          onStatusChange={async (projectId, newStatus) => {
+            try {
+              const res = await fetch(`/api/projects/${projectId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus }),
+              });
+              if (res.ok) {
+                load();
+              } else {
+                const data = await res.json().catch(() => ({}));
+                toast.error(data?.error ?? "Could not update project status.");
+              }
+            } catch {
+              toast.error("Could not update project status.");
+            }
+          }}
+        />
+      )}
 
       <div className="mt-4">
         {filteredTasks.length === 0 ? (
@@ -706,9 +745,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                       {sortKey === "date" && sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : sortKey === "date" && sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}
                     </button>
                   </th>
-                  {showScheduledOnly && (
-                    <th className="px-3 py-2 font-medium">Show date</th>
-                  )}
+                  <th className="px-3 py-2 font-medium">Show date</th>
                   <th className="px-3 py-2 font-medium w-0" />
                 </tr>
               </thead>
@@ -780,30 +817,38 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                       <td className="px-3 py-2 text-muted-foreground">
                         {task.dateValue ? new Date(task.dateValue).toLocaleDateString() : "—"}
                       </td>
-                      {showScheduledOnly && (
-                        <td className="px-3 py-2 text-blue-500 font-medium text-xs">
-                          {task.showDateValue
-                            ? new Date(task.showDateValue + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-                            : "—"}
-                        </td>
-                      )}
+                      <td className="px-3 py-2 text-blue-500 font-medium text-xs">
+                        {task.showDateValue
+                          ? new Date(task.showDateValue + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                          : "—"}
+                      </td>
                       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        {isDone && (
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setDoneModalTask(task); }}
-                            className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
+                            title={task.kind === "daily" ? "Move to project task" : "Move to daily task"}
+                            onClick={(e) => { e.stopPropagation(); setMoveTaskRow(task); setMoveProjectSearch(""); }}
+                            className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-blue-500/50 hover:text-blue-400 transition-colors"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <ChevronRight className="h-3 w-3" />
                           </button>
-                        )}
+                          {isDone && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDoneModalTask(task); }}
+                              className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-red-500/50 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
                 {hiddenRows.size > 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-2">
+                    <td colSpan={10} className="px-3 py-2">
                       <button type="button" onClick={() => { setHiddenRows(new Set()); window.localStorage.removeItem("daily-tasks-hidden-rows"); }}
                         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                         <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — click to show all
@@ -853,6 +898,91 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
           >
             <X className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Move Task modal */}
+      {moveTaskRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <p className="font-semibold text-foreground mb-1">
+              {moveTaskRow.kind === "daily" ? "Move to Project Task" : "Move to Daily Task"}
+            </p>
+            <p className="text-xs text-muted-foreground mb-4 line-clamp-1">&ldquo;{moveTaskRow.title}&rdquo;</p>
+            {moveTaskRow.kind === "daily" ? (
+              <>
+                <input
+                  autoFocus
+                  placeholder="Search project…"
+                  value={moveProjectSearch}
+                  onChange={(e) => setMoveProjectSearch(e.target.value)}
+                  className="w-full rounded-md border border-border bg-muted px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none mb-2"
+                />
+                <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                  {projects.filter((p) => p.name.toLowerCase().includes(moveProjectSearch.toLowerCase())).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={moveLoading}
+                      onClick={async () => {
+                        setMoveLoading(true);
+                        const supabase = createClient();
+                        try {
+                          // Update daily task: set project_id, which will sync to project tasks via next save.
+                          // For a direct move: update the daily_tasks row's project_id.
+                          const { error } = await supabase.from("daily_tasks").update({ project_id: p.id }).eq("id", moveTaskRow.id);
+                          if (error) { toast.error("Could not move task."); return; }
+                          toast.success(`Moved to project: ${p.name}`);
+                          setMoveTaskRow(null);
+                          load();
+                        } finally { setMoveLoading(false); }
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left disabled:opacity-50"
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-4">This will unlink the project task and convert it to a standalone daily task.</p>
+            )}
+            {moveTaskRow.kind === "project" && (
+              <button
+                type="button"
+                disabled={moveLoading}
+                onClick={async () => {
+                  setMoveLoading(true);
+                  const supabase = createClient();
+                  try {
+                    // Convert project task to daily task: insert daily_tasks row, then optionally delete project_tasks row
+                    const pt = moveTaskRow.project_task!;
+                    const { error } = await supabase.from("daily_tasks").insert({
+                      account_id: pt.account_id,
+                      created_by: pt.assignee_user_id ?? user!.id,
+                      title: pt.title,
+                      stage_id: stages[0]?.id ?? "",
+                      project_id: pt.project_id,
+                      assignee_user_id: pt.assignee_user_id,
+                      assignee_user_ids: pt.assignee_user_ids ?? [],
+                      priority: pt.priority,
+                      target_date: pt.due_date,
+                    });
+                    if (error) { toast.error("Could not move task."); return; }
+                    toast.success("Moved to daily tasks.");
+                    setMoveTaskRow(null);
+                    load();
+                  } finally { setMoveLoading(false); }
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+              >
+                {moveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Move to Daily Tasks"}
+              </button>
+            )}
+            <button type="button" onClick={() => setMoveTaskRow(null)} className="mt-2 w-full rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -938,6 +1068,87 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         onClose={() => setEditingProjectTask(null)}
         onSaved={load}
       />
+    </div>
+  );
+}
+
+const STATUS_ORDER: string[] = ["active", "inactive", "hold_by_client", "in_discussion", "archived", "completed"];
+const STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  hold_by_client: "Hold by Client",
+  in_discussion: "In Discussion",
+  archived: "Archived",
+  completed: "Completed",
+};
+const STATUS_COLORS: Record<string, string> = {
+  active: "border-green-500/30 bg-green-500/10 text-green-400",
+  inactive: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  hold_by_client: "border-orange-500/30 bg-orange-500/10 text-orange-400",
+  in_discussion: "border-cyan-500/30 bg-cyan-500/10 text-cyan-400",
+  archived: "border-border bg-muted text-muted-foreground",
+  completed: "border-teal-500/30 bg-teal-500/10 text-teal-400",
+};
+
+function ProjectsPanel({ projects, onStatusChange }: { projects: import("@/types").Project[]; onStatusChange: (projectId: string, newStatus: string) => Promise<void> }) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<Set<string>>(new Set());
+  const grouped = useMemo(() => {
+    const map: Record<string, import("@/types").Project[]> = {};
+    for (const s of STATUS_ORDER) map[s] = [];
+    for (const p of projects) {
+      const key = STATUS_ORDER.includes(p.status) ? p.status : "active";
+      map[key].push(p);
+    }
+    return map;
+  }, [projects]);
+
+  async function handleDrop(newStatus: string) {
+    if (!dragId || dragId === newStatus) return;
+    setUpdating((prev) => new Set(prev).add(dragId));
+    await onStatusChange(dragId, newStatus);
+    setUpdating((prev) => { const n = new Set(prev); n.delete(dragId); return n; });
+    setDragId(null);
+    setDropTarget(null);
+  }
+
+  return (
+    <div className="my-3 rounded-lg border border-border bg-card overflow-hidden">
+      <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+        <Layers className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium text-foreground">Projects by Status</span>
+        <span className="ml-auto text-xs text-muted-foreground">{projects.length} total</span>
+      </div>
+      <div className="grid grid-cols-2 gap-0 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-border">
+        {STATUS_ORDER.map((status) => (
+          <div
+            key={status}
+            onDragOver={(e) => { e.preventDefault(); setDropTarget(status); }}
+            onDragLeave={() => setDropTarget(null)}
+            onDrop={(e) => { e.preventDefault(); handleDrop(status); setDropTarget(null); }}
+            className={`p-2 min-h-[80px] transition-colors ${dropTarget === status ? "bg-primary/10" : ""}`}
+          >
+            <p className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider rounded-full border px-2 py-0.5 inline-block ${STATUS_COLORS[status] ?? ""}`}>
+              {STATUS_LABELS[status]} {grouped[status].length > 0 && `(${grouped[status].length})`}
+            </p>
+            <div className="flex flex-col gap-1">
+              {grouped[status].map((p) => (
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={() => setDragId(p.id)}
+                  onDragEnd={() => { setDragId(null); setDropTarget(null); }}
+                  className={`cursor-grab rounded px-2 py-1 text-xs border border-border bg-muted/50 text-foreground hover:bg-muted truncate transition-opacity ${updating.has(p.id) ? "opacity-40" : ""} ${dragId === p.id ? "opacity-60" : ""}`}
+                  title={p.name}
+                >
+                  {p.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

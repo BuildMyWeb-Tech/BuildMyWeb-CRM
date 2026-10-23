@@ -22,6 +22,19 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
+  // Desktop collapse — persisted to localStorage.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return window.localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
+  });
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem("sidebar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
@@ -46,7 +59,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       {/* Reports this tab's online/away presence once we know a user is
           signed in. Headless — renders nothing. */}
       <PresenceHeartbeat />
-      <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+      <Sidebar open={sidebarOpen} onClose={closeSidebar} collapsed={sidebarCollapsed} onToggle={toggleSidebarCollapsed} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
         {/* Thinner horizontal padding on mobile so cards have room to breathe. */}

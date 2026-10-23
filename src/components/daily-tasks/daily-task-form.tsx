@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { DailyTask, PipelineStage, AccountMember, Project, TaskPriority } from "@/types";
 import {
@@ -71,8 +71,22 @@ export function DailyTaskForm({
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [targetDate, setTargetDate] = useState("");
   const [showDate, setShowDate] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectDropOpen, setProjectDropOpen] = useState(false);
+  const projectDropRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!projectDropOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (projectDropRef.current && !projectDropRef.current.contains(e.target as Node)) {
+        setProjectDropOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [projectDropOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -245,19 +259,45 @@ export function DailyTaskForm({
 
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Project (optional)</Label>
-            <Select value={projectId} onValueChange={(v) => setProjectId(v ?? "__none__")}>
-              <SelectTrigger className="w-full">
-                <SelectValue className="truncate">
-                  {(v: string) => (v === "__none__" ? "None" : projects.find((p) => p.id === v)?.name ?? "None")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div ref={projectDropRef} className="relative">
+              <button
+                type="button"
+                onClick={() => { setProjectDropOpen((v) => !v); setProjectSearch(""); }}
+                className="flex h-9 w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <span className="truncate">
+                  {projectId === "__none__" ? "None" : projects.find((p) => p.id === projectId)?.name ?? "None"}
+                </span>
+                <svg className="h-4 w-4 shrink-0 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd"/></svg>
+              </button>
+              {projectDropOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg">
+                  <div className="p-1.5 border-b border-border">
+                    <input
+                      autoFocus
+                      placeholder="Search projects…"
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
+                      className="w-full rounded-sm bg-muted px-2 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    {[{ id: "__none__", name: "None" }, ...projects].filter((p) =>
+                      p.name.toLowerCase().includes(projectSearch.toLowerCase())
+                    ).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setProjectId(p.id); setProjectDropOpen(false); setProjectSearch(""); }}
+                        className={`flex w-full items-center px-3 py-1.5 text-sm hover:bg-muted ${projectId === p.id ? "text-primary font-medium" : "text-foreground"}`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

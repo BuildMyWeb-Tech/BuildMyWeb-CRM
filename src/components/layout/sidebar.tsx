@@ -10,6 +10,8 @@ import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { fetchPagePermissionRows } from "@/hooks/use-page-permissions";
 import { visibleGlobalItems, visibleModules, type ModuleNavItem } from "@/lib/modules";
 import {
+  ChevronLeft,
+  ChevronRight,
   Crown,
   ChevronDown,
   Eye,
@@ -91,6 +93,9 @@ interface SidebarProps {
   /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
   open?: boolean;
   onClose?: () => void;
+  /** Desktop-only collapse to icon-only mode. Ignored on mobile. */
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 import { useTranslations } from "next-intl";
@@ -119,6 +124,7 @@ function NavLink({
   unreadNotifications,
   siblingHrefs,
   onHide,
+  collapsed,
 }: {
   item: ModuleNavItem;
   pathname: string;
@@ -128,6 +134,7 @@ function NavLink({
   unreadNotifications: number;
   siblingHrefs?: string[];
   onHide?: (href: string) => void;
+  collapsed?: boolean;
 }) {
   const isActive =
     pathname === item.href ||
@@ -147,15 +154,18 @@ function NavLink({
       <Link
         href={item.href}
         onClick={onClose}
+        title={collapsed ? t(item.labelKey) : undefined}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 py-2.5 pr-8 text-sm font-medium transition-colors lg:py-2",
+          collapsed && "lg:justify-center lg:px-2 lg:pr-2",
           isActive
             ? "bg-primary/10 text-primary"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}
       >
         <item.icon className="h-4 w-4 shrink-0" />
-        <span className="flex-1 min-w-0 truncate">{t(item.labelKey)}</span>
+        {!collapsed && <span className="flex-1 min-w-0 truncate lg:block hidden">{t(item.labelKey)}</span>}
+        <span className="flex-1 min-w-0 truncate lg:hidden">{t(item.labelKey)}</span>
         {item.beta && (
           <span
             aria-label={t("beta")}
@@ -196,7 +206,7 @@ function NavLink({
   );
 }
 
-export function Sidebar({ open = false, onClose }: SidebarProps) {
+export function Sidebar({ open = false, onClose, collapsed = false, onToggle }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut, user } = useAuth();
@@ -355,16 +365,22 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           "transition-transform duration-200 ease-out will-change-transform",
           open ? "translate-x-0" : "-translate-x-full",
           // Desktop: static, always visible — reset all the mobile framing.
-          "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
+          "lg:static lg:z-0 lg:translate-x-0 lg:transition-all lg:duration-200",
+          collapsed ? "lg:w-[60px]" : "lg:w-60",
         )}
         aria-label="Primary"
       >
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/dashboard" className={cn("flex items-center gap-2 min-w-0", collapsed && "lg:justify-center lg:w-full")}>
             <BrandMark size={22} />
-            <span className="text-sm font-semibold text-foreground">
+            {!collapsed && (
+              <span className="text-sm font-semibold text-foreground lg:block hidden">
+                {t("title")}
+              </span>
+            )}
+            <span className={cn("text-sm font-semibold text-foreground lg:hidden")}>
               {t("title")}
             </span>
           </Link>
@@ -376,6 +392,16 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           >
             <X className="h-5 w-5" />
           </button>
+          {onToggle && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn("hidden lg:flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors", collapsed && "mx-auto")}
+            >
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
         {/* Main navigation — driven entirely by src/lib/modules.ts.
@@ -395,7 +421,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 onClose={onClose}
                 totalUnread={totalUnread}
                 unreadNotifications={unreadNotifications}
-                onHide={hideNavItem}
+                onHide={collapsed ? undefined : hideNavItem}
+                collapsed={collapsed}
               />
             ))}
             {/* Restore hidden global items */}
@@ -418,6 +445,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             return (
               <div key={mod.id} className="group/modsection">
                 <div className="my-4 border-t border-border" />
+                {!collapsed && (
                 <div className="mb-1 flex w-full items-center gap-1">
                   <button
                     type="button"
@@ -449,7 +477,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     <EyeOff className="h-3 w-3" />
                   </button>
                 </div>
-                {!isCollapsed && (
+                )}
+                {(!isCollapsed || collapsed) && (
                   <>
                     <ul className="flex flex-col gap-1">
                       {visibleItems.map((item) => (
@@ -462,12 +491,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                           totalUnread={totalUnread}
                           unreadNotifications={unreadNotifications}
                           siblingHrefs={mod.items.map((i) => i.href)}
-                          onHide={hideNavItem}
+                          onHide={collapsed ? undefined : hideNavItem}
+                          collapsed={collapsed}
                         />
                       ))}
                     </ul>
                     {/* Restore hidden items inside this module */}
-                    {hiddenCount > 0 && (
+                    {!collapsed && hiddenCount > 0 && (
                       <button
                         type="button"
                         onClick={() => showModuleItems(mod.items.map((i) => i.href))}
@@ -511,15 +541,18 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={collapsed ? t(item.labelKey as string) : undefined}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
+                      collapsed && "lg:justify-center lg:px-2",
                       isActive
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
+                    {!collapsed && <span className="hidden lg:inline">{t(item.labelKey as string)}</span>}
+                    <span className="lg:hidden">{t(item.labelKey as string)}</span>
                   </Link>
                 </li>
               );
@@ -528,14 +561,14 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         </nav>
 
         {/* User section */}
-        <div className="shrink-0 border-t border-border p-3">
+        <div className={cn("shrink-0 border-t border-border p-3", collapsed && "lg:flex lg:justify-center")}>
           {/* Account name display — surfaced only when the account
               name differs from the user's own name (see
               `showAccountStrip`). For a default solo account the two
               match, so we hide it to avoid duplicating the user name
               below; for renamed or shared accounts it tells the user
               which account they're acting in. */}
-          {showAccountStrip && account?.name ? (
+          {!collapsed && showAccountStrip && account?.name ? (
             <div className="mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground">
               <UsersRound className="size-3.5 shrink-0" />
               {/* `title=` exposes the full name on hover when it
@@ -565,7 +598,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             </div>
           ) : null}
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
+            <DropdownMenuTrigger className={cn("flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60", collapsed && "lg:justify-center lg:px-2")}>
               <Avatar className="size-8 shrink-0">
                 {profile?.avatar_url ? (
                   <AvatarImage
@@ -579,7 +612,17 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="min-w-0 flex-1">
+              {!collapsed && (
+              <div className="min-w-0 flex-1 hidden lg:block">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {profile?.full_name ?? t("defaultUser")}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {profile?.email ?? ""}
+                </p>
+              </div>
+              )}
+              <div className="min-w-0 flex-1 lg:hidden">
                 <p className="truncate text-sm font-medium text-foreground">
                   {profile?.full_name ?? t("defaultUser")}
                 </p>

@@ -97,6 +97,8 @@ export default function ProjectsPage() {
     all: (projects ?? []).length,
     active: (projects ?? []).filter((p) => p.status === "active").length,
     inactive: (projects ?? []).filter((p) => p.status === "inactive").length,
+    hold_by_client: (projects ?? []).filter((p) => p.status === "hold_by_client").length,
+    in_discussion: (projects ?? []).filter((p) => p.status === "in_discussion").length,
     archived: (projects ?? []).filter((p) => p.status === "archived").length,
     completed: (projects ?? []).filter((p) => p.status === "completed").length,
   };
@@ -142,8 +144,8 @@ export default function ProjectsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {(["all", "active", "inactive", "archived", "completed"] as const).map((s) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {(["all", "active", "inactive", "hold_by_client", "in_discussion", "archived", "completed"] as const).map((s) => (
             <button key={s} type="button" onClick={() => { setStatusFilter(s); try { localStorage.setItem("projects-status-filter", s); } catch {} }}
               className={`rounded-xl border p-4 text-left transition-colors ${
                 statusFilter === s
@@ -151,7 +153,7 @@ export default function ProjectsPage() {
                   : "border-[#2a3045] bg-[#1a1f2e] hover:border-[#3a4055]"
               }`}>
               <p className="text-2xl font-bold text-white">{statCounts[s]}</p>
-              <p className="text-xs capitalize text-slate-400">{s === "all" ? "Total Projects" : `${s} Projects`}</p>
+              <p className="text-xs text-slate-400">{s === "all" ? "Total Projects" : `${s.replace(/_/g, " ")} Projects`}</p>
             </button>
           ))}
         </div>
@@ -195,12 +197,14 @@ export default function ProjectsPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-400">{p.contact?.name || p.client_name || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
                         : p.status === "inactive" ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
                         : p.status === "completed" ? "border-teal-500/30 bg-teal-500/20 text-teal-400"
+                        : p.status === "hold_by_client" ? "border-orange-500/30 bg-orange-500/20 text-orange-400"
+                        : p.status === "in_discussion" ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
                         : "border-[#2a3045] bg-[#2a3045] text-slate-500"
-                      }`}>{p.status}</span>
+                      }`}>{p.status.replace(/_/g, " ")}</span>
                     </td>
                     <td className="px-4 py-3">
                       {typeof p.progress_percentage === "number" ? (
@@ -237,12 +241,14 @@ export default function ProjectsPage() {
                     <KanbanSquare className="h-5 w-5 text-blue-400" />
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                       p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
                       : p.status === "inactive" ? "border-amber-500/30 bg-amber-500/20 text-amber-400"
                       : p.status === "completed" ? "border-teal-500/30 bg-teal-500/20 text-teal-400"
+                      : p.status === "hold_by_client" ? "border-orange-500/30 bg-orange-500/20 text-orange-400"
+                      : p.status === "in_discussion" ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
                       : "border-[#2a3045] bg-[#2a3045] text-slate-500"
-                    }`}>{p.status}</span>
+                    }`}>{p.status.replace(/_/g, " ")}</span>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}

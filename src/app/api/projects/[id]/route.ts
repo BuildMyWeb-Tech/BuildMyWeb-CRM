@@ -77,7 +77,7 @@ export async function PATCH(
   if ('start_date' in body) update.start_date = body.start_date ?? null
   if ('due_date' in body) update.due_date = body.due_date ?? null
   if (typeof body.status === 'string') {
-    if (!['active', 'inactive', 'archived'].includes(body.status)) {
+    if (!['active', 'inactive', 'archived', 'completed', 'hold_by_client', 'in_discussion'].includes(body.status)) {
       return NextResponse.json({ error: 'invalid status' }, { status: 400 })
     }
     update.status = body.status
