@@ -309,12 +309,12 @@ export default function ClientLeadsPage() {
             ))}
           </div>
 
-          {/* Tab bar + count */}
-          <div className="shrink-0 px-6 pb-0 flex items-end justify-between">
-            <div className="flex items-center gap-1 border-b border-[#2a3045] overflow-x-auto">
+          {/* Tab bar + inline filters */}
+          <div className="shrink-0 px-6 pb-0 flex flex-wrap items-center gap-2 border-b border-[#2a3045]">
+            <div className="flex items-center gap-1 overflow-x-auto">
               {TABS.map((tab) => (
                 <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-                  className={`flex shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key ? "border-blue-500 text-white" : "border-transparent text-slate-400 hover:text-white"}`}>
+                  className={`flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key ? "border-blue-500 text-white" : "border-transparent text-slate-400 hover:text-white"}`}>
                   {tab.label}
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTab === tab.key ? "bg-blue-500/20 text-blue-400" : "bg-[#2a3045] text-slate-400"}`}>
                     {tabCounts[tab.key]}
@@ -322,35 +322,33 @@ export default function ClientLeadsPage() {
                 </button>
               ))}
             </div>
-            {leads !== null && isFiltered && (
-              <p className="text-xs text-slate-500 pb-3 shrink-0 pl-4">
-                <span className="font-medium text-slate-300">{visibleLeads.length}</span> of {allLeads.length} — filtered
-              </p>
-            )}
-          </div>
-
-          {/* Filter bar */}
-          <div className="shrink-0 flex flex-wrap items-center gap-2 px-6 py-3 border-b border-[#2a3045]">
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, phone..."
-                className="border-[#2a3045] bg-[#1a1f2e] pl-9 text-white placeholder:text-slate-600 focus:border-blue-500 h-8 text-sm" />
+            <div className="flex flex-wrap items-center gap-2 py-1.5 ml-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="border-[#2a3045] bg-[#1a1f2e] pl-8 text-white placeholder:text-slate-600 focus:border-blue-500 h-7 text-xs w-36" />
+              </div>
+              <select value={priorityFilter} onChange={(e) => setPriorityPersisted(e.target.value as "all" | LeadPriority)}
+                className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-2.5 py-1 text-xs text-slate-300 focus:border-blue-500 focus:outline-none">
+                <option value="all">Priority: All</option>
+                {PRIORITIES.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
+              </select>
+              <select value={peopleFilter} onChange={(e) => setPeoplePersisted(e.target.value)}
+                className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-2.5 py-1 text-xs text-slate-300 focus:border-blue-500 focus:outline-none">
+                <option value="all">Assignee: All</option>
+                {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
+              </select>
+              <button type="button" onClick={() => setOverdueOnly((v) => !v)}
+                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
+                <Calendar className="h-3 w-3" /> Overdue
+              </button>
+              {leads !== null && isFiltered && (
+                <p className="text-xs text-slate-500 shrink-0">
+                  <span className="font-medium text-slate-300">{visibleLeads.length}</span>/{allLeads.length}
+                </p>
+              )}
             </div>
-            <select value={priorityFilter} onChange={(e) => setPriorityPersisted(e.target.value as "all" | LeadPriority)}
-              className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-blue-500 focus:outline-none">
-              <option value="all">Priority: All</option>
-              {PRIORITIES.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
-            </select>
-            <select value={peopleFilter} onChange={(e) => setPeoplePersisted(e.target.value)}
-              className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-blue-500 focus:outline-none">
-              <option value="all">Assignee: All</option>
-              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
-            </select>
-            <button type="button" onClick={() => setOverdueOnly((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
-              <Calendar className="h-3.5 w-3.5" /> Overdue
-            </button>
           </div>
 
           {/* Table / Grid */}
@@ -393,6 +391,7 @@ export default function ClientLeadsPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
+                      <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Tasks</th>
                       <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -403,7 +402,8 @@ export default function ClientLeadsPage() {
                       const initials = getInitials(lead.title);
                       return (
                         <tr key={lead.id}
-                          className={`border-b border-[#2a3045] last:border-0 transition-colors hover:bg-[#1a1f2e]`}>
+                          onClick={() => canUpdate && openEdit(lead)}
+                          className={`border-b border-[#2a3045] last:border-0 transition-colors hover:bg-[#1a1f2e] ${canUpdate ? "cursor-pointer" : ""}`}>
                           <td className="px-4 py-3">
                             <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
                           </td>
@@ -441,7 +441,20 @@ export default function ClientLeadsPage() {
                               {STATUS_DISPLAY[lead.status] ?? lead.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const taskList = lead.tasks ?? [];
+                              const done = taskList.filter((t) => t.is_done).length;
+                              const total = taskList.length;
+                              if (total === 0) return <span className="text-slate-600 text-xs">—</span>;
+                              return (
+                                <span className={`text-xs font-medium ${done === total ? "text-green-400" : "text-slate-400"}`}>
+                                  {done}/{total}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
                               <Link href={`/client-leads/${lead.id}`}
                                 className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">

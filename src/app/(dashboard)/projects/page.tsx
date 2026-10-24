@@ -186,7 +186,7 @@ export default function ProjectsPage() {
                   : "border-[#2a3045] bg-[#1a1f2e] hover:border-[#3a4055]"
               }`}>
               <p className="text-2xl font-bold text-white">{statCounts[s]}</p>
-              <p className="text-xs text-slate-400">{s === "all" ? "Total Projects" : `${s.replace(/_/g, " ")} Projects`}</p>
+              <p className="text-xs text-slate-400 capitalize">{s === "all" ? "Total Projects" : `${(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ")} projects`}</p>
             </button>
           ))}
         </div>
@@ -290,19 +290,26 @@ export default function ProjectsPage() {
                     <p className="mt-2 line-clamp-2 text-xs text-slate-500">{p.description}</p>
                   )}
                 </div>
-                {typeof p.progress_percentage === "number" && (
+                {(typeof p.progress_percentage === "number" || p.status === "completed") && (
                   <div className="mt-4">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-500">Progress</span>
-                      <span className="text-[11px] font-semibold text-white">{p.progress_percentage}%</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#2a3045]">
-                      <div className={`h-full rounded-full transition-all ${
-                        p.progress_percentage >= 75 ? "bg-green-500"
-                        : p.progress_percentage >= 40 ? "bg-blue-500"
-                        : "bg-amber-500"
-                      }`} style={{ width: `${p.progress_percentage}%` }} />
-                    </div>
+                    {(() => {
+                      const pct = p.status === "completed" ? 100 : (p.progress_percentage ?? 0);
+                      return (
+                        <>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[11px] text-slate-500">Progress</span>
+                            <span className="text-[11px] font-semibold text-white">{pct}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#2a3045]">
+                            <div className={`h-full rounded-full transition-all ${
+                              pct >= 75 ? "bg-green-500"
+                              : pct >= 40 ? "bg-blue-500"
+                              : "bg-amber-500"
+                            }`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

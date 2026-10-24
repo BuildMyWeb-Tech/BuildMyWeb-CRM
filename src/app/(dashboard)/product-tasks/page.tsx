@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, X,
+  ChevronsUpDown, Loader2, X, Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -364,6 +364,10 @@ export default function ProductTasksPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [members, setMembers] = useState<AccountMember[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dropStageId, setDropStageId] = useState<string | null>(null);
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -474,6 +478,30 @@ export default function ProductTasksPage() {
   function openCreate() { setEditTask(null); setModalOpen(true); }
   function openEdit(task: ProductTask) { setEditTask(task); setModalOpen(true); }
 
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} task${selectedIds.size > 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => fetch(`/api/product-tasks/${id}`, { method: "DELETE" })));
+      setSelectedIds(new Set());
+      load();
+      toast.success(`Deleted ${selectedIds.size} task${selectedIds.size > 1 ? "s" : ""}`);
+    } finally { setBulkDeleting(false); }
+  }
+
+  async function handleStageDrop(stageId: string) {
+    if (!dragTaskId || !stageId) return;
+    setDropStageId(null);
+    setDragTaskId(null);
+    await fetch(`/api/product-tasks/${dragTaskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage_id: stageId }),
+    });
+    load();
+  }
+
   const productsWithTasks = products.filter((p) => (tasks ?? []).some((t) => t.product_id === p.id));
 
   // Stat counts
@@ -535,27 +563,16 @@ export default function ProductTasksPage() {
             ))}
           </div>
 
-          {/* View mode tabs + count */}
-          <div className="shrink-0 px-4 pb-3 flex flex-wrap items-center justify-between gap-4 sm:px-6">
-            <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1 w-fit">
+          {/* Combined filter + tabs row */}
+          <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 pb-3 sm:px-6">
+            <div className="flex items-center gap-1 rounded-lg bg-[#1a1f2e] p-1">
               {(["current", "scheduled", "all"] as const).map((mode) => (
                 <button key={mode} type="button" onClick={() => setViewModePersisted(mode)}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:text-slate-200"}`}>
-                  {mode === "current" ? "Current Tasks" : mode === "scheduled" ? "Scheduled" : "All Tasks"}
+                  {mode === "current" ? "Current" : mode === "scheduled" ? "Scheduled" : "All"}
                 </button>
               ))}
             </div>
-            {!loading && tasks !== null && (
-              <p className="text-xs text-slate-500 shrink-0">
-                {filtered.length === tasks.length
-                  ? `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`
-                  : <><span className="font-medium text-slate-300">{filtered.length}</span> of {tasks.length} tasks — filtered</>}
-              </p>
-            )}
-          </div>
-
-          {/* Filter bar */}
-          <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 pb-3 sm:px-6">
             <select value={priorityFilter} onChange={(e) => setPriorityFilterPersisted(e.target.value)}
               className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-sm text-slate-300 focus:border-teal-500 focus:outline-none">
               <option value="all">Priority: All</option>
@@ -578,6 +595,21 @@ export default function ProductTasksPage() {
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
               Overdue
             </button>
+            <div className="flex-1" />
+            {selectedIds.size > 0 && (
+              <button type="button" onClick={handleBulkDelete} disabled={bulkDeleting}
+                className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors">
+                <Trash2 className="h-3.5 w-3.5" />
+                {bulkDeleting ? "Deleting…" : `Delete ${selectedIds.size}`}
+              </button>
+            )}
+            {!loading && tasks !== null && (
+              <p className="text-xs text-slate-500 shrink-0">
+                {filtered.length === tasks.length
+                  ? `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`
+                  : <><span className="font-medium text-slate-300">{filtered.length}</span>/{tasks.length}</>}
+              </p>
+            )}
           </div>
 
           {/* Table */}
@@ -600,7 +632,12 @@ export default function ProductTasksPage() {
                 <table className="w-full min-w-[700px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
-                      <th className="w-8 px-3 py-3" />
+                      <th className="w-8 px-3 py-3">
+                        <input type="checkbox"
+                          checked={filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id))}
+                          onChange={(e) => setSelectedIds(e.target.checked ? new Set(filtered.map((t) => t.id)) : new Set())}
+                          className="h-3.5 w-3.5 rounded border-[#3a4055] bg-transparent accent-teal-500 cursor-pointer" />
+                      </th>
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="title" label="Task" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
@@ -622,6 +659,7 @@ export default function ProductTasksPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="show_date" label="Show Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
+                      <th className="w-16 px-3 py-3 font-medium text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -634,13 +672,23 @@ export default function ProductTasksPage() {
                       ).map((uid) => getMemberName(uid)).filter(Boolean);
                       const stageName = task.stage?.name ?? "";
                       const productName = (task.product as { project_name?: string } | null)?.project_name ?? "";
+                      const isSelected = selectedIds.has(task.id);
 
                       return (
                         <tr key={task.id}
+                          draggable
+                          onDragStart={() => setDragTaskId(task.id)}
+                          onDragEnd={() => { setDragTaskId(null); setDropStageId(null); }}
                           onClick={() => openEdit(task)}
-                          className="border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors cursor-pointer">
-                          <td className="px-3 py-3">
-                            <span className="block h-1.5 w-1.5 rounded-full bg-teal-500/40 mx-auto" />
+                          className={`border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors cursor-pointer ${isSelected ? "bg-teal-500/5" : ""}`}>
+                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input type="checkbox" checked={isSelected}
+                              onChange={(e) => setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                e.target.checked ? next.add(task.id) : next.delete(task.id);
+                                return next;
+                              })}
+                              className="h-3.5 w-3.5 rounded border-[#3a4055] bg-transparent accent-teal-500 cursor-pointer" />
                           </td>
                           <td className="px-4 py-3 font-medium text-white max-w-xs">
                             <span className="line-clamp-1">{task.title}</span>
@@ -679,6 +727,12 @@ export default function ProductTasksPage() {
                               </span>
                             ) : <span className="text-slate-600">—</span>}
                           </td>
+                          <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button type="button" onClick={() => openEdit(task)}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-teal-400 transition-colors">
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -689,46 +743,62 @@ export default function ProductTasksPage() {
           </div>
         </div>
 
-        {/* ── Right sidebar — Products ── */}
+        {/* ── Right sidebar — Stages drag panel ── */}
         <div className="w-64 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex items-center gap-2 mb-2 px-1">
               <Package className="h-4 w-4 text-teal-400" />
-              <h2 className="text-sm font-semibold text-white">Products</h2>
+              <h2 className="text-sm font-semibold text-white">By Stage</h2>
+              <span className="text-[10px] text-slate-600 ml-auto">drag to move</span>
             </div>
 
-            {(["active", "inactive", "archived"] as const).map((status) => {
-              const group = products.filter((p) => (p.status ?? "active") === status);
-              if (group.length === 0) return null;
-              const taskCountMap = new Map<string, number>();
-              for (const t of (tasks ?? [])) {
-                if (t.product_id) taskCountMap.set(t.product_id, (taskCountMap.get(t.product_id) ?? 0) + 1);
-              }
+            {stages.map((stage) => {
+              const stageTasks = (tasks ?? []).filter((t) => t.stage_id === stage.id);
+              const isDropTarget = dropStageId === stage.id;
               return (
-                <div key={status}>
-                  <p className="mb-1 px-1 text-[9px] font-semibold uppercase tracking-wider text-slate-600 capitalize">{status}</p>
-                  <div className="space-y-0.5">
-                    {group.map((p) => (
-                      <button key={p.id} type="button"
-                        onClick={() => setProductFilter(productFilter === p.id ? "all" : p.id)}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition-colors text-left ${productFilter === p.id ? "bg-teal-500/10 text-teal-300" : "hover:bg-[#0f1117] text-slate-300 hover:text-white"}`}>
-                        <span className="h-5 w-5 shrink-0 rounded bg-teal-500/20 flex items-center justify-center text-[9px] font-bold text-teal-300">
-                          {p.project_name.charAt(0).toUpperCase()}
-                        </span>
-                        <span className="flex-1 truncate text-xs">{p.project_name}</span>
-                        <span className="shrink-0 text-[11px] font-medium text-slate-500">
-                          {taskCountMap.get(p.id) ?? 0}
-                        </span>
-                      </button>
+                <div key={stage.id}
+                  onDragOver={(e) => { e.preventDefault(); setDropStageId(stage.id); }}
+                  onDragLeave={() => setDropStageId(null)}
+                  onDrop={() => handleStageDrop(stage.id)}
+                  className={`rounded-lg border transition-colors px-2 py-1.5 min-h-[36px] ${isDropTarget ? "border-teal-500/50 bg-teal-500/5" : "border-transparent"}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`text-[9px] font-semibold uppercase tracking-wider rounded-full border px-1.5 py-0.5 shrink-0 ${stageColor(stage.name)}`}>
+                      {stage.name}
+                    </span>
+                    {stageTasks.length > 0 && <span className="text-[10px] text-slate-600">{stageTasks.length}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {stageTasks.map((t) => (
+                      <span key={t.id}
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); setDragTaskId(t.id); }}
+                        onDragEnd={() => { setDragTaskId(null); setDropStageId(null); }}
+                        className={`inline-block max-w-full rounded px-1.5 py-0.5 text-[10px] leading-tight text-slate-400 bg-[#0f1117] border border-[#2a3045] cursor-grab truncate hover:text-white hover:border-teal-500/40 transition-colors ${dragTaskId === t.id ? "opacity-50" : ""}`}>
+                        {t.title}
+                      </span>
                     ))}
                   </div>
                 </div>
               );
             })}
 
-            {products.length === 0 && (
-              <p className="text-xs text-slate-600 text-center py-3">No products</p>
+            {stages.length === 0 && (
+              <p className="text-xs text-slate-600 text-center py-3">No stages configured</p>
             )}
+
+            {/* Tasks without a stage */}
+            {(() => {
+              const unstageTasks = (tasks ?? []).filter((t) => !t.stage_id);
+              if (unstageTasks.length === 0) return null;
+              return (
+                <div className="rounded-lg border border-transparent px-2 py-1.5">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider rounded-full border border-[#2a3045] px-1.5 py-0.5 text-slate-600">No Stage</span>
+                    <span className="text-[10px] text-slate-600">{unstageTasks.length}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

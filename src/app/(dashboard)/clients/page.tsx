@@ -6,6 +6,7 @@ import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
   List as ListIcon, LayoutGrid, Search, AlertTriangle,
   Archive, ChevronRight, Home, ExternalLink,
+  ChevronUp, ChevronDown, ChevronsUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -113,7 +114,17 @@ export default function ClientsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | ClientStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"status" | "name" | "updated" | "client_since">("status");
+  const [sortBy, setSortBy] = useState<"status" | "name" | "updated" | "client_since" | "contact_name" | "contact_number">("status");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  function toggleSortClient(key: typeof sortBy) {
+    if (sortBy === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortBy(key); setSortDir("asc"); }
+  }
+  function SortIconC({ k }: { k: typeof sortBy }) {
+    if (sortBy !== k) return <ChevronsUpDown className="h-3 w-3 text-slate-600 inline ml-1" />;
+    return sortDir === "asc" ? <ChevronUp className="h-3 w-3 text-blue-400 inline ml-1" /> : <ChevronDown className="h-3 w-3 text-blue-400 inline ml-1" />;
+  }
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -246,9 +257,12 @@ export default function ClientsPage() {
       return matchesStatus && matchesSearch && matchesOwner;
     })
     .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "updated") return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-      if (sortBy === "client_since") return (b.client_since ?? "").localeCompare(a.client_since ?? "");
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "name") return dir * a.name.localeCompare(b.name);
+      if (sortBy === "updated") return dir * (new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      if (sortBy === "client_since") return dir * ((b.client_since ?? "").localeCompare(a.client_since ?? ""));
+      if (sortBy === "contact_name") return dir * ((a.interface_name ?? "").localeCompare(b.interface_name ?? ""));
+      if (sortBy === "contact_number") return dir * ((a.interface_contact_number ?? "").localeCompare(b.interface_contact_number ?? ""));
       return (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99);
     }), [allClients, statusFilter, searchQuery, ownerFilter, sortBy]);
 
@@ -458,43 +472,81 @@ export default function ClientsPage() {
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-[#2a3045] rounded-xl border border-[#2a3045] bg-[#1a1f2e]">
-            {visibleClients.map((c) => (
-              <div
-                key={c.id}
-                onClick={(e) => openQuickEdit(c, e)}
-                className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-[#2a3045]/50 transition-colors"
-              >
-                <div
-                  className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white ${getAvatarColor(c.name)}`}
-                >
-                  {getInitials(c.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">{c.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {c.client_since
-                      ? `Client since ${new Date(c.client_since).toLocaleDateString()}`
-                      : ""}
-                  </p>
-                </div>
-                <StatusBadge status={c.status} />
-                <Link
-                  href={`/clients/${c.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  title="Open client details"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-                <ClientCardMenu
-                  onEdit={(e) => openQuickEdit(c, e)}
-                  onDelete={(e) => handleDelete(c, e)}
-                  canUpdate={canUpdate}
-                  canDelete={canDelete}
-                />
-              </div>
-            ))}
+          <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead>
+                <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3 font-medium">
+                    <button type="button" onClick={() => toggleSortClient("name")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+                      Client Name <SortIconC k="name" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    <button type="button" onClick={() => toggleSortClient("contact_name")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+                      Contact Name <SortIconC k="contact_name" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    <button type="button" onClick={() => toggleSortClient("contact_number")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+                      Contact Number <SortIconC k="contact_number" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    <button type="button" onClick={() => toggleSortClient("status")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+                      Status <SortIconC k="status" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    <button type="button" onClick={() => toggleSortClient("client_since")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+                      Client Since <SortIconC k="client_since" />
+                    </button>
+                  </th>
+                  <th className="w-16 px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {visibleClients.map((c) => (
+                  <tr key={c.id}
+                    onClick={(e) => openQuickEdit(c, e)}
+                    className="cursor-pointer border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${getAvatarColor(c.name)}`}>
+                          {getInitials(c.name)}
+                        </div>
+                        <span className="font-medium text-white truncate">{c.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {c.interface_name || <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {c.interface_contact_number || <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={c.status} />
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {c.client_since ? new Date(c.client_since).toLocaleDateString() : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 justify-end">
+                        <Link href={`/clients/${c.id}`} title="Open client details"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                        <ClientCardMenu
+                          onEdit={(e) => openQuickEdit(c, e)}
+                          onDelete={(e) => handleDelete(c, e)}
+                          canUpdate={canUpdate}
+                          canDelete={canDelete}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
