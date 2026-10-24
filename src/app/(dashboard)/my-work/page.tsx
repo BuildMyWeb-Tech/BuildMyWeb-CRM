@@ -11,6 +11,7 @@ import Link from "next/link";
 
 interface ProjectTask {
   id: string; title: string;
+  due_date?: string | null;
   show_date: string | null;
   stage?: { name: string } | null;
   project?: { id: string; name: string } | null;
@@ -18,6 +19,7 @@ interface ProjectTask {
 }
 interface ProductTask {
   id: string; title: string;
+  due_date?: string | null;
   show_date: string | null;
   stage?: { name: string } | null;
   product?: { project_name?: string } | null;
@@ -136,12 +138,12 @@ export default function MyWorkPage() {
       const uid = user.id;
       const nowStr = new Date().toISOString().slice(0, 10);
 
-      const ptSelect = "id, title, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
-      const pdSelect = "id, title, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
+      const ptSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      const pdSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
       // Single query per table (all assigned tasks), then JS-side filter
-      // mirrors UnifiedTasksView's "current" logic: exclude show_date > today
+      // mirrors UnifiedTasksView's "current" logic: exclude future show_date AND tasks with no date context
       const [ptRes, pdRes, clRes] = await Promise.all([
         supabase.from("project_tasks").select(ptSelect)
           .eq("account_id", accountId).or(assigneeFilter),
@@ -153,9 +155,11 @@ export default function MyWorkPage() {
           .or(`allocated_user_id.eq.${uid},allocated_user_ids.cs.{${uid}}`),
       ]);
 
-      // Same filter as UnifiedTasksView "current" tab: hide if show_date is in the future
-      const isCurrent = (t: { show_date: string | null }) =>
-        !t.show_date || t.show_date <= nowStr;
+      // Same filter as UnifiedTasksView "current" tab:
+      // - hide if show_date is in the future
+      // - hide if task has neither due_date nor show_date (no date context = not actionable yet)
+      const isCurrent = (t: { due_date?: string | null; show_date: string | null }) =>
+        (!t.show_date || t.show_date <= nowStr) && (!!t.due_date || !!t.show_date);
 
       const normPt = (ptRes.data ?? [])
         .filter(isCurrent)
@@ -294,10 +298,12 @@ export default function MyWorkPage() {
                       <tr key={t.id}
                         className={`border-b border-[#2a3045]/60 last:border-0 hover:bg-[#1a1f2e] transition-colors group ${isHidden ? "opacity-30" : ""}`}>
                         <td className="px-4 py-2.5">
-                          <p className="text-sm text-white font-medium line-clamp-2 leading-snug">{t.title}</p>
-                          {t.project && (
-                            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{t.project.name}</p>
-                          )}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-sm text-white font-medium line-clamp-1 leading-snug shrink-0 max-w-[55%]">{t.title}</p>
+                            {t.project && (
+                              <p className="text-[11px] text-slate-500 line-clamp-1 truncate">{t.project.name}</p>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2.5">
                           {t.stage?.name
@@ -436,7 +442,7 @@ export default function MyWorkPage() {
                 <thead className="sticky top-0 z-10 bg-[#0f1117] border-b border-[#2a3045]">
                   <tr>
                     <th className="px-4 py-2 text-left">
-                      <SortBtn label="Client" active={clSort === "title"} dir={clDir}
+                      <SortBtn label="Task" active={clSort === "title"} dir={clDir}
                         onClick={() => toggle("title", clSort, clDir, setClSort, setClDir)} />
                     </th>
                     <th className="px-3 py-2 text-left">

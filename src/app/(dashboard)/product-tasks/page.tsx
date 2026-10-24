@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, X, Eye,
+  ChevronsUpDown, Loader2, X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -659,7 +659,6 @@ export default function ProductTasksPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="show_date" label="Show Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
-                      <th className="w-16 px-3 py-3 font-medium text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -726,12 +725,6 @@ export default function ProductTasksPage() {
                                 {new Date(task.show_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                               </span>
                             ) : <span className="text-slate-600">—</span>}
-                          </td>
-                          <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            <button type="button" onClick={() => openEdit(task)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-teal-400 transition-colors">
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
                           </td>
                         </tr>
                       );
