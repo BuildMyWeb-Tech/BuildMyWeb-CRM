@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Users, Plus, Loader2, MoreVertical, Pencil, Trash2,
   List as ListIcon, LayoutGrid, Search, AlertTriangle,
-  Archive, ChevronRight, Home,
+  Archive, ChevronRight, Home, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -460,10 +460,10 @@ export default function ClientsPage() {
         ) : (
           <div className="divide-y divide-[#2a3045] rounded-xl border border-[#2a3045] bg-[#1a1f2e]">
             {visibleClients.map((c) => (
-              <Link
+              <div
                 key={c.id}
-                href={`/clients/${c.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-[#2a3045]/50 transition-colors"
+                onClick={(e) => openQuickEdit(c, e)}
+                className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-[#2a3045]/50 transition-colors"
               >
                 <div
                   className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white ${getAvatarColor(c.name)}`}
@@ -479,13 +479,21 @@ export default function ClientsPage() {
                   </p>
                 </div>
                 <StatusBadge status={c.status} />
+                <Link
+                  href={`/clients/${c.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title="Open client details"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
                 <ClientCardMenu
                   onEdit={(e) => openQuickEdit(c, e)}
                   onDelete={(e) => handleDelete(c, e)}
                   canUpdate={canUpdate}
                   canDelete={canDelete}
                 />
-              </Link>
+              </div>
             ))}
           </div>
         )}

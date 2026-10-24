@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { KanbanSquare, Plus, MoreVertical, Pencil, Loader2, LayoutGrid, List as ListIcon, Search } from "lucide-react";
+import { KanbanSquare, Plus, Loader2, LayoutGrid, List as ListIcon, Search, ArrowUp, ArrowDown, ArrowUpDown, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,15 +14,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ProjectSettings } from "@/components/projects/project-settings";
 import type { Project, ProjectStatus } from "@/types";
 import { toast } from "sonner";
+
+type SortKey = "name" | "client" | "status" | "start_date" | "due_date";
+type SortDir = "asc" | "desc";
+
+const STATUS_RANK: Record<string, number> = {
+  active: 0, inactive: 1, hold_by_client: 2, in_discussion: 3, archived: 4, completed: 5,
+};
 
 // Projects list — client projects each get their own task board
 // (see [id]/page.tsx). New-project dialog creates the project and
@@ -39,11 +40,23 @@ export default function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("status");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   useEffect(() => {
     const savedStatus = localStorage.getItem("projects-status-filter") as "all" | ProjectStatus | null;
     if (savedStatus) setStatusFilter(savedStatus);
     if (localStorage.getItem("projects-view") === "list") setViewMode("list");
   }, []);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  function SortIcon({ k }: { k: SortKey }) {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3 inline ml-1" /> : <ArrowDown className="h-3 w-3 inline ml-1" />;
+  }
 
   async function loadProjects() {
     const res = await fetch("/api/projects");
@@ -87,11 +100,31 @@ export default function ProjectsPage() {
     }
   }
 
-  const visibleProjects = (projects ?? []).filter((p) => {
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.client_name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const visibleProjects = useMemo(() => {
+    return (projects ?? [])
+      .filter((p) => {
+        const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+        const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.client_name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) || (p.contact?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesStatus && matchesSearch;
+      })
+      .sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        if (sortKey === "name") return dir * a.name.localeCompare(b.name);
+        if (sortKey === "client") return dir * ((a.contact?.name || a.client_name || "").localeCompare(b.contact?.name || b.client_name || ""));
+        if (sortKey === "status") return dir * ((STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
+        if (sortKey === "start_date") {
+          if (!a.start_date && !b.start_date) return 0;
+          if (!a.start_date) return 1; if (!b.start_date) return -1;
+          return dir * a.start_date.localeCompare(b.start_date);
+        }
+        if (sortKey === "due_date") {
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return 1; if (!b.due_date) return -1;
+          return dir * a.due_date.localeCompare(b.due_date);
+        }
+        return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9);
+      });
+  }, [projects, statusFilter, searchQuery, sortKey, sortDir]);
 
   const statCounts = {
     all: (projects ?? []).length,
@@ -178,21 +211,24 @@ export default function ProjectsPage() {
           </div>
         ) : viewMode === "list" ? (
           <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
-            <table className="w-full min-w-[600px] text-sm">
+            <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b border-[#2a3045] bg-[#1a1f2e]">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Project</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Client</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">Progress</th>
+                  {([["name","Project"],["client","Client"],["status","Status"],["start_date","Start Date"],["due_date","Due Date"]] as [SortKey,string][]).map(([k, label]) => (
+                    <th key={k} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">
+                      <button type="button" onClick={() => toggleSort(k)} className="flex items-center gap-1 hover:text-white transition-colors">
+                        {label}<SortIcon k={k} />
+                      </button>
+                    </th>
+                  ))}
                   <th className="w-10 px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {visibleProjects.map((p) => (
-                  <tr key={p.id} className="border-b border-[#2a3045] bg-[#1a1f2e] hover:bg-[#1e2436] transition-colors last:border-0">
+                  <tr key={p.id} onClick={() => setEditingProject(p)} className="cursor-pointer border-b border-[#2a3045] bg-[#1a1f2e] hover:bg-[#1e2436] transition-colors last:border-0">
                     <td className="px-4 py-3">
-                      <Link href={`/projects/${p.id}`} className="font-medium text-white hover:text-blue-300 transition-colors">{p.name}</Link>
+                      <p className="font-medium text-white">{p.name}</p>
                       {p.description && <p className="text-xs text-slate-500 line-clamp-1">{p.description}</p>}
                     </td>
                     <td className="px-4 py-3 text-slate-400">{p.contact?.name || p.client_name || "—"}</td>
@@ -206,25 +242,16 @@ export default function ProjectsPage() {
                         : "border-[#2a3045] bg-[#2a3045] text-slate-500"
                       }`}>{p.status.replace(/_/g, " ")}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      {typeof p.progress_percentage === "number" ? (
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#2a3045]">
-                            <div className={`h-full rounded-full ${p.progress_percentage >= 75 ? "bg-green-500" : p.progress_percentage >= 40 ? "bg-blue-500" : "bg-amber-500"}`} style={{ width: `${p.progress_percentage}%` }} />
-                          </div>
-                          <span className="text-xs text-slate-400">{p.progress_percentage}%</span>
-                        </div>
-                      ) : <span className="text-xs text-slate-600">—</span>}
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {p.start_date ? new Date(p.start_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                     </td>
-                    <td className="px-4 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white">
-                          <MoreVertical className="h-3.5 w-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditingProject(p)}><Pencil className="h-3.5 w-3.5" /> Edit</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {p.due_date ? new Date(p.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/projects/${p.id}`} title="Open board" className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -234,8 +261,8 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleProjects.map((p) => (
-              <Link key={p.id} href={`/projects/${p.id}`}
-                className="group rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-5 hover:border-blue-500/40 hover:bg-[#1e2436] transition-colors">
+              <div key={p.id} onClick={() => setEditingProject(p)}
+                className="group cursor-pointer rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-5 hover:border-blue-500/40 hover:bg-[#1e2436] transition-colors">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/20">
                     <KanbanSquare className="h-5 w-5 text-blue-400" />
@@ -249,19 +276,11 @@ export default function ProjectsPage() {
                       : p.status === "in_discussion" ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
                       : "border-[#2a3045] bg-[#2a3045] text-slate-500"
                     }`}>{p.status.replace(/_/g, " ")}</span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors"
-                      >
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingProject(p); }}>
-                          <Pencil className="h-3.5 w-3.5" /> Edit
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Link href={`/projects/${p.id}`} title="Open board"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
                   </div>
                 </div>
                 <div className="mt-3">
@@ -286,7 +305,7 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                 )}
-              </Link>
+              </div>
             ))}
           </div>
         )}

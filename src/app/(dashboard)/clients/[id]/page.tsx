@@ -27,7 +27,7 @@ import type {
 } from "@/types";
 import { toast } from "sonner";
 
-type C360Tab = "overview" | "projects" | "tasks" | "files" | "payments" | "notes" | "info";
+// Single-page layout — all sections visible, no tabs
 
 const STATUSES: ClientStatus[] = ["active", "inactive", "archived", "completed"];
 const STATUS_STYLE: Record<ClientStatus, string> = {
@@ -87,8 +87,6 @@ export default function ClientDetailPage() {
   const { canUpdate: gridCanUpdate, canCreate: gridCanCreate } = usePagePermissions("client_directory");
   const canEditInfo = canUpdateRecords && gridCanUpdate;
   const canCreateScope = canSendMessages && gridCanCreate;
-  const [tab, setTab] = useState<C360Tab>("overview");
-
   const [client, setClient] = useState<Client | null>(null);
   const [members, setMembers] = useState<AccountMember[]>([]);
   const [scopeItems, setScopeItems] = useState<ScopeOfWork[]>([]);
@@ -148,30 +146,16 @@ export default function ClientDetailPage() {
     fetch("/api/account/members").then((r) => r.ok ? r.json() : null).then((d) => setMembers(d?.members ?? []));
   }, [load]);
 
-  // Lazy load per tab
+  // Load all section data upfront (single-page layout)
   useEffect(() => {
-    if (tab === "projects" && projects === null) {
-      fetch(`/api/projects?client_id=${params.id}`)
-        .then((r) => r.ok ? r.json() : null)
-        .then((d) => setProjects(d?.projects ?? []));
-    }
-    if (tab === "payments" && payments === null) {
-      fetch(`/api/client-payments?client_id=${params.id}`)
-        .then((r) => r.ok ? r.json() : null)
-        .then((d) => setPayments(d?.payments ?? []));
-    }
-    if (tab === "notes" && notes === null) {
-      fetch(`/api/client-notes?client_id=${params.id}`)
-        .then((r) => r.ok ? r.json() : null)
-        .then((d) => setNotes(d?.notes ?? []));
-    }
-    if (tab === "tasks" && clientTasks === null && !clientTasksLoading) {
-      setClientTasksLoading(true);
-      fetch(`/api/projects?client_id=${params.id}`)
-        .then((r) => r.ok ? r.json() : null)
-        .then(async (d) => {
-          const projs: Project[] = d?.projects ?? [];
-          if (projs.length === 0) { setClientTasks([]); return; }
+    fetch(`/api/projects?client_id=${params.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then(async (d) => {
+        const projs: Project[] = d?.projects ?? [];
+        setProjects(projs);
+        if (projs.length === 0) { setClientTasks([]); return; }
+        setClientTasksLoading(true);
+        try {
           const results = await Promise.all(
             projs.map((p) => fetch(`/api/projects/${p.id}`).then((r) => r.ok ? r.json() : null))
           );
@@ -182,10 +166,15 @@ export default function ClientDetailPage() {
             }))
           );
           setClientTasks(allTasks);
-        })
-        .finally(() => setClientTasksLoading(false));
-    }
-  }, [tab, params.id, projects, payments, notes, clientTasks, clientTasksLoading]);
+        } finally { setClientTasksLoading(false); }
+      });
+    fetch(`/api/client-payments?client_id=${params.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => setPayments(d?.payments ?? []));
+    fetch(`/api/client-notes?client_id=${params.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => setNotes(d?.notes ?? []));
+  }, [params.id]);
 
   async function saveField(field: InfoField, value: string) {
     if (!client) return;
@@ -425,19 +414,11 @@ export default function ClientDetailPage() {
         </div>
       </div>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────── */}
-      <div className="mt-4 flex items-center gap-0 overflow-x-auto border-b border-border scrollbar-none">
-        <TabButton active={tab === "overview"} onClick={() => setTab("overview")} icon={Globe}>Overview</TabButton>
-        <TabButton active={tab === "projects"} onClick={() => setTab("projects")} icon={Briefcase}>Projects</TabButton>
-        <TabButton active={tab === "tasks"} onClick={() => setTab("tasks")} icon={FileText}>Tasks</TabButton>
-        <TabButton active={tab === "files"} onClick={() => setTab("files")} icon={Folder}>Files</TabButton>
-        <TabButton active={tab === "payments"} onClick={() => setTab("payments")} icon={CreditCard}>Payments</TabButton>
-        <TabButton active={tab === "notes"} onClick={() => setTab("notes")} icon={StickyNote}>Notes</TabButton>
-        <TabButton active={tab === "info"} onClick={() => setTab("info")} icon={FileText}>Info</TabButton>
-      </div>
-
       {/* ── Overview ────────────────────────────────────────────────── */}
-      {tab === "overview" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><Globe className="h-4 w-4" /> Overview</h2>
+      </div>
+      {(true) && (
         <div className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-border bg-card p-4">
@@ -483,7 +464,10 @@ export default function ClientDetailPage() {
       )}
 
       {/* ── Projects ────────────────────────────────────────────────── */}
-      {tab === "projects" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><Briefcase className="h-4 w-4" /> Projects</h2>
+      </div>
+      {(true) && (
         <div className="mt-4">
           {projects === null ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -518,7 +502,10 @@ export default function ClientDetailPage() {
       )}
 
       {/* ── Tasks ───────────────────────────────────────────────────── */}
-      {tab === "tasks" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><FileText className="h-4 w-4" /> Tasks</h2>
+      </div>
+      {(true) && (
         <div className="mt-4">
           {clientTasksLoading || clientTasks === null ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -598,14 +585,20 @@ export default function ClientDetailPage() {
       )}
 
       {/* ── Files ───────────────────────────────────────────────────── */}
-      {tab === "files" && accountId && user && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><Folder className="h-4 w-4" /> Files</h2>
+      </div>
+      {accountId && user && (
         <div className="mt-4">
           <CombinedFilesView accountId={accountId} userId={user.id} clientId={client.id} />
         </div>
       )}
 
       {/* ── Payments ────────────────────────────────────────────────── */}
-      {tab === "payments" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><CreditCard className="h-4 w-4" /> Payments</h2>
+      </div>
+      {(true) && (
         <div className="mt-4">
           {payments === null ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -685,7 +678,10 @@ export default function ClientDetailPage() {
       )}
 
       {/* ── Notes ───────────────────────────────────────────────────── */}
-      {tab === "notes" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><StickyNote className="h-4 w-4" /> Notes</h2>
+      </div>
+      {(true) && (
         <div className="mt-4 space-y-3">
           {canEditInfo && (
             <div className="flex gap-2">
@@ -739,7 +735,10 @@ export default function ClientDetailPage() {
       )}
 
       {/* ── Info ────────────────────────────────────────────────────── */}
-      {tab === "info" && (
+      <div className="mt-6 border-b border-border pb-1 mb-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground"><User className="h-4 w-4" /> Info</h2>
+      </div>
+      {(true) && (
         <div className="mt-4 flex max-w-lg flex-col gap-4">
           {/* Logo */}
           <div className="flex items-center gap-3 rounded-lg border border-border p-3">

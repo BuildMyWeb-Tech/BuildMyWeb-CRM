@@ -556,8 +556,8 @@ export default function OverviewPage() {
   const enqEffectiveUser = enqSubUser ?? globalUserId;
   const prodEffectiveUser = prodSubUser ?? globalUserId;
 
-  // My Work — always uses globalUserId, defaulting to current user
-  const myWorkUserId = globalUserId ?? user?.id ?? null;
+  // My Work — always shows the currently logged-in user's tasks (not affected by "All People" picker)
+  const myWorkUserId = user?.id ?? null;
 
   const [myWorkData, setMyWorkData] = useState<{
     my_work: { overdue: MyWorkTask[]; due_today: MyWorkTask[]; upcoming: MyWorkTask[]; waiting: MyWorkTask[] };
