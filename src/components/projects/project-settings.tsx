@@ -56,7 +56,7 @@ export function ProjectSettings({
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [startDate, setStartDate] = useState(project.start_date ?? "");
   const [dueDate, setDueDate] = useState(project.due_date ?? "");
-  const [progress, setProgress] = useState(String(project.progress_percentage ?? 0));
+  const [progress, setProgress] = useState(project.status === "completed" ? "100" : String(project.progress_percentage ?? 0));
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -69,7 +69,7 @@ export function ProjectSettings({
     setStatus(project.status);
     setStartDate(project.start_date ?? "");
     setDueDate(project.due_date ?? "");
-    setProgress(String(project.progress_percentage ?? 0));
+    setProgress(project.status === "completed" ? "100" : String(project.progress_percentage ?? 0));
   }, [open, project]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -162,7 +162,7 @@ export function ProjectSettings({
 
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatus)}>
+            <Select value={status} onValueChange={(v) => { const s = v as ProjectStatus; setStatus(s); if (s === "completed") setProgress("100"); }}>
               <SelectTrigger className="w-full">
                 <SelectValue className="capitalize">
                   {(value: string) => value.replace("_", " ")}

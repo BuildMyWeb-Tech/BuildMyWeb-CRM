@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  UserPlus, Plus, Loader2, MoreVertical, Pencil,
-  List as ListIcon, LayoutGrid, Search, ArrowUpRight,
+  UserPlus, Plus, Loader2, MoreVertical,
+  List as ListIcon, LayoutGrid, Search, ArrowUpRight, ExternalLink,
   PauseCircle, PlayCircle, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle,
-  FolderOpen, Info, Sparkles, Eye, Calendar,
+  FolderOpen, Info, Sparkles, Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,7 +311,7 @@ export default function ClientLeadsPage() {
 
           {/* Tab bar + inline filters */}
           <div className="shrink-0 px-6 pb-0 flex flex-wrap items-center gap-2 border-b border-[#2a3045]">
-            <div className="flex items-center gap-1 overflow-x-auto">
+            <div className="flex items-center gap-1">
               {TABS.map((tab) => (
                 <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
                   className={`flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.key ? "border-blue-500 text-white" : "border-transparent text-slate-400 hover:text-white"}`}>
@@ -399,7 +399,6 @@ export default function ClientLeadsPage() {
                     {visibleLeads.map((lead, idx) => {
                       const allocatedNames = getAllocatedNames(lead);
                       const fu = followUpState(lead.next_follow_up_at, lead.status);
-                      const initials = getInitials(lead.title);
                       return (
                         <tr key={lead.id}
                           onClick={() => canUpdate && openEdit(lead)}
@@ -408,17 +407,12 @@ export default function ClientLeadsPage() {
                             <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-[11px] font-bold text-blue-400">
-                                {initials}
-                              </div>
-                              <div className="min-w-0">
-                                <Link href={`/client-leads/${lead.id}`}
-                                  className="truncate text-sm font-medium text-white hover:text-blue-400 transition-colors block">
-                                  {lead.title}
-                                </Link>
-                                {lead.phone && <p className="text-[11px] text-slate-500">{lead.phone}</p>}
-                              </div>
+                            <div className="min-w-0">
+                              <Link href={`/client-leads/${lead.id}`}
+                                className="truncate text-sm font-medium text-white hover:text-blue-400 transition-colors block">
+                                {lead.title}
+                              </Link>
+                              {lead.phone && <p className="text-[11px] text-slate-500">{lead.phone}</p>}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -444,13 +438,15 @@ export default function ClientLeadsPage() {
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const taskList = lead.tasks ?? [];
-                              const done = taskList.filter((t) => t.is_done).length;
-                              const total = taskList.length;
-                              if (total === 0) return <span className="text-slate-600 text-xs">—</span>;
+                              if (taskList.length === 0) return <span className="text-slate-600 text-xs">—</span>;
                               return (
-                                <span className={`text-xs font-medium ${done === total ? "text-green-400" : "text-slate-400"}`}>
-                                  {done}/{total}
-                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  {taskList.map((t: { id: string; title: string; is_done: boolean }) => (
+                                    <span key={t.id} className={`text-xs ${t.is_done ? "text-slate-500 line-through" : "text-slate-300"}`}>
+                                      {t.title}
+                                    </span>
+                                  ))}
+                                </div>
                               );
                             })()}
                           </td>
@@ -458,14 +454,8 @@ export default function ClientLeadsPage() {
                             <div className="flex items-center gap-1">
                               <Link href={`/client-leads/${lead.id}`}
                                 className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
-                                <Eye className="h-3.5 w-3.5" />
+                                <ExternalLink className="h-3.5 w-3.5" />
                               </Link>
-                              {canUpdate && (
-                                <button type="button" onClick={() => openEdit(lead)}
-                                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                              )}
                               <DropdownMenu>
                                 <DropdownMenuTrigger className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">
                                   <MoreVertical className="h-3.5 w-3.5" />
