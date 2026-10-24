@@ -7,7 +7,7 @@ import {
   List as ListIcon, LayoutGrid, Search, ArrowUpRight, ExternalLink,
   PauseCircle, PlayCircle, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle,
-  FolderOpen, Info, Sparkles, Calendar,
+  FolderOpen, Info, Sparkles, Calendar, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
