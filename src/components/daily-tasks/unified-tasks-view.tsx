@@ -376,6 +376,8 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
       } else if (!effectiveShowAll) {
         // "current" mode: hide tasks scheduled for the future
         if (isFutureScheduled) return false;
+        // also hide project tasks with no date context at all (no due_date, no show_date)
+        if (t.kind === "project" && !t.dateValue && !t.showDateValue) return false;
       }
       // Apply all user filters in every view mode
       if (projectFilter.size > 0) {
@@ -1161,27 +1163,33 @@ export function ProjectsPanel({ projects, onStatusChange }: { projects: import("
         <span className="text-sm font-medium text-foreground">Projects by Status</span>
         <span className="ml-auto text-xs text-muted-foreground">{projects.length} total</span>
       </div>
-      <div className="grid grid-cols-2 gap-0 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-border">
+      <div className="flex flex-col divide-y divide-border">
         {STATUS_ORDER.map((status) => (
           <div
             key={status}
             onDragOver={(e) => { e.preventDefault(); setDropTarget(status); }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null); }}
             onDrop={(e) => { e.preventDefault(); handleDrop(status); setDropTarget(null); }}
-            className={`p-2 min-h-[80px] transition-colors ${dropTarget === status ? "bg-primary/10" : ""}`}
+            className={`px-2 py-1.5 min-h-[36px] transition-colors ${dropTarget === status ? "bg-primary/10" : ""}`}
           >
-            <p className={`mb-1.5 text-[10px] font-semibold uppercase tracking-wider rounded-full border px-2 py-0.5 inline-block ${STATUS_COLORS[status] ?? ""}`}>
-              {STATUS_LABELS[status]} {grouped[status].length > 0 && `(${grouped[status].length})`}
-            </p>
-            <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`text-[9px] font-semibold uppercase tracking-wider rounded-full border px-1.5 py-0.5 shrink-0 ${STATUS_COLORS[status] ?? ""}`}>
+                {STATUS_LABELS[status]}
+              </span>
+              {grouped[status].length > 0 && (
+                <span className="text-[10px] text-muted-foreground">{grouped[status].length}</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
               {grouped[status].map((p) => (
                 <div
                   key={p.id}
                   draggable
                   onDragStart={() => setDragId(p.id)}
                   onDragEnd={() => { setDragId(null); setDropTarget(null); }}
-                  className={`cursor-grab rounded px-2 py-1 text-xs border border-border bg-muted/50 text-foreground hover:bg-muted truncate transition-opacity ${updating.has(p.id) ? "opacity-40" : ""} ${dragId === p.id ? "opacity-60" : ""}`}
+                  className={`cursor-grab rounded px-1.5 py-0.5 text-[10px] border border-border bg-muted/50 text-foreground hover:bg-muted truncate transition-opacity max-w-full ${updating.has(p.id) ? "opacity-40" : ""} ${dragId === p.id ? "opacity-60" : ""}`}
                   title={p.name}
+                  style={{ maxWidth: "calc(100% - 4px)" }}
                 >
                   {p.name}
                 </div>
