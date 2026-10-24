@@ -188,12 +188,11 @@ export default function MyPagesPage() {
 
   function addPage(page: { href: string; label: string }) {
     const existing = tabs.find((t) => t.href === page.href);
-    if (existing) { switchTab(existing.id); setShowPicker(false); return; }
+    if (existing) { switchTab(existing.id); return; }
     const id = `tab-${Date.now()}`;
     const next: TabConfig[] = [...tabs, { id, href: page.href, title: label(page.label) }];
     setTabs(next); switchTab(id);
     saveTabs(userId, next);
-    setShowPicker(false); setSearch("");
   }
 
   function removeTab(id: string, e: React.MouseEvent) {

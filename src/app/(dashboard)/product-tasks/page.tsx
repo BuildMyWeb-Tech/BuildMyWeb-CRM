@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, X,
+  ChevronsUpDown, Loader2, X, LayoutList, LayoutGrid,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -359,6 +359,9 @@ export default function ProductTasksPage() {
   const [viewMode, setViewMode] = useState<"current" | "scheduled" | "all">(() => {
     try { return (localStorage.getItem("pt-view") as "current" | "scheduled" | "all") || "current"; } catch { return "current"; }
   });
+  const [displayMode, setDisplayMode] = useState<"table" | "grid">(() => {
+    try { return (localStorage.getItem("pt-display") as "table" | "grid") || "table"; } catch { return "table"; }
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<ProductTask | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -595,6 +598,14 @@ export default function ProductTasksPage() {
               className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${overdueOnly ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#2a3045] bg-[#1a1f2e] text-slate-400 hover:text-white"}`}>
               Overdue
             </button>
+            <div className="flex items-center gap-0.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] p-0.5">
+              <button type="button" onClick={() => { setDisplayMode("table"); try { localStorage.setItem("pt-display", "table"); } catch {} }}
+                className={`rounded p-1.5 transition-colors ${displayMode === "table" ? "bg-[#2a3045] text-white" : "text-slate-500 hover:text-slate-300"}`}
+                title="Table view"><LayoutList className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => { setDisplayMode("grid"); try { localStorage.setItem("pt-display", "grid"); } catch {} }}
+                className={`rounded p-1.5 transition-colors ${displayMode === "grid" ? "bg-[#2a3045] text-white" : "text-slate-500 hover:text-slate-300"}`}
+                title="Grid view"><LayoutGrid className="h-3.5 w-3.5" /></button>
+            </div>
             <div className="flex-1" />
             {selectedIds.size > 0 && (
               <button type="button" onClick={handleBulkDelete} disabled={bulkDeleting}
@@ -612,7 +623,7 @@ export default function ProductTasksPage() {
             )}
           </div>
 
-          {/* Table */}
+          {/* Table / Grid */}
           <div className="flex-1 overflow-auto px-4 pb-6 sm:px-6">
             {loading ? (
               <div className="flex h-48 items-center justify-center">
@@ -626,6 +637,52 @@ export default function ProductTasksPage() {
                   className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-4 py-2 text-sm text-slate-300 hover:border-teal-500/50 transition-colors">
                   <Plus className="h-4 w-4" /> Create task
                 </button>
+              </div>
+            ) : displayMode === "grid" ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filtered.map((task) => {
+                  const isOverdue = task.due_date && task.due_date < todayStr;
+                  const isToday = task.due_date === todayStr;
+                  const stageName = task.stage?.name ?? "";
+                  const productName = (task.product as { project_name?: string } | null)?.project_name ?? "";
+                  const assigneeNames = (task.assignee_user_ids?.length
+                    ? task.assignee_user_ids
+                    : task.assignee_user_id ? [task.assignee_user_id] : []
+                  ).map((uid) => getMemberName(uid)).filter(Boolean);
+                  return (
+                    <div key={task.id} onClick={() => openEdit(task)}
+                      className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-4 cursor-pointer hover:border-teal-500/30 hover:bg-[#1e2438] transition-colors flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-white line-clamp-2 flex-1">{task.title}</p>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>
+                          {task.priority}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {stageName && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageColor(stageName)}`}>
+                            {stageName}
+                          </span>
+                        )}
+                        {productName && (
+                          <span className="rounded-full border border-[#2a3045] px-2 py-0.5 text-[10px] text-slate-400">
+                            {productName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-auto pt-1 border-t border-[#2a3045]">
+                        <span className="text-[11px] text-slate-500">
+                          {assigneeNames.length > 0 ? assigneeNames.join(", ") : "Unassigned"}
+                        </span>
+                        {task.due_date && (
+                          <span className={`text-[11px] font-medium ${isOverdue ? "text-red-400" : isToday ? "text-amber-400" : "text-slate-400"}`}>
+                            {new Date(task.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
