@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
-  Folder,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
-import { UnifiedTasksView } from "@/components/daily-tasks/unified-tasks-view";
-import Link from "next/link";
+import { UnifiedTasksView, ProjectsPanel } from "@/components/daily-tasks/unified-tasks-view";
+import { toast } from "sonner";
+
 import type { Project } from "@/types";
 
 interface TaskStats {
@@ -24,16 +24,6 @@ interface ProjectWithTaskCount extends Project {
 }
 
 
-const PROJECT_COLORS = [
-  "bg-blue-500", "bg-purple-500", "bg-teal-500", "bg-orange-500",
-  "bg-pink-500", "bg-green-500", "bg-yellow-500", "bg-red-500",
-];
-
-function getProjectColor(nameOrId: string) {
-  let hash = 0;
-  for (let i = 0; i < nameOrId.length; i++) hash = (hash * 31 + nameOrId.charCodeAt(i)) >>> 0;
-  return PROJECT_COLORS[hash % PROJECT_COLORS.length];
-}
 
 type ViewMode = "current" | "scheduled" | "all";
 
@@ -208,100 +198,27 @@ export default function DailyTasksPage() {
           
 
          
-          {/* Projects section */}
-<div>
-  <div className="flex items-center gap-2 mb-3">
-    <Folder className="h-4 w-4 text-blue-400" />
-    <h2 className="text-sm font-semibold text-white">Projects</h2>
-  </div>
-
-  <div className="space-y-2">
-    {loading ? (
-      <div className="flex items-center justify-center py-4">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-      </div>
-    ) : projects.length === 0 ? (
-      <p className="text-xs text-slate-600 text-center py-3">
-        No projects
-      </p>
-    ) : (
-      (["active", "inactive", "completed", "archived"] as const).map(
-        (status) => {
-          const group = projects.filter(
-            (project) => project.status === status
-          );
-
-          if (group.length === 0) return null;
-
-          const isActive = status === "active";
-
-          return (
-            <details
-              key={status}
-              open={isActive}
-              className="group/status"
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-1 py-1.5 hover:bg-[#0f1117]">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      status === "active"
-                        ? "bg-green-400"
-                        : status === "inactive"
-                        ? "bg-yellow-400"
-                        : status === "completed"
-                        ? "bg-blue-400"
-                        : "bg-slate-500"
-                    }`}
-                  />
-
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 capitalize">
-                    {status}
-                  </span>
-
-                  <span className="text-[9px] font-medium text-slate-600">
-                    {group.length}
-                  </span>
-                </div>
-
-                <span className="text-[10px] text-slate-600 transition-transform group-open/status:rotate-180">
-                  ▼
-                </span>
-              </summary>
-
-              <div className="mt-1 space-y-1">
-                {group.map((project, idx) => (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}`}
-                    className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[#0f1117] transition-colors group"
-                  >
-                    <span
-                      className={`h-5 w-5 shrink-0 rounded ${getProjectColor(
-                        project.id
-                      )} flex items-center justify-center text-[9px] font-bold text-white`}
-                    >
-                      {project.name.charAt(0).toUpperCase()}
-                    </span>
-
-                    <span className="flex-1 truncate text-xs text-slate-300 group-hover:text-white">
-                      {project.name}
-                    </span>
-
-                    {/* Task count */}
-                    <span className="shrink-0 rounded-md bg-[#252b3d] px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-                      {project.task_count}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </details>
-          );
-        }
-      )
-    )}
-  </div>
-</div>
+          {/* Projects by Status — drag & drop */}
+        <ProjectsPanel
+          projects={projects}
+          onStatusChange={async (projectId, newStatus) => {
+            try {
+              const res = await fetch(`/api/projects/${projectId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus }),
+              });
+              if (res.ok) {
+                loadData();
+              } else {
+                const data = await res.json().catch(() => ({}));
+                toast.error(data?.error ?? "Could not update project status.");
+              }
+            } catch {
+              toast.error("Could not update project status.");
+            }
+          }}
+        />
 
         </div>
       </div>

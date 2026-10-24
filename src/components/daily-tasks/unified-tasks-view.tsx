@@ -81,7 +81,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   const [doneModalTask, setDoneModalTask] = useState<UnifiedRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
+
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
   const [moveTaskRow, setMoveTaskRow] = useState<UnifiedRow | null>(null);
   const [moveProjectSearch, setMoveProjectSearch] = useState("");
@@ -406,8 +406,12 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         return dir * ((order[a.priority ?? ""] ?? 4) - (order[b.priority ?? ""] ?? 4));
       }
       if (sortKey === "client") {
-        const aName = clients.find((c) => c.id === a.clientId)?.name ?? "";
-        const bName = clients.find((c) => c.id === b.clientId)?.name ?? "";
+        const aClient = clients.find((c) => c.id === a.clientId);
+        const aProject = projects.find((p) => p.id === a.projectId);
+        const aName = aClient?.name || aProject?.name || "";
+        const bClient = clients.find((c) => c.id === b.clientId);
+        const bProject = projects.find((p) => p.id === b.projectId);
+        const bName = bClient?.name || bProject?.name || "";
         return dir * aName.localeCompare(bName);
       }
       if (sortKey === "assignee") {
@@ -540,10 +544,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         >
           Overdue
         </Button>
-        <Button variant="outline" onClick={() => setProjectsPanelOpen((v) => !v)} className={projectsPanelOpen ? "border-primary bg-primary/10 text-primary" : ""}>
-          <Layers className="mr-1.5 h-3.5 w-3.5" />
-          Projects
-        </Button>
+
         <Button variant="outline" onClick={() => setFiltersOpen(true)} className="relative">
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
           Filters
@@ -655,29 +656,6 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         )}
       </aside>
 
-      {/* Projects side panel */}
-      {projectsPanelOpen && (
-        <ProjectsPanel
-          projects={projects}
-          onStatusChange={async (projectId, newStatus) => {
-            try {
-              const res = await fetch(`/api/projects/${projectId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: newStatus }),
-              });
-              if (res.ok) {
-                load();
-              } else {
-                const data = await res.json().catch(() => ({}));
-                toast.error(data?.error ?? "Could not update project status.");
-              }
-            } catch {
-              toast.error("Could not update project status.");
-            }
-          }}
-        />
-      )}
 
       <div className="mt-4">
         {filteredTasks.length === 0 ? (
@@ -1135,7 +1113,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   );
 }
 
-const STATUS_ORDER: string[] = ["active", "inactive", "hold_by_client", "in_discussion", "archived", "completed"];
+export const STATUS_ORDER: string[] = ["active", "inactive", "hold_by_client", "in_discussion", "archived", "completed"];
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
   inactive: "Inactive",
@@ -1153,7 +1131,7 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "border-teal-500/30 bg-teal-500/10 text-teal-400",
 };
 
-function ProjectsPanel({ projects, onStatusChange }: { projects: import("@/types").Project[]; onStatusChange: (projectId: string, newStatus: string) => Promise<void> }) {
+export function ProjectsPanel({ projects, onStatusChange }: { projects: import("@/types").Project[]; onStatusChange: (projectId: string, newStatus: string) => Promise<void> }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [updating, setUpdating] = useState<Set<string>>(new Set());

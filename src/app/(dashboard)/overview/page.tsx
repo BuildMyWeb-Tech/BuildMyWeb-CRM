@@ -732,7 +732,7 @@ export default function OverviewPage() {
   const overdueProjectTasks = (myWorkData?.my_work.overdue ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
   const dueTodayProjectTasks = (myWorkData?.my_work.due_today ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
   const upcomingTaskList = (myWorkData?.my_work.upcoming ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
-  const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t));
+  const waitingTaskList = (myWorkData?.my_work.waiting ?? []).filter((t) => taskMatchesUser(t, myWorkUserId) && taskIsVisible(t) && (t.due_date || t.show_date));
   const allProjectTasksRaw = [...overdueProjectTasks, ...dueTodayProjectTasks, ...upcomingTaskList, ...waitingTaskList];
   const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, normal: 2, low: 3 };
   const allProjectTasks = [...allProjectTasksRaw].sort((a, b) => {
