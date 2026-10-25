@@ -156,10 +156,9 @@ export default function MyWorkPage() {
       ]);
 
       // Same filter as UnifiedTasksView "current" tab:
-      // - hide if show_date is in the future
-      // - hide if task has neither due_date nor show_date (no date context = not actionable yet)
-      const isCurrent = (t: { due_date?: string | null; show_date: string | null }) =>
-        (!t.show_date || t.show_date <= nowStr) && (!!t.due_date || !!t.show_date);
+      // hide only if show_date is explicitly set to a future date
+      const isCurrent = (t: { show_date: string | null }) =>
+        !t.show_date || t.show_date <= nowStr;
 
       const normPt = (ptRes.data ?? [])
         .filter(isCurrent)
@@ -442,7 +441,7 @@ export default function MyWorkPage() {
                 <thead className="sticky top-0 z-10 bg-[#0f1117] border-b border-[#2a3045]">
                   <tr>
                     <th className="px-4 py-2 text-left">
-                      <SortBtn label="Task" active={clSort === "title"} dir={clDir}
+                      <SortBtn label="Client" active={clSort === "title"} dir={clDir}
                         onClick={() => toggle("title", clSort, clDir, setClSort, setClDir)} />
                     </th>
                     <th className="px-3 py-2 text-left">

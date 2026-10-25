@@ -376,6 +376,7 @@ export default function ClientLeadsPage() {
                       <th className="w-10 px-4 py-3">
                         <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
                       </th>
+                      <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Tasks</th>
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="title" label="Client Name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
@@ -391,7 +392,6 @@ export default function ClientLeadsPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="status" label="Status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
-                      <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Tasks</th>
                       <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -405,6 +405,21 @@ export default function ClientLeadsPage() {
                           className={`border-b border-[#2a3045] last:border-0 transition-colors hover:bg-[#1a1f2e] ${canUpdate ? "cursor-pointer" : ""}`}>
                           <td className="px-4 py-3">
                             <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            {(() => {
+                              const taskList = lead.tasks ?? [];
+                              if (taskList.length === 0) return <span className="text-slate-600 text-xs">—</span>;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  {taskList.map((t: { id: string; title: string; is_done: boolean }) => (
+                                    <span key={t.id} className={`text-xs ${t.is_done ? "text-slate-500 line-through" : "text-slate-300"}`}>
+                                      {t.title}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3">
                             <div className="min-w-0">
@@ -434,21 +449,6 @@ export default function ClientLeadsPage() {
                             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[lead.status] ?? "text-slate-400"}`}>
                               {STATUS_DISPLAY[lead.status] ?? lead.status}
                             </span>
-                          </td>
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const taskList = lead.tasks ?? [];
-                              if (taskList.length === 0) return <span className="text-slate-600 text-xs">—</span>;
-                              return (
-                                <div className="flex flex-col gap-0.5">
-                                  {taskList.map((t: { id: string; title: string; is_done: boolean }) => (
-                                    <span key={t.id} className={`text-xs ${t.is_done ? "text-slate-500 line-through" : "text-slate-300"}`}>
-                                      {t.title}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            })()}
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
