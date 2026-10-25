@@ -458,7 +458,7 @@ export default function ClientsPage() {
             <p className="text-sm text-slate-500">No clients match this filter.</p>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             {visibleClients.map((c) => (
               <ClientCard
                 key={c.id}

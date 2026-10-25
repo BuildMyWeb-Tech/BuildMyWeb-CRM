@@ -155,13 +155,16 @@ export default function MyWorkPage() {
           .or(`allocated_user_id.eq.${uid},allocated_user_ids.cs.{${uid}}`),
       ]);
 
-      // Same filter as UnifiedTasksView "current" tab:
-      // hide only if show_date is explicitly set to a future date
-      const isCurrent = (t: { show_date: string | null }) =>
+      // Match UnifiedTasksView "current" tab exactly:
+      // - project tasks: hide future show_date OR tasks with no date context at all
+      // - product tasks: hide only future show_date (no-date tasks ARE current)
+      const isCurrentProject = (t: { show_date: string | null; due_date?: string | null }) =>
+        (!t.show_date || t.show_date <= nowStr) && (!!t.due_date || !!t.show_date);
+      const isCurrentProduct = (t: { show_date: string | null }) =>
         !t.show_date || t.show_date <= nowStr;
 
       const normPt = (ptRes.data ?? [])
-        .filter(isCurrent)
+        .filter(isCurrentProject)
         .map((t: Record<string, unknown>) => ({
           ...t,
           stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,
@@ -169,7 +172,7 @@ export default function MyWorkPage() {
         })) as ProjectTask[];
 
       const normPd = (pdRes.data ?? [])
-        .filter(isCurrent)
+        .filter(isCurrentProduct)
         .map((t: Record<string, unknown>) => ({
           ...t,
           stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,

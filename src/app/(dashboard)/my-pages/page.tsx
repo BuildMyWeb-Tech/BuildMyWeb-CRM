@@ -4,6 +4,7 @@ import { useEffect, useState, lazy, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { LayoutGrid, Plus, X, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { CRM_MODULES, GLOBAL_NAV_ITEMS } from "@/lib/modules";
 
@@ -120,30 +121,57 @@ function label(key: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence helpers
+// Persistence helpers — localStorage (instant) + Supabase (cross-device)
 // ---------------------------------------------------------------------------
 interface TabConfig { id: string; href: string; title: string }
 
-function storageKey(userId: string) { return `my-pages-tabs-${userId}`; }
-function activeKey(userId: string) { return `my-pages-active-${userId}`; }
+function lsTabsKey(userId: string) { return `my-pages-tabs-${userId}`; }
+function lsActiveKey(userId: string) { return `my-pages-active-${userId}`; }
 
-function loadTabs(userId: string): TabConfig[] {
+function lsLoadTabs(userId: string): TabConfig[] {
   try {
-    const raw = localStorage.getItem(storageKey(userId));
+    const raw = localStorage.getItem(lsTabsKey(userId));
     return raw ? (JSON.parse(raw) as TabConfig[]) : [];
   } catch { return []; }
 }
+function lsSaveTabs(userId: string, tabs: TabConfig[]) {
+  try { localStorage.setItem(lsTabsKey(userId), JSON.stringify(tabs)); } catch {}
+}
+function lsSaveActive(userId: string, tabId: string) {
+  try { localStorage.setItem(lsActiveKey(userId), tabId); } catch {}
+}
+function lsLoadActive(userId: string): string | null {
+  try { return localStorage.getItem(lsActiveKey(userId)); } catch { return null; }
+}
+
+async function dbLoadTabs(userId: string): Promise<TabConfig[] | null> {
+  try {
+    const sb = createClient();
+    const { data } = await sb.from("user_preferences")
+      .select("value").eq("user_id", userId).eq("key", "my-pages-tabs").maybeSingle();
+    if (!data) return null;
+    const val = data.value as { tabs?: TabConfig[] };
+    return val.tabs ?? null;
+  } catch { return null; }
+}
+
+async function dbSaveTabs(userId: string, tabs: TabConfig[]) {
+  try {
+    const sb = createClient();
+    await sb.from("user_preferences").upsert(
+      { user_id: userId, key: "my-pages-tabs", value: { tabs }, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,key" }
+    );
+  } catch {}
+}
 
 function saveTabs(userId: string, tabs: TabConfig[]) {
-  try { localStorage.setItem(storageKey(userId), JSON.stringify(tabs)); } catch {}
+  lsSaveTabs(userId, tabs);
+  dbSaveTabs(userId, tabs);
 }
 
 function saveActiveTab(userId: string, tabId: string) {
-  try { localStorage.setItem(activeKey(userId), tabId); } catch {}
-}
-
-function loadActiveTab(userId: string): string | null {
-  try { return localStorage.getItem(activeKey(userId)); } catch { return null; }
+  lsSaveActive(userId, tabId);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +189,30 @@ export default function MyPagesPage() {
 
   useEffect(() => {
     if (!userId) return;
-    const saved = loadTabs(userId);
-    setTabs(saved);
-    const lastActive = loadActiveTab(userId);
-    const initial = (lastActive && saved.find((t) => t.id === lastActive)) ? lastActive : (saved[0]?.id ?? null);
-    setActiveTab(initial);
+    // Load from localStorage first (instant), then check Supabase (cross-device)
+    const lsTabs = lsLoadTabs(userId);
+    const lsActive = lsLoadActive(userId);
+    if (lsTabs.length > 0) {
+      setTabs(lsTabs);
+      const initial = (lsActive && lsTabs.find((t) => t.id === lsActive)) ? lsActive : (lsTabs[0]?.id ?? null);
+      setActiveTab(initial);
+    }
+    // Always sync from DB (may have tabs added on another device)
+    dbLoadTabs(userId).then((dbTabs) => {
+      if (!dbTabs) return;
+      // Use DB version if it has more tabs or local was empty
+      setTabs((cur) => {
+        if (dbTabs.length >= cur.length) {
+          lsSaveTabs(userId, dbTabs);
+          return dbTabs;
+        }
+        return cur;
+      });
+      setActiveTab((cur) => {
+        if (cur) return cur;
+        return dbTabs[0]?.id ?? null;
+      });
+    });
   }, [userId]);
 
   function switchTab(id: string) {

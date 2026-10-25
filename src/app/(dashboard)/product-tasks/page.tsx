@@ -793,8 +793,8 @@ export default function ProductTasksPage() {
           </div>
         </div>
 
-        {/* ── Right sidebar — Stages drag panel ── */}
-        <div className="w-64 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex flex-col overflow-hidden">
+        {/* ── Right sidebar — Stages drag panel (hidden on mobile) ── */}
+        <div className="hidden lg:flex w-64 shrink-0 border-l border-[#2a3045] bg-[#1a1f2e] flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-3 space-y-1">
             <div className="flex items-center gap-2 mb-2 px-1">
               <Package className="h-4 w-4 text-teal-400" />
