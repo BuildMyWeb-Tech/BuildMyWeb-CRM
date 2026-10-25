@@ -213,7 +213,7 @@ export default function ProjectsPage() {
           <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
             <table className="w-full min-w-[700px] text-sm">
               <thead>
-                <tr className="border-b border-[#2a3045] bg-[#1a1f2e]">
+                <tr className="border-b border-[#2a3045] bg-[#0f1117]">
                   {([["name","Project"],["client","Client"],["status","Status"],["start_date","Start Date"],["due_date","Due Date"]] as [SortKey,string][]).map(([k, label]) => (
                     <th key={k} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">
                       <button type="button" onClick={() => toggleSort(k)} className="flex items-center gap-1 hover:text-white transition-colors">
@@ -226,7 +226,7 @@ export default function ProjectsPage() {
               </thead>
               <tbody>
                 {visibleProjects.map((p) => (
-                  <tr key={p.id} onClick={() => setEditingProject(p)} className="cursor-pointer border-b border-[#2a3045] bg-[#1a1f2e] hover:bg-[#1e2436] transition-colors last:border-0">
+                  <tr key={p.id} onClick={() => setEditingProject(p)} className="cursor-pointer border-b border-[#2a3045] hover:bg-[#1a1f2e] transition-colors last:border-0">
                     <td className="px-4 py-3">
                       <p className="font-medium text-white">{p.name}</p>
                       {p.description && <p className="text-xs text-slate-500 line-clamp-1">{p.description}</p>}
@@ -240,7 +240,7 @@ export default function ProjectsPage() {
                         : p.status === "hold_by_client" ? "border-orange-500/30 bg-orange-500/20 text-orange-400"
                         : p.status === "in_discussion" ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
                         : "border-[#2a3045] bg-[#2a3045] text-slate-500"
-                      }`}>{p.status.replace(/_/g, " ")}</span>
+                      }`}>{p.status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-xs">
                       {p.start_date ? new Date(p.start_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
@@ -275,7 +275,7 @@ export default function ProjectsPage() {
                       : p.status === "hold_by_client" ? "border-orange-500/30 bg-orange-500/20 text-orange-400"
                       : p.status === "in_discussion" ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
                       : "border-[#2a3045] bg-[#2a3045] text-slate-500"
-                    }`}>{p.status.replace(/_/g, " ")}</span>
+                    }`}>{p.status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                     <Link href={`/projects/${p.id}`} title="Open board"
                       onClick={(e) => e.stopPropagation()}
                       className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-[#2a3045] hover:text-white transition-colors">

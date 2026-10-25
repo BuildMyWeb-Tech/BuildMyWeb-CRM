@@ -478,17 +478,17 @@ export default function ClientsPage() {
                 <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3 font-medium">
                     <button type="button" onClick={() => toggleSortClient("name")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
-                      Client Name <SortIconC k="name" />
+                      Project Name <SortIconC k="name" />
                     </button>
                   </th>
                   <th className="px-4 py-3 font-medium">
                     <button type="button" onClick={() => toggleSortClient("contact_name")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
-                      Contact Name <SortIconC k="contact_name" />
+                      Client Name <SortIconC k="contact_name" />
                     </button>
                   </th>
                   <th className="px-4 py-3 font-medium">
                     <button type="button" onClick={() => toggleSortClient("contact_number")} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
-                      Contact Number <SortIconC k="contact_number" />
+                      Client Number <SortIconC k="contact_number" />
                     </button>
                   </th>
                   <th className="px-4 py-3 font-medium">

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ChevronDown, ChevronUp, ChevronsUpDown, Loader2,
-  ClipboardList, Package, UserPlus, Eye, EyeOff,
+  ClipboardList, Package, UserPlus, Eye, EyeOff, Share2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -47,6 +47,8 @@ type SortDir = "asc" | "desc";
 const LS_HIDDEN_PT = "mw-hidden-pt";
 const LS_HIDDEN_PD = "mw-hidden-pd";
 const LS_HIDDEN_CL = "mw-hidden-cl";
+const LS_SORT_PT = "mw-sort-pt";
+const LS_SORT_PD = "mw-sort-pd";
 
 function loadHidden(key: string): Set<string> {
   try {
@@ -114,20 +116,36 @@ export default function MyWorkPage() {
   // Per-column overdue filter
   const [clOverdue, setClOverdue] = useState(false);
 
-  // Per-column sort — project tasks: sort by project only (no task-title sort)
-  const [ptSort, setPtSort] = useState<"project" | "stage">("project");
-  const [ptDir, setPtDir] = useState<SortDir>("asc");
-  const [pdSort, setPdSort] = useState<"title" | "stage">("title");
-  const [pdDir, setPdDir] = useState<SortDir>("asc");
+  // Per-column sort — persisted to localStorage
+  const [ptSort, setPtSort] = useState<"project" | "stage">(() => {
+    try { const v = localStorage.getItem(LS_SORT_PT); return (v === "stage" ? "stage" : "project"); } catch { return "project"; }
+  });
+  const [ptDir, setPtDir] = useState<SortDir>(() => {
+    try { const v = localStorage.getItem(LS_SORT_PT + "-dir"); return (v === "desc" ? "desc" : "asc"); } catch { return "asc"; }
+  });
+  const [pdSort, setPdSort] = useState<"title" | "stage">(() => {
+    try { const v = localStorage.getItem(LS_SORT_PD); return (v === "stage" ? "stage" : "title"); } catch { return "title"; }
+  });
+  const [pdDir, setPdDir] = useState<SortDir>(() => {
+    try { const v = localStorage.getItem(LS_SORT_PD + "-dir"); return (v === "desc" ? "desc" : "asc"); } catch { return "asc"; }
+  });
   const [clSort, setClSort] = useState<"title" | "follow_up" | "status">("follow_up");
   const [clDir, setClDir] = useState<SortDir>("asc");
 
   function toggle<T extends string>(
     field: T, cur: T, dir: SortDir,
     setF: (f: T) => void, setD: (d: SortDir) => void,
+    lsKey?: string,
   ) {
-    if (cur === field) setD(dir === "asc" ? "desc" : "asc");
-    else { setF(field); setD("asc"); }
+    if (cur === field) {
+      const next = dir === "asc" ? "desc" : "asc";
+      setD(next);
+      if (lsKey) try { localStorage.setItem(lsKey + "-dir", next); } catch {}
+    } else {
+      setF(field);
+      setD("asc");
+      if (lsKey) try { localStorage.setItem(lsKey, field); localStorage.setItem(lsKey + "-dir", "asc"); } catch {}
+    }
   }
 
   const load = useCallback(async () => {
@@ -214,6 +232,41 @@ export default function MyWorkPage() {
 
   const clOverdueCount = (leads ?? []).filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at) < today).length;
 
+  function shareViaWhatsApp(section: string) {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const text = `Hi, here are your ${section} tasks in BuildMyWeb CRM. Login at ${url} to view them.`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
+  function shareViaEmail(section: string) {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const subject = encodeURIComponent(`Your ${section} tasks – BuildMyWeb CRM`);
+    const body = encodeURIComponent(`Hi,\n\nHere are your ${section} tasks.\nLogin at: ${url}\n\nThank you.`);
+    window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
+  }
+  function ShareBtn({ section }: { section: string }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="relative">
+        <button type="button" onClick={() => setOpen(v => !v)}
+          className="text-slate-600 hover:text-slate-300 transition-colors" title="Share">
+          <Share2 className="h-3.5 w-3.5" />
+        </button>
+        {open && (
+          <div className="absolute right-0 top-6 z-50 rounded-lg border border-[#2a3045] bg-[#1a1f2e] shadow-xl py-1 min-w-[140px]">
+            <button type="button" onClick={() => { shareViaWhatsApp(section); setOpen(false); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-[#2a3045] transition-colors">
+              WhatsApp
+            </button>
+            <button type="button" onClick={() => { shareViaEmail(section); setOpen(false); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-[#2a3045] transition-colors">
+              Email
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -260,6 +313,7 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/daily-tasks" className="text-[10px] text-slate-500 hover:text-teal-400 transition-colors">All →</Link>
+              <ShareBtn section="Project Tasks" />
             </div>
           </div>
 
@@ -276,12 +330,12 @@ export default function MyWorkPage() {
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Task</span>
                         <SortBtn label="Project" active={ptSort === "project"} dir={ptDir}
-                          onClick={() => toggle("project", ptSort, ptDir, setPtSort, setPtDir)} />
+                          onClick={() => toggle("project", ptSort, ptDir, setPtSort, setPtDir, LS_SORT_PT)} />
                       </div>
                     </th>
                     <th className="px-3 py-2 text-left">
                       <SortBtn label="Stage" active={ptSort === "stage"} dir={ptDir}
-                        onClick={() => toggle("stage", ptSort, ptDir, setPtSort, setPtDir)} />
+                        onClick={() => toggle("stage", ptSort, ptDir, setPtSort, setPtDir, LS_SORT_PT)} />
                     </th>
                     <th className="w-8 py-2" />
                   </tr>
@@ -294,12 +348,10 @@ export default function MyWorkPage() {
                       <tr key={t.id}
                         className={`border-b border-[#2a3045]/60 last:border-0 hover:bg-[#1a1f2e] transition-colors group ${isHidden ? "opacity-30" : ""}`}>
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <p className="text-sm text-white font-medium line-clamp-1 leading-snug shrink-0 max-w-[55%]">{t.title}</p>
-                            {t.project && (
-                              <p className="text-[11px] text-slate-500 line-clamp-1 truncate">{t.project.name}</p>
-                            )}
-                          </div>
+                          <p className="text-sm text-white font-medium line-clamp-1 leading-snug">{t.title}</p>
+                          {t.project && (
+                            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{t.project.name}</p>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           {t.stage?.name
@@ -342,6 +394,7 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/product-tasks" className="text-[10px] text-slate-500 hover:text-purple-400 transition-colors">All →</Link>
+              <ShareBtn section="Product Tasks" />
             </div>
           </div>
 
@@ -356,11 +409,11 @@ export default function MyWorkPage() {
                   <tr>
                     <th className="px-4 py-2 text-left">
                       <SortBtn label="Task" active={pdSort === "title"} dir={pdDir}
-                        onClick={() => toggle("title", pdSort, pdDir, setPdSort, setPdDir)} />
+                        onClick={() => toggle("title", pdSort, pdDir, setPdSort, setPdDir, LS_SORT_PD)} />
                     </th>
                     <th className="px-3 py-2 text-left">
                       <SortBtn label="Stage" active={pdSort === "stage"} dir={pdDir}
-                        onClick={() => toggle("stage", pdSort, pdDir, setPdSort, setPdDir)} />
+                        onClick={() => toggle("stage", pdSort, pdDir, setPdSort, setPdDir, LS_SORT_PD)} />
                     </th>
                     <th className="w-8 py-2" />
                   </tr>
@@ -425,6 +478,7 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/client-leads" className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors">All →</Link>
+              <ShareBtn section="Client Enquiry" />
             </div>
           </div>
 
