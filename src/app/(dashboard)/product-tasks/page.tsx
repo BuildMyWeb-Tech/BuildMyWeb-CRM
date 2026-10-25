@@ -685,7 +685,32 @@ export default function ProductTasksPage() {
                 })}
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
+              <>
+                {/* Mobile card list (hidden on sm+) */}
+                <div className="flex flex-col gap-2 sm:hidden">
+                  {filtered.map((task) => {
+                    const isOverdue = task.due_date && task.due_date < todayStr;
+                    const stageName = task.stage?.name ?? "";
+                    const productName = (task.product as { project_name?: string } | null)?.project_name ?? "";
+                    return (
+                      <div key={task.id}
+                        onClick={() => openEdit(task)}
+                        className="rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-3 cursor-pointer hover:border-teal-500/30 transition-colors">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <p className="text-sm font-medium text-white leading-snug flex-1 min-w-0">{task.title}</p>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_COLOR[task.priority] ?? ""}`}>{task.priority}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {stageName && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageColor(stageName)}`}>{stageName}</span>}
+                          {productName && <span className="text-[11px] text-slate-500">{productName}</span>}
+                          {task.due_date && <span className={`text-[11px] font-medium ${isOverdue ? "text-red-400" : "text-slate-400"}`}>{new Date(task.due_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Desktop table (hidden on mobile) */}
+                <div className="hidden sm:block overflow-x-auto rounded-xl border border-[#2a3045]">
                 <table className="w-full min-w-[700px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
@@ -788,7 +813,8 @@ export default function ProductTasksPage() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </div>
         </div>

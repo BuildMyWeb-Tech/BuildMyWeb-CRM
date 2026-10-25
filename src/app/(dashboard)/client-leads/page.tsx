@@ -369,7 +369,48 @@ export default function ClientLeadsPage() {
                 )}
               </div>
             ) : viewMode === "table" ? (
-              <div className="overflow-x-auto rounded-xl border border-[#2a3045]">
+              <>
+                {/* Mobile card list (hidden on sm+) */}
+                <div className="flex flex-col gap-2 sm:hidden">
+                  {visibleLeads.map((lead) => {
+                    const fu = followUpState(lead.next_follow_up_at, lead.status);
+                    const allocatedNames = getAllocatedNames(lead);
+                    const taskList = lead.tasks ?? [];
+                    return (
+                      <div key={lead.id}
+                        onClick={() => canUpdate && openEdit(lead)}
+                        className={`rounded-xl border border-[#2a3045] bg-[#1a1f2e] p-3 ${canUpdate ? "cursor-pointer hover:border-blue-500/30" : ""} transition-colors`}>
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <Link href={`/client-leads/${lead.id}`} onClick={(e) => e.stopPropagation()}
+                            className="text-sm font-medium text-white hover:text-blue-400 transition-colors flex-1 min-w-0 truncate">
+                            {lead.title}
+                          </Link>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[lead.status] ?? ""}`}>
+                            {STATUS_DISPLAY[lead.status] ?? lead.status}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                          {lead.priority && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_BADGE[lead.priority] ?? ""}`}>{lead.priority}</span>}
+                          {allocatedNames && <span>{allocatedNames}</span>}
+                          {lead.next_follow_up_at && (
+                            <span className={fu === "overdue" ? "text-red-400 font-medium" : fu === "today" ? "text-green-400 font-medium" : ""}>
+                              {formatFollowUp(lead.next_follow_up_at, lead.next_follow_up_has_time)}
+                            </span>
+                          )}
+                        </div>
+                        {taskList.length > 0 && (
+                          <div className="mt-1.5 flex flex-col gap-0.5">
+                            {taskList.slice(0, 2).map((t: { id: string; title: string; is_done: boolean }) => (
+                              <span key={t.id} className={`text-[11px] ${t.is_done ? "text-slate-600 line-through" : "text-slate-400"}`}>• {t.title}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Desktop table (hidden on mobile) */}
+                <div className="hidden sm:block overflow-x-auto rounded-xl border border-[#2a3045]">
                 <table className="w-full min-w-[600px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
@@ -495,7 +536,8 @@ export default function ClientLeadsPage() {
                     Showing {visibleLeads.length} of {allLeads.length} enquiries
                   </p>
                 </div>
-              </div>
+                </div>
+              </>
             ) : (
               /* GRID VIEW */
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

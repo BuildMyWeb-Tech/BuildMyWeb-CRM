@@ -142,29 +142,24 @@ export default function MyWorkPage() {
       const pdSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
-      // Single query per table (all assigned tasks), then JS-side filter
-      // mirrors UnifiedTasksView's "current" logic: exclude future show_date AND tasks with no date context
+      // Filtering pushed to DB level — mirrors UnifiedTasksView "current" tab exactly:
+      // Project tasks: must have at least one date (due_date OR show_date), and show_date must not be future
+      // Product tasks: show_date must not be future (no-date tasks ARE current for products)
       const [ptRes, pdRes, clRes] = await Promise.all([
         supabase.from("project_tasks").select(ptSelect)
-          .eq("account_id", accountId).or(assigneeFilter),
+          .eq("account_id", accountId).or(assigneeFilter)
+          .or(`due_date.not.is.null,show_date.not.is.null`)
+          .or(`show_date.is.null,show_date.lte.${nowStr}`),
         supabase.from("product_tasks").select(pdSelect)
-          .eq("account_id", accountId).or(assigneeFilter),
+          .eq("account_id", accountId).or(assigneeFilter)
+          .or(`show_date.is.null,show_date.lte.${nowStr}`),
         supabase.from("client_leads")
           .select("id, title, status, next_follow_up_at, allocated_user_id, allocated_user_ids")
           .eq("account_id", accountId)
           .or(`allocated_user_id.eq.${uid},allocated_user_ids.cs.{${uid}}`),
       ]);
 
-      // Match UnifiedTasksView "current" tab exactly:
-      // - project tasks: hide future show_date OR tasks with no date context at all
-      // - product tasks: hide only future show_date (no-date tasks ARE current)
-      const isCurrentProject = (t: { show_date: string | null; due_date?: string | null }) =>
-        (!t.show_date || t.show_date <= nowStr) && (!!t.due_date || !!t.show_date);
-      const isCurrentProduct = (t: { show_date: string | null }) =>
-        !t.show_date || t.show_date <= nowStr;
-
       const normPt = (ptRes.data ?? [])
-        .filter(isCurrentProject)
         .map((t: Record<string, unknown>) => ({
           ...t,
           stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,
@@ -172,7 +167,6 @@ export default function MyWorkPage() {
         })) as ProjectTask[];
 
       const normPd = (pdRes.data ?? [])
-        .filter(isCurrentProduct)
         .map((t: Record<string, unknown>) => ({
           ...t,
           stage: Array.isArray(t.stage) ? (t.stage[0] ?? null) : t.stage,
