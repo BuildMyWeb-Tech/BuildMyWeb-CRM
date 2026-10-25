@@ -11,7 +11,7 @@ import Link from "next/link";
 
 interface ProjectTask {
   id: string; title: string;
-  due_date?: string | null;
+  target_date?: string | null;
   show_date: string | null;
   stage?: { name: string } | null;
   project?: { id: string; name: string } | null;
@@ -138,17 +138,17 @@ export default function MyWorkPage() {
       const uid = user.id;
       const nowStr = new Date().toISOString().slice(0, 10);
 
-      const ptSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      // daily_tasks is the authoritative source for project task show_date.
+      // Users schedule tasks via the daily-tasks UI which updates daily_tasks.show_date,
+      // not project_tasks.show_date — so querying project_tasks gives stale show_dates.
+      const ptSelect = "id, title, target_date, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
       const pdSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
-      // Filtering pushed to DB level — mirrors UnifiedTasksView "current" tab exactly:
-      // Project tasks: must have at least one date (due_date OR show_date), and show_date must not be future
-      // Product tasks: show_date must not be future (no-date tasks ARE current for products)
       const [ptRes, pdRes, clRes] = await Promise.all([
-        supabase.from("project_tasks").select(ptSelect)
+        supabase.from("daily_tasks").select(ptSelect)
           .eq("account_id", accountId).or(assigneeFilter)
-          .or(`due_date.not.is.null,show_date.not.is.null`)
+          .not("project_id", "is", null)
           .or(`show_date.is.null,show_date.lte.${nowStr}`),
         supabase.from("product_tasks").select(pdSelect)
           .eq("account_id", accountId).or(assigneeFilter)
