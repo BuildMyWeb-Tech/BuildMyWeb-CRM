@@ -494,7 +494,7 @@ export default function ClientLeadsPage() {
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
                               <button type="button" title="Share via WhatsApp"
-                                onClick={(e) => { e.stopPropagation(); const base = typeof window !== "undefined" ? window.location.origin : ""; const name = lead.name || "Client"; const text = `Hi, please check this client enquiry in BuildMyWeb CRM:\n*${name}*\nLogin at: ${base}/client-leads/${lead.id}`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"); }}
+                                onClick={(e) => { e.stopPropagation(); const base = typeof window !== "undefined" ? window.location.origin : ""; const name = lead.title || "Client"; const text = `Hi, please check this client enquiry in BuildMyWeb CRM:\n*${name}*\nLogin at: ${base}/client-leads/${lead.id}`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"); }}
                                 className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-green-400 transition-colors">
                                 <Share2 className="h-3.5 w-3.5" />
                               </button>
