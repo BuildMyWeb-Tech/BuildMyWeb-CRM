@@ -574,13 +574,8 @@ export default function ContactsPage() {
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="w-10 px-3">
                 <Checkbox
-                  checked={
-                    allOnPageSelected
-                      ? true
-                      : someOnPageSelected
-                        ? "indeterminate"
-                        : false
-                  }
+                  checked={allOnPageSelected}
+                  indeterminate={!allOnPageSelected && someOnPageSelected}
                   onCheckedChange={toggleSelectAll}
                   disabled={contacts.length === 0}
                   aria-label="Select all contacts on this page"
