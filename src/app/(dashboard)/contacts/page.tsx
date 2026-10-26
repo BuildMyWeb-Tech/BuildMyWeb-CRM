@@ -14,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -50,6 +49,7 @@ import {
   Filter,
   X,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
 import { ImportModal } from '@/components/contacts/import-modal';
@@ -573,13 +573,14 @@ export default function ContactsPage() {
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="w-10 px-3">
-                <Checkbox
+                <input
+                  type="checkbox"
                   checked={allOnPageSelected}
-                  indeterminate={!allOnPageSelected && someOnPageSelected}
-                  onCheckedChange={toggleSelectAll}
+                  ref={(el) => { if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected; }}
+                  onChange={toggleSelectAll}
                   disabled={contacts.length === 0}
                   aria-label="Select all contacts on this page"
-                  className="size-4 border-2 border-slate-500"
+                  className="h-4 w-4 rounded border-2 border-slate-500 bg-transparent accent-blue-500 cursor-pointer disabled:opacity-40"
                 />
               </TableHead>
               <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
@@ -635,11 +636,12 @@ export default function ContactsPage() {
                   onClick={() => openDetail(contact.id)}
                 >
                   <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
+                    <input
+                      type="checkbox"
                       checked={selected.has(contact.id)}
-                      onCheckedChange={() => toggleSelect(contact.id)}
+                      onChange={() => toggleSelect(contact.id)}
                       aria-label={`Select ${contact.name || contact.phone}`}
-                      className="size-4 border-2 border-slate-500"
+                      className="h-4 w-4 rounded border-2 border-slate-500 bg-transparent accent-blue-500 cursor-pointer"
                     />
                   </TableCell>
                   <TableCell className="text-foreground font-medium">
