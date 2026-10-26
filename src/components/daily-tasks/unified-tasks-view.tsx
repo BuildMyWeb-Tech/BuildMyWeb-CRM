@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, ChevronRight, Clock, Eye, EyeOff, Loader2, Layers, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, ChevronRight, Clock, Eye, EyeOff, Loader2, Layers, Plus, Share2, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,10 +89,12 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   const [moveTarget, setMoveTarget] = useState<"project" | "product" | null>(null);
   const [moveProductSearch, setMoveProductSearch] = useState("");
   const [products, setProducts] = useState<{ id: string; project_name: string }[]>([]);
-  const [hiddenRows, setHiddenRows] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try { return new Set(JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "[]")); } catch { return new Set(); }
+  const [hiddenRows, setHiddenRows] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "{}") as Record<string, string>; } catch { return {}; }
   });
+  const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -268,6 +270,25 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
   useEffect(() => {
     load();
   }, [load]);
+
+  // Auto-clean expired hide entries on mount
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    setHiddenRows((prev) => {
+      const cleaned = Object.fromEntries(Object.entries(prev).filter(([, d]) => d > today));
+      window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify(cleaned));
+      return cleaned;
+    });
+  }, []);
+
+  function hideUntil(id: string, date: string) {
+    setHiddenRows((prev) => {
+      const next = { ...prev, [id]: date };
+      window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify(next));
+      return next;
+    });
+    setHideMenuId(null);
+  }
 
   function openNewTask() {
     setEditingTask(null);
@@ -671,9 +692,9 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                   <th className="px-2 py-2 font-medium w-8">
                     <input type="checkbox"
-                      checked={filteredTasks.filter((t) => !hiddenRows.has(t.id)).length > 0 && filteredTasks.filter((t) => !hiddenRows.has(t.id)).every((t) => selectedIds.has(t.id))}
+                      checked={filteredTasks.filter((t) => !hiddenRows[t.id] || hiddenRows[t.id] <= todayStr).length > 0 && filteredTasks.filter((t) => !hiddenRows[t.id] || hiddenRows[t.id] <= todayStr).every((t) => selectedIds.has(t.id))}
                       onChange={(e) => {
-                        const visible = filteredTasks.filter((t) => !hiddenRows.has(t.id));
+                        const visible = filteredTasks.filter((t) => !hiddenRows[t.id] || hiddenRows[t.id] <= todayStr);
                         setSelectedIds(e.target.checked ? new Set(visible.map((t) => t.id)) : new Set());
                       }}
                       className="rounded border-[#2a3045] accent-blue-500 cursor-pointer"
@@ -720,7 +741,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.filter((t) => !hiddenRows.has(t.id)).map((task) => {
+                {filteredTasks.filter((t) => !hiddenRows[t.id] || hiddenRows[t.id] <= todayStr).map((task) => {
                   const stage =
                     task.kind === "daily"
                       ? stages.find((s) => s.id === task.stageId)
@@ -730,6 +751,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                   const client = clients.find((c) => c.id === task.clientId);
                   const project = projects.find((p) => p.id === task.projectId);
                   const isDone = stage?.name?.toLowerCase() === "done";
+                  const isOverdue = !isDone && !!task.dateValue && task.dateValue < todayStr;
                   return (
                     <tr
                       key={`${task.kind}-${task.id}`}
@@ -751,15 +773,31 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                             }}
                             className="rounded border-[#2a3045] accent-blue-500 cursor-pointer"
                           />
-                          <button type="button" title="Hide row"
-                            onClick={(e) => { e.stopPropagation(); setHiddenRows((prev) => { const n = new Set(prev); n.add(task.id); window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify([...n])); return n; }); }}
-                            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
+                          <div className="relative">
+                            <button type="button" title="Hide row"
+                              onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
+                              className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            {hideMenuId === task.id && (
+                              <div className="absolute left-0 top-5 z-50 w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
+                                <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
+                                  onClick={() => { hideUntil(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
+                                  Hide until tomorrow
+                                </button>
+                                <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
+                                  Hide until date
+                                  <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
+                                    min={new Date().toISOString().split("T")[0]}
+                                    onChange={(e) => { if (e.target.value) { hideUntil(task.id, e.target.value); setHideMenuId(null); } }} />
+                                </label>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-foreground">
-                        <span className={isDone ? "line-through text-muted-foreground" : ""}>{task.title}</span>
+                        <span className={isDone ? "line-through text-muted-foreground" : isOverdue ? "text-red-400" : ""}>{task.title}</span>
                       </td>
                       <td className="px-3 py-2">
                         {stage && (
@@ -771,7 +809,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td className={`px-3 py-2 ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
                         {client?.name || project?.name || "—"}
                       </td>
                       <td className="px-3 py-2">
@@ -779,7 +817,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                           {task.priority}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground">
+                      <td className={`px-3 py-2 ${isOverdue ? "text-red-400" : "text-muted-foreground"}`}>
                         {task.assigneeUserIds.length > 0
                           ? task.assigneeUserIds.map((id) => members.find((m) => m.user_id === id)?.full_name).filter(Boolean).join(", ")
                           : "Unassigned"}
@@ -794,6 +832,11 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                       </td>
                       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
+                          <button type="button" title="Share via WhatsApp"
+                            onClick={(e) => { e.stopPropagation(); const base = typeof window !== "undefined" ? window.location.origin : ""; const text = `Hi, please check this task in BuildMyWeb CRM:\n*${task.title}*\nLogin at: ${base}/daily-tasks`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"); }}
+                            className="flex items-center gap-1 rounded-md border border-[#2a3045] bg-[#1a1f2e] px-2 py-1 text-[10px] font-medium text-slate-400 hover:border-green-500/50 hover:text-green-400 transition-colors">
+                            <Share2 className="h-3 w-3" />
+                          </button>
                           <button
                             type="button"
                             title={task.kind === "daily" ? "Move to project task" : "Move to daily task"}
@@ -816,12 +859,12 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                     </tr>
                   );
                 })}
-                {hiddenRows.size > 0 && (
+                {Object.values(hiddenRows).filter(d => d > todayStr).length > 0 && (
                   <tr>
                     <td colSpan={10} className="px-3 py-2">
-                      <button type="button" onClick={() => { setHiddenRows(new Set()); window.localStorage.removeItem("daily-tasks-hidden-rows"); }}
+                      <button type="button" onClick={() => { setHiddenRows({}); window.localStorage.removeItem("daily-tasks-hidden-rows"); }}
                         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                        <EyeOff className="h-3 w-3" /> {hiddenRows.size} hidden — click to show all
+                        <EyeOff className="h-3 w-3" /> {Object.values(hiddenRows).filter(d => d > todayStr).length} hidden — click to show all
                       </button>
                     </td>
                   </tr>

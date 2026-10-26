@@ -104,13 +104,13 @@ export default function ProjectsPage() {
     return (projects ?? [])
       .filter((p) => {
         const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-        const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.client_name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) || (p.contact?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.client_name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) || (p.contact?.name ?? "").toLowerCase().includes(searchQuery.toLowerCase()) || ((p as {client?: {interface_name?: string | null}}).client?.interface_name ?? "").toLowerCase().includes(searchQuery.toLowerCase());
         return matchesStatus && matchesSearch;
       })
       .sort((a, b) => {
         const dir = sortDir === "asc" ? 1 : -1;
         if (sortKey === "name") return dir * a.name.localeCompare(b.name);
-        if (sortKey === "client") return dir * ((a.contact?.name || a.client_name || "").localeCompare(b.contact?.name || b.client_name || ""));
+        if (sortKey === "client") return dir * (((a as {client?: {interface_name?: string | null}}).client?.interface_name || a.contact?.name || a.client_name || "").localeCompare(((b as {client?: {interface_name?: string | null}}).client?.interface_name || b.contact?.name || b.client_name || "")));
         if (sortKey === "status") return dir * ((STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9));
         if (sortKey === "start_date") {
           if (!a.start_date && !b.start_date) return 0;
@@ -231,7 +231,7 @@ export default function ProjectsPage() {
                       <p className="font-medium text-white">{p.name}</p>
                       {p.description && <p className="text-xs text-slate-500 line-clamp-1">{p.description}</p>}
                     </td>
-                    <td className="px-4 py-3 text-slate-400">{p.contact?.name || p.client_name || "—"}</td>
+                    <td className="px-4 py-3 text-slate-400">{(p as {client?: {interface_name?: string | null}}).client?.interface_name || p.contact?.name || p.client_name || "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                         p.status === "active" ? "border-green-500/30 bg-green-500/20 text-green-400"
@@ -285,7 +285,7 @@ export default function ProjectsPage() {
                 </div>
                 <div className="mt-3">
                   <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors">{p.name}</h3>
-                  <p className="mt-0.5 text-sm text-slate-500">{p.contact?.name || p.client_name || ""}</p>
+                  <p className="mt-0.5 text-sm text-slate-500">{(p as {client?: {interface_name?: string | null}}).client?.interface_name || p.contact?.name || p.client_name || ""}</p>
                   {p.description && (
                     <p className="mt-2 line-clamp-2 text-xs text-slate-500">{p.description}</p>
                   )}

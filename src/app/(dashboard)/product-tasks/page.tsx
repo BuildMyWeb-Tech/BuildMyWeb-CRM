@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Package, Plus, Trash2, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, X, LayoutList, LayoutGrid,
+  ChevronsUpDown, Loader2, X, LayoutList, LayoutGrid, Eye, EyeOff, Share2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -374,6 +374,21 @@ export default function ProductTasksPage() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  const LS_HIDE = "pt-hide-map";
+  const [hideMap, setHideMap] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(window.localStorage.getItem(LS_HIDE) ?? "{}") as Record<string, string>; } catch { return {}; }
+  });
+  const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+
+  function hideUntilPt(id: string, date: string) {
+    setHideMap((prev) => {
+      const next = { ...prev, [id]: date };
+      window.localStorage.setItem(LS_HIDE, JSON.stringify(next));
+      return next;
+    });
+  }
+
   const load = useCallback(async () => {
     if (!accountId) return;
     setLoading(true);
@@ -442,6 +457,7 @@ export default function ProductTasksPage() {
       }
       if (productFilter !== "all" && t.product_id !== productFilter) return false;
       if (overdueOnly && !(t.due_date && t.due_date < todayStr)) return false;
+      if (hideMap[t.id] && hideMap[t.id] > todayStr) return false;
       return true;
     })
     .sort((a, b) => {
@@ -741,6 +757,7 @@ export default function ProductTasksPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="show_date" label="Show Date" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
+                      <th className="w-8 px-3 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -771,8 +788,8 @@ export default function ProductTasksPage() {
                               })}
                               className="h-3.5 w-3.5 rounded border-[#3a4055] bg-transparent accent-teal-500 cursor-pointer" />
                           </td>
-                          <td className="px-4 py-3 font-medium text-white max-w-xs">
-                            <span className="line-clamp-1">{task.title}</span>
+                          <td className="px-4 py-3 font-medium max-w-xs">
+                            <span className={`line-clamp-1 ${isOverdue ? "text-red-400" : "text-white"}`}>{task.title}</span>
                           </td>
                           <td className="px-4 py-3">
                             {stageName ? (
@@ -786,10 +803,10 @@ export default function ProductTasksPage() {
                               {task.priority}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-400">
+                          <td className={`px-4 py-3 text-xs ${isOverdue ? "text-red-400" : "text-slate-400"}`}>
                             {productName || <span className="text-slate-600">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-300">
+                          <td className={`px-4 py-3 text-xs ${isOverdue ? "text-red-400" : "text-slate-300"}`}>
                             {assigneeNames.length > 0
                               ? assigneeNames.join(", ")
                               : <span className="text-slate-600">—</span>}
@@ -807,6 +824,36 @@ export default function ProductTasksPage() {
                                 {new Date(task.show_date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                               </span>
                             ) : <span className="text-slate-600">—</span>}
+                          </td>
+                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1">
+                              <button type="button" title="Share via WhatsApp"
+                                onClick={(e) => { e.stopPropagation(); const base = typeof window !== "undefined" ? window.location.origin : ""; const text = `Hi, please check this task in BuildMyWeb CRM:\n*${task.title}*\nLogin at: ${base}/product-tasks`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"); }}
+                                className="rounded p-1 text-slate-500 hover:text-green-400 transition-colors">
+                                <Share2 className="h-3.5 w-3.5" />
+                              </button>
+                              <div className="relative">
+                                <button type="button" title="Hide row"
+                                  onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
+                                  className="rounded p-1 text-slate-500 hover:text-slate-300 transition-colors">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                                {hideMenuId === task.id && (
+                                  <div className="absolute right-0 top-6 z-50 w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
+                                    <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
+                                      onClick={() => { hideUntilPt(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
+                                      Hide until tomorrow
+                                    </button>
+                                    <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
+                                      Hide until date
+                                      <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
+                                        min={new Date().toISOString().split("T")[0]}
+                                        onChange={(e) => { if (e.target.value) { hideUntilPt(task.id, e.target.value); setHideMenuId(null); } }} />
+                                    </label>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       );

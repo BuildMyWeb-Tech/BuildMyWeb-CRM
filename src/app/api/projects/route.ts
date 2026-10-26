@@ -92,7 +92,7 @@ export async function GET(request: Request) {
 
     let query = ctx.supabase
       .from('projects')
-      .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name)')
+      .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name), client:clients(id, name, interface_name)')
       .eq('account_id', ctx.accountId)
       .order('created_at', { ascending: false })
 
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
       start_date: startDate,
       due_date: dueDate,
     })
-    .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name)')
+    .select('*, contact:contacts(id, name, phone), pipeline:pipelines(id, name), client:clients(id, name, interface_name)')
     .single()
 
   if (projectError) {
