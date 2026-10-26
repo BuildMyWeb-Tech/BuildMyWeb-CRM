@@ -386,7 +386,6 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     );
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
   const scheduledCount = unifiedRows.filter((t) => t.showDateValue && t.showDateValue > todayStr).length;
 
   const filteredTasks = unifiedRows
