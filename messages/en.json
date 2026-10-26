@@ -342,9 +342,9 @@
   },
   "Contacts": {
     "page": {
-      "title": "Contacts",
-      "subtitle": "Manage your contact list. {count} total contacts.",
-      "subtitleZero": "Manage your contact list.",
+      "title": "Leads Captured",
+      "subtitle": "Leads captured from sourcing. {count} total contacts.",
+      "subtitleZero": "Leads captured from sourcing.",
       "customFieldsBtn": "Custom fields",
       "importBtn": "Import",
       "addContactBtn": "Add Contact",

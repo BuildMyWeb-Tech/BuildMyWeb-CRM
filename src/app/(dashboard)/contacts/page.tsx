@@ -77,6 +77,9 @@ export default function ContactsPage() {
   const [totalCount, setTotalCount] = useState(0);
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  // Campaign filter — contacts with a matching campaign_name.
+  const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<string[]>([]);
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -102,6 +105,18 @@ export default function ContactsPage() {
   // results. Without this, rapidly toggling tag filters could let a slower
   // earlier request resolve last and render stale rows.
   const fetchSeq = useRef(0);
+
+  const fetchCampaigns = useCallback(async () => {
+    const { data } = await supabase
+      .from('contacts')
+      .select('campaign_name')
+      .not('campaign_name', 'is', null)
+      .order('campaign_name', { ascending: true });
+    if (data) {
+      const unique = [...new Set(data.map((r) => r.campaign_name as string))].filter(Boolean);
+      setCampaigns(unique);
+    }
+  }, [supabase]);
 
   const fetchTags = useCallback(async () => {
     const { data } = await supabase.from('tags').select('*');
@@ -165,6 +180,10 @@ export default function ContactsPage() {
         query = query.or(`name.ilike.${like},phone.ilike.${like},email.ilike.${like}`);
       }
 
+      if (selectedCampaign) {
+        query = query.eq('campaign_name', selectedCampaign);
+      }
+
       const { data, count: exactCount, error } = await query;
       if (seq !== fetchSeq.current) return; // superseded by a newer fetch
       if (error) {
@@ -207,7 +226,7 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+  }, [supabase, page, search, selectedTagIds, selectedCampaign, tagsMap, t]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -217,6 +236,11 @@ export default function ContactsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTags();
   }, [fetchTags]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCampaigns();
+  }, [fetchCampaigns]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -323,7 +347,7 @@ export default function ContactsPage() {
   const allTags = Object.values(tagsMap).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
-  const hasActiveFilters = search.trim().length > 0 || selectedTagIds.length > 0;
+  const hasActiveFilters = search.trim().length > 0 || selectedTagIds.length > 0 || selectedCampaign !== null;
 
   function toggleTagFilter(tagId: string) {
     setSelectedTagIds((prev) =>
@@ -460,6 +484,22 @@ export default function ContactsPage() {
               )}
             </PopoverContent>
           </Popover>
+          {/* Campaign filter */}
+          {campaigns.length > 0 && (
+            <select
+              value={selectedCampaign ?? ''}
+              onChange={(e) => {
+                setSelectedCampaign(e.target.value || null);
+                setPage(0);
+              }}
+              className="h-9 rounded-md border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary shrink-0"
+            >
+              <option value="">All Campaigns</option>
+              {campaigns.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Active tag-filter chips */}
@@ -532,13 +572,19 @@ export default function ContactsPage() {
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="w-10">
+              <TableHead className="w-10 px-3">
                 <Checkbox
-                  checked={allOnPageSelected}
-                  indeterminate={!allOnPageSelected && someOnPageSelected}
+                  checked={
+                    allOnPageSelected
+                      ? true
+                      : someOnPageSelected
+                        ? "indeterminate"
+                        : false
+                  }
                   onCheckedChange={toggleSelectAll}
                   disabled={contacts.length === 0}
                   aria-label="Select all contacts on this page"
+                  className="size-4 border-2 border-slate-500"
                 />
               </TableHead>
               <TableHead className="text-muted-foreground">{t('tableColumns.name')}</TableHead>
@@ -593,11 +639,12 @@ export default function ContactsPage() {
                   className="border-border hover:bg-muted/50 cursor-pointer"
                   onClick={() => openDetail(contact.id)}
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selected.has(contact.id)}
                       onCheckedChange={() => toggleSelect(contact.id)}
                       aria-label={`Select ${contact.name || contact.phone}`}
+                      className="size-4 border-2 border-slate-500"
                     />
                   </TableCell>
                   <TableCell className="text-foreground font-medium">

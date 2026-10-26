@@ -142,9 +142,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
-  const niche    = typeof body.niche    === 'string' ? body.niche.trim()    : ''
-  const location = typeof body.location === 'string' ? body.location.trim() : ''
-  const count    = Math.min(Math.max(parseInt(body.count, 10) || 30, 1), 60)
+  const niche        = typeof body.niche        === 'string' ? body.niche.trim()        : ''
+  const location     = typeof body.location     === 'string' ? body.location.trim()     : ''
+  const count        = Math.min(Math.max(parseInt(body.count, 10) || 30, 1), 60)
+  const campaignName = typeof body.campaign_name === 'string' ? body.campaign_name.trim() : null
 
   if (!niche || !location) {
     return NextResponse.json({ error: 'niche and location are required' }, { status: 400 })
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
         company:         biz.address,
         lead_source:     'maps_scraper',
         search_category: niche,
+        ...(campaignName ? { campaign_name: campaignName } : {}),
       })
       .select('id, account_id, name, company, search_category')
       .single()

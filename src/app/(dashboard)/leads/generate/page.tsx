@@ -33,6 +33,7 @@ export default function LeadSourcingPage() {
   const [niche, setNiche] = useState("");
   const [location, setLocation] = useState("");
   const [count, setCount] = useState(30);
+  const [campaignName, setCampaignName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResult | null>(null);
@@ -46,7 +47,7 @@ export default function LeadSourcingPage() {
       const res = await fetch("/api/leads/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche, location, count }),
+        body: JSON.stringify({ niche, location, count, campaign_name: campaignName.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -84,6 +85,15 @@ export default function LeadSourcingPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="campaign">Campaign / Group Name</Label>
+              <Input
+                id="campaign"
+                placeholder="e.g. Gym First Campaign Trichy"
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="niche">Niche</Label>
               <Input
