@@ -232,39 +232,10 @@ export default function MyWorkPage() {
 
   const clOverdueCount = (leads ?? []).filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at) < today).length;
 
-  function shareViaWhatsApp(section: string) {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const text = `Hi, here are your ${section} tasks in BuildMyWeb CRM. Login at ${url} to view them.`;
+  function shareTaskViaWhatsApp(title: string, path: string) {
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const text = `Hi, please check this task in BuildMyWeb CRM:\n*${title}*\nLogin at: ${base}${path}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
-  }
-  function shareViaEmail(section: string) {
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const subject = encodeURIComponent(`Your ${section} tasks – BuildMyWeb CRM`);
-    const body = encodeURIComponent(`Hi,\n\nHere are your ${section} tasks.\nLogin at: ${url}\n\nThank you.`);
-    window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
-  }
-  function ShareBtn({ section }: { section: string }) {
-    const [open, setOpen] = useState(false);
-    return (
-      <div className="relative">
-        <button type="button" onClick={() => setOpen(v => !v)}
-          className="text-slate-600 hover:text-slate-300 transition-colors" title="Share">
-          <Share2 className="h-3.5 w-3.5" />
-        </button>
-        {open && (
-          <div className="absolute right-0 top-6 z-50 rounded-lg border border-[#2a3045] bg-[#1a1f2e] shadow-xl py-1 min-w-[140px]">
-            <button type="button" onClick={() => { shareViaWhatsApp(section); setOpen(false); }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-[#2a3045] transition-colors">
-              WhatsApp
-            </button>
-            <button type="button" onClick={() => { shareViaEmail(section); setOpen(false); }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-[#2a3045] transition-colors">
-              Email
-            </button>
-          </div>
-        )}
-      </div>
-    );
   }
 
   if (loading) {
@@ -313,7 +284,6 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/daily-tasks" className="text-[10px] text-slate-500 hover:text-teal-400 transition-colors">All →</Link>
-              <ShareBtn section="Project Tasks" />
             </div>
           </div>
 
@@ -359,11 +329,18 @@ export default function MyWorkPage() {
                             : <span className="text-slate-700 text-xs">—</span>}
                         </td>
                         <td className="pr-3 py-2.5 text-right">
-                          <button type="button"
-                            onClick={() => toggleHide(t.id, hiddenPt, setHiddenPt, LS_HIDDEN_PT)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-slate-300">
-                            {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); shareTaskViaWhatsApp(t.title, "/daily-tasks"); }}
+                              className="text-slate-600 hover:text-green-400 transition-colors" title="Share via WhatsApp">
+                              <Share2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button"
+                              onClick={() => toggleHide(t.id, hiddenPt, setHiddenPt, LS_HIDDEN_PT)}
+                              className="text-slate-600 hover:text-slate-300 transition-colors">
+                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -394,7 +371,6 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/product-tasks" className="text-[10px] text-slate-500 hover:text-purple-400 transition-colors">All →</Link>
-              <ShareBtn section="Product Tasks" />
             </div>
           </div>
 
@@ -437,11 +413,18 @@ export default function MyWorkPage() {
                             : <span className="text-slate-700 text-xs">—</span>}
                         </td>
                         <td className="pr-3 py-2.5 text-right">
-                          <button type="button"
-                            onClick={() => toggleHide(t.id, hiddenPd, setHiddenPd, LS_HIDDEN_PD)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-slate-300">
-                            {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); shareTaskViaWhatsApp(t.title, "/product-tasks"); }}
+                              className="text-slate-600 hover:text-green-400 transition-colors" title="Share via WhatsApp">
+                              <Share2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button"
+                              onClick={() => toggleHide(t.id, hiddenPd, setHiddenPd, LS_HIDDEN_PD)}
+                              className="text-slate-600 hover:text-slate-300 transition-colors">
+                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -478,7 +461,6 @@ export default function MyWorkPage() {
                 </button>
               )}
               <Link href="/client-leads" className="text-[10px] text-slate-500 hover:text-blue-400 transition-colors">All →</Link>
-              <ShareBtn section="Client Enquiry" />
             </div>
           </div>
 
@@ -534,11 +516,18 @@ export default function MyWorkPage() {
                             : <span className="text-slate-700 text-xs">—</span>}
                         </td>
                         <td className="pr-3 py-2.5 text-right">
-                          <button type="button"
-                            onClick={() => toggleHide(l.id, hiddenCl, setHiddenCl, LS_HIDDEN_CL)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-slate-300">
-                            {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); shareTaskViaWhatsApp(l.title, `/client-leads/${l.id}`); }}
+                              className="text-slate-600 hover:text-green-400 transition-colors" title="Share via WhatsApp">
+                              <Share2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button"
+                              onClick={() => toggleHide(l.id, hiddenCl, setHiddenCl, LS_HIDDEN_CL)}
+                              className="text-slate-600 hover:text-slate-300 transition-colors">
+                              {isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -5,8 +5,6 @@ import {
   Package,
   Plus,
   Loader2,
-  MoreVertical,
-  Pencil,
   Trash2,
   Search,
   ExternalLink,
@@ -31,12 +29,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -115,17 +107,6 @@ export function ProductsView() {
     const q = search.trim().toLowerCase();
     return `${p.project_name} ${p.purpose ?? ""} ${p.tech_stack ?? ""}`.toLowerCase().includes(q);
   });
-
-  async function handleDelete(p: Product) {
-    if (!window.confirm(`Delete "${p.project_name}"? This can't be undone.`)) return;
-    const res = await fetch(`/api/products/${p.id}`, { method: "DELETE" });
-    if (!res.ok) {
-      toast.error("Could not delete product.");
-      return;
-    }
-    load();
-    toast.success("Product deleted.");
-  }
 
   function openEdit(p: Product) {
     setEditTarget(p);
@@ -240,12 +221,11 @@ export function ProductsView() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Stage</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Priority</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">Purpose</th>
-                <th className="w-10 px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {visible.map((p) => (
-                <tr key={p.id} className="border-b border-border bg-card hover:bg-muted/50 transition-colors last:border-0">
+                <tr key={p.id} onClick={() => canUpdate && openEdit(p)} className={`border-b border-border bg-card hover:bg-muted/50 transition-colors last:border-0 ${canUpdate ? "cursor-pointer" : ""}`}>
                   <td className="px-4 py-3 font-medium text-foreground">{p.project_name}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -258,19 +238,6 @@ export function ProductsView() {
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${PRIORITY_STYLE[p.priority]}`}>{p.priority}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground line-clamp-1 max-w-xs">{p.purpose || "—"}</td>
-                  <td className="px-4 py-3">
-                    {(canUpdate || canDelete) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                          <MoreVertical className="h-3.5 w-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {canUpdate && <DropdownMenuItem onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /> Edit</DropdownMenuItem>}
-                          {canDelete && <DropdownMenuItem onClick={() => handleDelete(p)} className="text-red-400 focus:text-red-400"><Trash2 className="h-3.5 w-3.5" /> Delete</DropdownMenuItem>}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -279,31 +246,10 @@ export function ProductsView() {
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((p) => (
-            <Card key={p.id} className="h-full">
+            <Card key={p.id} onClick={() => canUpdate && openEdit(p)} className={`h-full ${canUpdate ? "cursor-pointer hover:border-primary/40 transition-colors" : ""}`}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{p.project_name}</CardTitle>
-                  {(canUpdate || canDelete) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canUpdate && (
-                          <DropdownMenuItem onClick={() => openEdit(p)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                            Edit
-                          </DropdownMenuItem>
-                        )}
-                        {canDelete && (
-                          <DropdownMenuItem onClick={() => handleDelete(p)} className="text-red-400 focus:text-red-400">
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1 pt-1">
                   <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize ${PRIORITY_STYLE[p.priority]}`}>
@@ -364,7 +310,7 @@ export function ProductsView() {
         </div>
       )}
 
-      <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editTarget} onSaved={load} />
+      <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editTarget} onSaved={load} onDeleted={load} />
     </div>
   );
 }
@@ -374,11 +320,13 @@ function ProductFormDialog({
   onOpenChange,
   initial,
   onSaved,
+  onDeleted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: Product | null;
   onSaved: () => void;
+  onDeleted?: () => void;
 }) {
   const [projectName, setProjectName] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -387,6 +335,7 @@ function ProductFormDialog({
   const [stageTags, setStageTags] = useState<Set<ProductStageTag>>(new Set());
   const [credentials, setCredentials] = useState<Partial<ProductCredential>[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { accountId } = useAuth();
 
   useEffect(() => {
@@ -416,6 +365,19 @@ function ProductFormDialog({
   }
   function removeCredential(i: number) {
     setCredentials((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleDelete() {
+    if (!initial) return;
+    if (!window.confirm(`Delete "${initial.project_name}"? This can't be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/products/${initial.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("Could not delete product."); return; }
+      onOpenChange(false);
+      onDeleted?.();
+      toast.success("Product deleted.");
+    } finally { setDeleting(false); }
   }
 
   async function handleSave() {
@@ -550,6 +512,12 @@ function ProductFormDialog({
           <Button onClick={handleSave} disabled={saving || !projectName.trim()}>
             {saving ? "Saving…" : initial ? "Save" : "Add product"}
           </Button>
+          {initial && (
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting} className="mt-3 w-full">
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleting ? "Deleting…" : "Delete Product"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
