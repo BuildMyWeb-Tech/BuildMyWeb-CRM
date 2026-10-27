@@ -756,59 +756,111 @@ export function AccountsTab() {
 
       {/* View payment popup */}
       <Dialog open={!!viewPayment} onOpenChange={(o) => { if (!o) setViewPayment(null); }}>
-        <DialogContent className="sm:max-w-md bg-popover border-border">
+        <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Payment Details</DialogTitle>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle>Payment Details</DialogTitle>
+              {viewPayment && (
+                <button type="button"
+                  className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => { openEditPayment(viewPayment); setViewPayment(null); }}
+                  title="Edit payment">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </DialogHeader>
           {viewPayment && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div className="text-muted-foreground">Client</div>
-                <div className="font-medium text-foreground">{viewPayment.client?.name ?? "—"}</div>
-                <div className="text-muted-foreground">Service</div>
-                <div className="text-foreground">{viewPayment.service_description ?? "—"}</div>
-                <div className="text-muted-foreground">Amount</div>
-                <div className="font-medium text-foreground">{formatCurrency(Number(viewPayment.amount))}</div>
-                <div className="text-muted-foreground">Status</div>
+            <div className="space-y-4 text-sm pt-1">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_STYLE[viewPayment.status] ?? 'bg-muted text-muted-foreground'}`}>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Client</p>
+                  <p className="font-medium text-foreground">{viewPayment.client?.name ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Service</p>
+                  <p className="text-foreground">{viewPayment.service_description ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Status</p>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_STYLE[viewPayment.status] ?? 'bg-muted text-muted-foreground'}`}>
                     {PAYMENT_STATUS_LABEL[viewPayment.status] ?? viewPayment.status}
                   </span>
                 </div>
-                <div className="text-muted-foreground">Payment method</div>
-                <div className="text-foreground capitalize">{viewPayment.payment_method ?? "—"}</div>
-                <div className="text-muted-foreground">Transaction ID</div>
-                <div className="text-foreground">{viewPayment.transaction_id ?? "—"}</div>
-                <div className="text-muted-foreground">Received date</div>
-                <div className="text-foreground">{viewPayment.received_date ? new Date(viewPayment.received_date).toLocaleDateString() : "—"}</div>
-                <div className="text-muted-foreground">Expected date</div>
-                <div className="text-foreground">{viewPayment.expected_date ? new Date(viewPayment.expected_date).toLocaleDateString() : "—"}</div>
-                {viewPayment.domain_fee != null && (<><div className="text-muted-foreground">Domain fee</div><div className="text-foreground">{formatCurrency(Number(viewPayment.domain_fee))}</div></>)}
-                {viewPayment.hosting_fee != null && (<><div className="text-muted-foreground">Hosting fee</div><div className="text-foreground">{formatCurrency(Number(viewPayment.hosting_fee))}</div></>)}
-                {viewPayment.notes && (<><div className="text-muted-foreground">Notes</div><div className="text-foreground whitespace-pre-wrap">{viewPayment.notes}</div></>)}
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Amount</p>
+                  <p className="font-medium text-foreground">{formatCurrency(Number(viewPayment.amount))}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Received date</p>
+                  <p className="text-foreground">{viewPayment.received_date ? new Date(viewPayment.received_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Expected date</p>
+                  <p className="text-foreground">{viewPayment.expected_date ? new Date(viewPayment.expected_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Payment method</p>
+                  <p className="text-foreground capitalize">{viewPayment.payment_method ?? "—"}</p>
+                </div>
+                {viewPayment.domain_fee != null && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Domain fee</p>
+                    <p className="text-foreground">{formatCurrency(Number(viewPayment.domain_fee))}</p>
+                  </div>
+                )}
+                {viewPayment.hosting_fee != null && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Hosting fee</p>
+                    <p className="text-foreground">{formatCurrency(Number(viewPayment.hosting_fee))}</p>
+                  </div>
+                )}
               </div>
+              {viewPayment.notes && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Notes</p>
+                  <p className="text-foreground whitespace-pre-wrap">{viewPayment.notes}</p>
+                </div>
+              )}
+              {viewPayment.allocations && viewPayment.allocations.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Allocations</p>
+                    <p className="text-[10px] text-muted-foreground">Allocated: {formatCurrency(viewPayment.allocations.reduce((s, a) => s + Number(a.amount), 0))} of {formatCurrency(Number(viewPayment.amount))}</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {viewPayment.allocations.map((a, i) => {
+                      const isTeam = a.recipient_type === "team_member";
+                      const memberName = isTeam
+                        ? (members.find((m) => m.user_id === a.recipient_user_id)?.full_name ?? "Team Member")
+                        : (a.role_label ?? "Outsource");
+                      const roleName = isTeam ? (a.role_label ?? "") : (a.outsource_role ?? "");
+                      return (
+                        <div key={i} className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5 text-sm">
+                          <span className="text-[10px] text-muted-foreground capitalize bg-muted rounded px-1 py-0.5">{a.recipient_type}</span>
+                          <span className="font-medium text-foreground flex-1">{memberName}</span>
+                          {roleName && <span className="text-xs text-muted-foreground">{roleName}</span>}
+                          <span className="font-medium text-foreground">{formatCurrency(Number(a.amount))}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {viewPayment.installments && viewPayment.installments.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Installments</p>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Installments</p>
+                    <p className="text-[10px] text-muted-foreground">Total: {formatCurrency(viewPayment.installments.reduce((s, inst) => s + Number(inst.amount), 0))}</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     {viewPayment.installments.map((inst, i) => (
                       <div key={i} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5 text-sm">
                         <span className="text-muted-foreground">{inst.date ? new Date(inst.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
                         <span className="font-medium text-foreground">{formatCurrency(Number(inst.amount))}</span>
                         {inst.note && <span className="text-xs text-muted-foreground ml-2">{inst.note}</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {viewPayment.allocations && viewPayment.allocations.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Payment Splitting</p>
-                  <div className="flex flex-col gap-2">
-                    {viewPayment.allocations.map((a, i) => (
-                      <div key={i} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5 text-sm">
-                        <span className="text-muted-foreground capitalize">{a.role_label ?? a.outsource_role ?? a.recipient_type ?? "—"}</span>
-                        <span className="font-medium text-foreground">{formatCurrency(Number(a.amount))}</span>
                       </div>
                     ))}
                   </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, ArrowUpDown, CalendarCheck, CheckSquare, ChevronRight, Clock, Eye, EyeOff, Loader2, Layers, Plus, Share2, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     try { return JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "{}") as Record<string, string>; } catch { return {}; }
   });
   const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+  const [hideMenuPos, setHideMenuPos] = useState<{ top: number; left: number } | null>(null);
   const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   useEffect(() => {
     if (!hideMenuId) return;
@@ -101,6 +103,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
       const btn = eyeBtnRef.current.get(hideMenuId!);
       if (btn?.contains(e.target as Node)) return;
       setHideMenuId(null);
+      setHideMenuPos(null);
     }
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);
@@ -790,24 +793,14 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                           <div className="relative">
                             <button type="button" title="Hide row"
                               ref={(el) => { eyeBtnRef.current.set(task.id, el); }}
-                              onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (hideMenuId === task.id) { setHideMenuId(null); setHideMenuPos(null); }
+                                else { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setHideMenuPos({ top: r.bottom + 4, left: r.left }); setHideMenuId(task.id); }
+                              }}
                               className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
                               <Eye className="h-3.5 w-3.5" />
                             </button>
-                            {hideMenuId === task.id && (
-                              <div className="absolute left-0 top-5 z-[200] w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
-                                <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
-                                  onClick={() => { hideUntil(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
-                                  Hide until tomorrow
-                                </button>
-                                <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
-                                  Hide until date
-                                  <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
-                                    min={new Date().toISOString().split("T")[0]}
-                                    onChange={(e) => { if (e.target.value) { hideUntil(task.id, e.target.value); setHideMenuId(null); } }} />
-                                </label>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -1169,6 +1162,26 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
         onClose={() => setEditingProjectTask(null)}
         onSaved={load}
       />
+
+      {typeof document !== "undefined" && hideMenuId && hideMenuPos && createPortal(
+        <div
+          style={{ position: "fixed", top: hideMenuPos.top, left: hideMenuPos.left, zIndex: 9999 }}
+          className="w-48 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
+            onClick={() => { const d = new Date(); d.setDate(d.getDate() + 1); hideUntil(hideMenuId, d.toISOString().split("T")[0]); setHideMenuId(null); setHideMenuPos(null); }}>
+            Hide until tomorrow
+          </button>
+          <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
+            Hide until date
+            <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
+              min={new Date().toISOString().split("T")[0]}
+              onChange={(e) => { if (e.target.value) { hideUntil(hideMenuId, e.target.value); setHideMenuId(null); setHideMenuPos(null); } }} />
+          </label>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
