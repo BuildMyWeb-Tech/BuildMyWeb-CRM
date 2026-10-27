@@ -383,6 +383,7 @@ export default function ProductTasksPage() {
   const [hideMenuId, setHideMenuId] = useState<string | null>(null);
   const [hideMenuPos, setHideMenuPos] = useState<{ top: number; left: number } | null>(null);
   const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  const hideMenuRef = useRef<HTMLDivElement | null>(null);
   const [moveTaskForPT, setMoveTaskForPT] = useState<ProductTask | null>(null);
   const [movePTSearch, setMovePTSearch] = useState("");
   const [movePTLoading, setMovePTLoading] = useState(false);
@@ -392,7 +393,8 @@ export default function ProductTasksPage() {
     function handler(e: MouseEvent) {
       if (!hideMenuId) return;
       const btn = eyeBtnRef.current.get(hideMenuId);
-      if (btn && btn.contains(e.target as Node)) return;
+      const menu = hideMenuRef.current;
+      if ((btn && btn.contains(e.target as Node)) || (menu && menu.contains(e.target as Node))) return;
       setHideMenuId(null);
       setHideMenuPos(null);
     }
@@ -1019,6 +1021,7 @@ export default function ProductTasksPage() {
 
       {typeof document !== "undefined" && hideMenuId && hideMenuPos && createPortal(
         <div
+          ref={hideMenuRef}
           style={{ position: "fixed", top: hideMenuPos.top, left: hideMenuPos.left, zIndex: 9999 }}
           className="w-48 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1"
           onClick={(e) => e.stopPropagation()}
