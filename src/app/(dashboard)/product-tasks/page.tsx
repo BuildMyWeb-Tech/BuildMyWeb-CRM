@@ -381,9 +381,10 @@ export default function ProductTasksPage() {
   });
   const [hideMenuId, setHideMenuId] = useState<string | null>(null);
   const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
-  const [moveTaskId, setMoveTaskId] = useState<string | null>(null);
-  const [moveStageId, setMoveStageId] = useState<string>("__none__");
-  const [moveSaving, setMoveSaving] = useState(false);
+  const [moveTaskForPT, setMoveTaskForPT] = useState<ProductTask | null>(null);
+  const [movePTSearch, setMovePTSearch] = useState("");
+  const [movePTLoading, setMovePTLoading] = useState(false);
+  const [movePTProjects, setMovePTProjects] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -392,8 +393,8 @@ export default function ProductTasksPage() {
       if (btn && btn.contains(e.target as Node)) return;
       setHideMenuId(null);
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
   }, [hideMenuId]);
 
   async function hideUntilPt(id: string, date: string) {
@@ -571,41 +572,67 @@ export default function ProductTasksPage() {
         />
       )}
 
-      {/* Move to Stage modal */}
-      {moveTaskId && (
+      {/* Move to Project Task modal */}
+      {moveTaskForPT && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
-            <p className="font-semibold text-white mb-1">Move Task</p>
-            <p className="text-xs text-slate-500 mb-4 line-clamp-1">{tasks?.find(t => t.id === moveTaskId)?.title}</p>
-            <label className="text-xs text-slate-400 mb-1.5 block">Select Stage</label>
-            <select value={moveStageId} onChange={(e) => setMoveStageId(e.target.value)}
-              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none mb-4">
-              <option value="__none__">None</option>
-              {[...stages].sort((a, b) => a.position - b.position).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+            <p className="font-semibold text-white mb-1">Move to Project Task</p>
+            <p className="text-xs text-slate-500 mb-4 line-clamp-1">&ldquo;{moveTaskForPT.title}&rdquo;</p>
+            <input autoFocus placeholder="Search project…" value={movePTSearch}
+              onChange={(e) => {
+                setMovePTSearch(e.target.value);
+                if (movePTProjects.length === 0) {
+                  fetch("/api/projects").then(r => r.ok ? r.json() : null).then(d => setMovePTProjects(d?.projects ?? []));
+                }
+              }}
+              onFocus={() => {
+                if (movePTProjects.length === 0) {
+                  fetch("/api/projects").then(r => r.ok ? r.json() : null).then(d => setMovePTProjects(d?.projects ?? []));
+                }
+              }}
+              className="w-full rounded-md border border-[#2a3045] bg-[#0f1117] px-3 py-1.5 text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none mb-2" />
+            <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+              {movePTProjects.filter(p => p.name.toLowerCase().includes(movePTSearch.toLowerCase())).map(p => (
+                <button key={p.id} type="button" disabled={movePTLoading}
+                  onClick={async () => {
+                    setMovePTLoading(true);
+                    try {
+                      const supabase = createClient();
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const userId = session?.user?.id ?? "";
+                      const { error } = await supabase.from("daily_tasks").insert({
+                        account_id: accountId,
+                        created_by: userId,
+                        title: moveTaskForPT.title,
+                        stage_id: moveTaskForPT.stage_id ?? stages[0]?.id ?? "",
+                        project_id: p.id,
+                        assignee_user_id: moveTaskForPT.assignee_user_id ?? null,
+                        assignee_user_ids: moveTaskForPT.assignee_user_ids ?? [],
+                        priority: moveTaskForPT.priority ?? "normal",
+                        target_date: moveTaskForPT.due_date ?? null,
+                      });
+                      if (error) { toast.error("Could not move task."); return; }
+                      await supabase.from("product_tasks").delete().eq("id", moveTaskForPT.id);
+                      toast.success(`Moved to project: ${p.name}`);
+                      setMoveTaskForPT(null); setMovePTSearch("");
+                      load();
+                    } finally { setMovePTLoading(false); }
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 hover:bg-[#1a1f2e] transition-colors text-left disabled:opacity-50">
+                  {p.name}
+                </button>
               ))}
-            </select>
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setMoveTaskId(null)}
+              {movePTProjects.length > 0 && movePTProjects.filter(p => p.name.toLowerCase().includes(movePTSearch.toLowerCase())).length === 0 && (
+                <p className="text-xs text-slate-600 px-2 py-1">No projects found</p>
+              )}
+              {movePTProjects.length === 0 && (
+                <p className="text-xs text-slate-600 px-2 py-1">Loading projects…</p>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end mt-4">
+              <button type="button" onClick={() => { setMoveTaskForPT(null); setMovePTSearch(""); }}
                 className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white">
                 Cancel
-              </button>
-              <button type="button" disabled={moveSaving}
-                onClick={async () => {
-                  setMoveSaving(true);
-                  try {
-                    await fetch(`/api/product-tasks/${moveTaskId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ stage_id: moveStageId === "__none__" ? null : moveStageId }),
-                    });
-                    setMoveTaskId(null);
-                    load();
-                    toast.success("Task moved");
-                  } finally { setMoveSaving(false); }
-                }}
-                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50">
-                {moveSaving ? "Moving…" : "Move"}
               </button>
             </div>
           </div>
@@ -787,7 +814,7 @@ export default function ProductTasksPage() {
                   })}
                 </div>
                 {/* Desktop table (hidden on mobile) */}
-                <div className="hidden sm:block overflow-x-auto rounded-xl border border-[#2a3045]">
+                <div className="hidden sm:block overflow-x-auto overflow-y-visible rounded-xl border border-[#2a3045]">
                 <table className="w-full min-w-[700px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
@@ -919,8 +946,8 @@ export default function ProductTasksPage() {
                                 className="rounded p-1 text-slate-500 hover:text-green-400 transition-colors">
                                 <Share2 className="h-3.5 w-3.5" />
                               </button>
-                              <button type="button" title="Move task to stage"
-                                onClick={(e) => { e.stopPropagation(); setMoveTaskId(task.id); setMoveStageId(task.stage_id ?? "__none__"); }}
+                              <button type="button" title="Move to project task"
+                                onClick={(e) => { e.stopPropagation(); setMoveTaskForPT(task); fetch("/api/projects").then(r => r.ok ? r.json() : null).then(d => setMovePTProjects(d?.projects ?? [])); }}
                                 className="rounded p-1 text-slate-500 hover:text-blue-400 transition-colors">
                                 <ChevronRight className="h-3.5 w-3.5" />
                               </button>

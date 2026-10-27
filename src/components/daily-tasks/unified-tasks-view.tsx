@@ -94,6 +94,17 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     try { return JSON.parse(window.localStorage.getItem("daily-tasks-hidden-rows") ?? "{}") as Record<string, string>; } catch { return {}; }
   });
   const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+  const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  useEffect(() => {
+    if (!hideMenuId) return;
+    function handler(e: MouseEvent) {
+      const btn = eyeBtnRef.current.get(hideMenuId!);
+      if (btn?.contains(e.target as Node)) return;
+      setHideMenuId(null);
+    }
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [hideMenuId]);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   const [projectFilter, setProjectFilter] = useState<Set<string>>(() => {
@@ -281,13 +292,17 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
     });
   }, []);
 
-  function hideUntil(id: string, date: string) {
+  async function hideUntil(id: string, date: string) {
     setHiddenRows((prev) => {
       const next = { ...prev, [id]: date };
       window.localStorage.setItem("daily-tasks-hidden-rows", JSON.stringify(next));
       return next;
     });
     setHideMenuId(null);
+    // Also update show_date in DB so the Scheduled tab (which filters by show_date) sees it
+    const supabase = createClient();
+    await supabase.from("daily_tasks").update({ show_date: date }).eq("id", id);
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, show_date: date } : t));
   }
 
   function openNewTask() {
@@ -685,7 +700,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
             <p className="text-sm text-muted-foreground">No tasks match this filter.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto overflow-y-visible rounded-lg border border-border">
             <table className="w-full min-w-[540px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -774,12 +789,13 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                           />
                           <div className="relative">
                             <button type="button" title="Hide row"
+                              ref={(el) => { eyeBtnRef.current.set(task.id, el); }}
                               onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
                               className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
                               <Eye className="h-3.5 w-3.5" />
                             </button>
                             {hideMenuId === task.id && (
-                              <div className="absolute left-0 top-5 z-50 w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
+                              <div className="absolute left-0 top-5 z-[200] w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
                                 <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
                                   onClick={() => { hideUntil(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
                                   Hide until tomorrow

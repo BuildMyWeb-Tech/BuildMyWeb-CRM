@@ -496,12 +496,10 @@ export default function MyWorkPage() {
                 <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{currentPt.length}</span>
               </div>
               <div className="flex items-center gap-2">
-                {scheduledPt.length > 0 && (
-                  <button type="button" onClick={() => setViewTab("scheduled")}
-                    className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
-                    {scheduledPt.length} scheduled
-                  </button>
-                )}
+                <button type="button" onClick={() => setViewTab("scheduled")}
+                  className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
+                  {scheduledPt.length} scheduled
+                </button>
                 <Link href="/daily-tasks" className="text-[10px] text-slate-500 hover:text-teal-400 transition-colors">All →</Link>
               </div>
             </div>
@@ -588,12 +586,10 @@ export default function MyWorkPage() {
                 <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{currentPd.length}</span>
               </div>
               <div className="flex items-center gap-2">
-                {scheduledPd.length > 0 && (
-                  <button type="button" onClick={() => setViewTab("scheduled")}
-                    className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
-                    {scheduledPd.length} scheduled
-                  </button>
-                )}
+                <button type="button" onClick={() => setViewTab("scheduled")}
+                  className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
+                  {scheduledPd.length} scheduled
+                </button>
                 <Link href="/product-tasks" className="text-[10px] text-slate-500 hover:text-purple-400 transition-colors">All →</Link>
               </div>
             </div>
@@ -677,12 +673,10 @@ export default function MyWorkPage() {
                 <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{currentCl.length}</span>
               </div>
               <div className="flex items-center gap-2">
-                {scheduledCl.length > 0 && (
-                  <button type="button" onClick={() => setViewTab("scheduled")}
-                    className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
-                    {scheduledCl.length} scheduled
-                  </button>
-                )}
+                <button type="button" onClick={() => setViewTab("scheduled")}
+                  className="text-[10px] text-orange-500 hover:text-orange-300 transition-colors">
+                  {scheduledCl.length} scheduled
+                </button>
                 {clOverdueCount > 0 && (
                   <button type="button" onClick={() => setClOverdue((v) => !v)}
                     className={`text-[10px] font-medium transition-colors ${clOverdue ? "text-red-300" : "text-red-400 hover:text-red-300"}`}>

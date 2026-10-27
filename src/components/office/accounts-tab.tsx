@@ -562,11 +562,10 @@ export function AccountsTab() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">Service</Label>
-              <Input value={serviceDescription} onChange={(e) => setServiceDescription(e.target.value)} placeholder="e.g. Logo, Website, Digital Marketing" className="border-border bg-muted text-foreground" />
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Service</Label>
+                <Input value={serviceDescription} onChange={(e) => setServiceDescription(e.target.value)} placeholder="e.g. Logo, Website, Digital Marketing" className="border-border bg-muted text-foreground" />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -788,6 +787,33 @@ export function AccountsTab() {
                 {viewPayment.hosting_fee != null && (<><div className="text-muted-foreground">Hosting fee</div><div className="text-foreground">{formatCurrency(Number(viewPayment.hosting_fee))}</div></>)}
                 {viewPayment.notes && (<><div className="text-muted-foreground">Notes</div><div className="text-foreground whitespace-pre-wrap">{viewPayment.notes}</div></>)}
               </div>
+              {viewPayment.installments && viewPayment.installments.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Installments</p>
+                  <div className="flex flex-col gap-2">
+                    {viewPayment.installments.map((inst, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5 text-sm">
+                        <span className="text-muted-foreground">{inst.date ? new Date(inst.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                        <span className="font-medium text-foreground">{formatCurrency(Number(inst.amount))}</span>
+                        {inst.note && <span className="text-xs text-muted-foreground ml-2">{inst.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {viewPayment.allocations && viewPayment.allocations.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Payment Splitting</p>
+                  <div className="flex flex-col gap-2">
+                    {viewPayment.allocations.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5 text-sm">
+                        <span className="text-muted-foreground capitalize">{a.role_label ?? a.outsource_role ?? a.recipient_type ?? "—"}</span>
+                        <span className="font-medium text-foreground">{formatCurrency(Number(a.amount))}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
