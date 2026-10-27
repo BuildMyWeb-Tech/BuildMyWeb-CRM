@@ -822,7 +822,7 @@ export function UnifiedTasksView({ viewMode = "current" }: { viewMode?: "current
                           : "Unassigned"}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
-                        {task.dateValue ? new Date(task.dateValue).toLocaleDateString() : "—"}
+                        {task.dateValue ? new Date(task.dateValue + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }).replace(/^(\d+)/, (m) => { const s = ["th","st","nd","rd"]; const v = +m % 100; return m + (s[(v-20)%10] || s[v] || s[0]); }) : "—"}
                       </td>
                       <td className="px-3 py-2 text-blue-500 font-medium text-xs">
                         {task.showDateValue
@@ -1175,7 +1175,7 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "border-teal-500/30 bg-teal-500/10 text-teal-400",
 };
 
-export function ProjectsPanel({ projects, onStatusChange }: { projects: import("@/types").Project[]; onStatusChange: (projectId: string, newStatus: string) => Promise<void> }) {
+export function ProjectsPanel({ projects, taskCounts, onStatusChange }: { projects: import("@/types").Project[]; taskCounts?: Record<string, { current: number; scheduled: number }>; onStatusChange: (projectId: string, newStatus: string) => Promise<void> }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [updating, setUpdating] = useState<Set<string>>(new Set());
@@ -1229,11 +1229,17 @@ export function ProjectsPanel({ projects, onStatusChange }: { projects: import("
                   draggable
                   onDragStart={() => setDragId(p.id)}
                   onDragEnd={() => { setDragId(null); setDropTarget(null); }}
-                  className={`cursor-grab rounded px-1.5 py-0.5 text-[10px] border border-border bg-muted/50 text-foreground hover:bg-muted truncate transition-opacity max-w-full ${updating.has(p.id) ? "opacity-40" : ""} ${dragId === p.id ? "opacity-60" : ""}`}
+                  className={`cursor-grab rounded px-1.5 py-0.5 text-[10px] border border-border bg-muted/50 text-foreground hover:bg-muted transition-opacity max-w-full flex items-center gap-1 ${updating.has(p.id) ? "opacity-40" : ""} ${dragId === p.id ? "opacity-60" : ""}`}
                   title={p.name}
                   style={{ maxWidth: "calc(100% - 4px)" }}
                 >
-                  {p.name}
+                  <span className="truncate">{p.name}</span>
+                  {taskCounts?.[p.id] && (taskCounts[p.id].current + taskCounts[p.id].scheduled) > 0 && (
+                    <span className="shrink-0 text-muted-foreground whitespace-nowrap">
+                      {taskCounts[p.id].current + taskCounts[p.id].scheduled}
+                      {taskCounts[p.id].scheduled > 0 && ` (${taskCounts[p.id].current}+${taskCounts[p.id].scheduled})`}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

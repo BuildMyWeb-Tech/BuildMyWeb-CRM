@@ -12,7 +12,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Loader2, IndianRupee, Users2, TrendingUp, Clock, Receipt } from "lucide-react";
+import { Plus, Trash2, Loader2, IndianRupee, Users2, TrendingUp, Clock, Receipt, Eye } from "lucide-react";
 import { ExpensesTab } from "@/components/office/expenses-tab";
 import { toast } from "sonner";
 
@@ -73,6 +73,7 @@ export function AccountsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [viewPayment, setViewPayment] = useState<ClientPayment | null>(null);
 
   // Form fields
   const [formClientId, setFormClientId] = useState("");
@@ -508,14 +509,25 @@ export function AccountsTab() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                            className="text-muted-foreground hover:text-red-400"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={(e) => { e.stopPropagation(); setViewPayment(p); }}
+                              className="text-muted-foreground hover:text-blue-400"
+                              title="View details"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
+                              className="text-muted-foreground hover:text-red-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -547,18 +559,6 @@ export function AccountsTab() {
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Project (optional)</Label>
-                <Select value={formProjectId || "__none__"} onValueChange={(v) => setFormProjectId(!v || v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue className="truncate">{(v: string) => projects.find((p) => p.id === v)?.name ?? "No project"}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">No project</SelectItem>
-                    {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -606,10 +606,6 @@ export function AccountsTab() {
                     {PAYMENT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Transaction ID</Label>
-                <Input value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Optional" className="border-border bg-muted text-foreground" />
               </div>
             </div>
 
@@ -756,6 +752,44 @@ export function AccountsTab() {
               {saving ? "Saving…" : editingId ? "Update payment" : "Save payment"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View payment popup */}
+      <Dialog open={!!viewPayment} onOpenChange={(o) => { if (!o) setViewPayment(null); }}>
+        <DialogContent className="sm:max-w-md bg-popover border-border">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+          </DialogHeader>
+          {viewPayment && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="text-muted-foreground">Client</div>
+                <div className="font-medium text-foreground">{viewPayment.client?.name ?? "—"}</div>
+                <div className="text-muted-foreground">Service</div>
+                <div className="text-foreground">{viewPayment.service_description ?? "—"}</div>
+                <div className="text-muted-foreground">Amount</div>
+                <div className="font-medium text-foreground">{formatCurrency(Number(viewPayment.amount))}</div>
+                <div className="text-muted-foreground">Status</div>
+                <div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_STYLE[viewPayment.status] ?? 'bg-muted text-muted-foreground'}`}>
+                    {PAYMENT_STATUS_LABEL[viewPayment.status] ?? viewPayment.status}
+                  </span>
+                </div>
+                <div className="text-muted-foreground">Payment method</div>
+                <div className="text-foreground capitalize">{viewPayment.payment_method ?? "—"}</div>
+                <div className="text-muted-foreground">Transaction ID</div>
+                <div className="text-foreground">{viewPayment.transaction_id ?? "—"}</div>
+                <div className="text-muted-foreground">Received date</div>
+                <div className="text-foreground">{viewPayment.received_date ? new Date(viewPayment.received_date).toLocaleDateString() : "—"}</div>
+                <div className="text-muted-foreground">Expected date</div>
+                <div className="text-foreground">{viewPayment.expected_date ? new Date(viewPayment.expected_date).toLocaleDateString() : "—"}</div>
+                {viewPayment.domain_fee != null && (<><div className="text-muted-foreground">Domain fee</div><div className="text-foreground">{formatCurrency(Number(viewPayment.domain_fee))}</div></>)}
+                {viewPayment.hosting_fee != null && (<><div className="text-muted-foreground">Hosting fee</div><div className="text-foreground">{formatCurrency(Number(viewPayment.hosting_fee))}</div></>)}
+                {viewPayment.notes && (<><div className="text-muted-foreground">Notes</div><div className="text-foreground whitespace-pre-wrap">{viewPayment.notes}</div></>)}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

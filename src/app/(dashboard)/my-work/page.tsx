@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown, ChevronUp, ChevronsUpDown, Loader2,
-  ClipboardList, Package, UserPlus, Eye, EyeOff, Share2, Calendar, Clock,
+  ClipboardList, Package, UserPlus, Eye, EyeOff, Share2, Calendar, Clock, RotateCcw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -12,6 +12,7 @@ import Link from "next/link";
 interface ProjectTask {
   id: string; title: string;
   target_date?: string | null;
+  priority?: string | null;
   show_date: string | null;
   stage?: { name: string } | null;
   project?: { id: string; name: string } | null;
@@ -20,6 +21,7 @@ interface ProjectTask {
 interface ProductTask {
   id: string; title: string;
   due_date?: string | null;
+  priority?: string | null;
   show_date: string | null;
   stage?: { name: string } | null;
   product?: { project_name?: string } | null;
@@ -178,8 +180,8 @@ export default function MyWorkPage() {
       const nowStr = new Date().toISOString().slice(0, 10);
       const assigneeFilter = `assignee_user_id.eq.${uid},assignee_user_ids.cs.{${uid}}`;
 
-      const ptSelect = "id, title, target_date, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
-      const pdSelect = "id, title, due_date, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
+      const ptSelect = "id, title, target_date, priority, show_date, stage:pipeline_stages(name), project:projects(id, name), assignee_user_id, assignee_user_ids";
+      const pdSelect = "id, title, due_date, priority, show_date, stage:pipeline_stages(name), product:products(project_name), product_id, assignee_user_id, assignee_user_ids";
 
       const [ptRes, pdRes, clRes] = await Promise.all([
         // fetch ALL assigned project tasks (current + scheduled) so we can split locally
@@ -367,124 +369,117 @@ export default function MyWorkPage() {
 
       {/* ── SCHEDULED TAB ── */}
       {viewTab === "scheduled" && (
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 sm:px-6">
-          {totalScheduled === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
-              <Calendar className="h-8 w-8 text-slate-700" />
-              <p className="text-sm text-slate-500">No scheduled tasks</p>
-              <p className="text-xs text-slate-600">Click the <EyeOff className="inline h-3 w-3" /> icon on any task to schedule it for later</p>
+        <div className="flex flex-1 flex-col overflow-hidden lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-[#2a3045]">
+          {/* Project tasks scheduled column */}
+          <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
+              <div className="flex items-center gap-2">
+                <div className="rounded-md bg-teal-500/10 p-1.5">
+                  <ClipboardList className="h-3.5 w-3.5 text-teal-400" />
+                </div>
+                <span className="text-sm font-semibold text-white">Project Tasks</span>
+                <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{scheduledPt.length}</span>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Project tasks scheduled */}
-              {scheduledPt.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="rounded-md bg-teal-500/10 p-1">
-                      <ClipboardList className="h-3.5 w-3.5 text-teal-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Project Tasks</span>
-                    <span className="rounded-full bg-[#2a3045] px-1.5 text-[10px] text-slate-500">{scheduledPt.length}</span>
-                  </div>
-                  <div className="rounded-lg border border-[#2a3045] overflow-hidden">
-                    {scheduledPt.map((t, i) => (
-                      <div key={t.id}
-                        className={`flex items-center justify-between px-4 py-2.5 gap-3 ${i > 0 ? "border-t border-[#2a3045]/60" : ""} hover:bg-[#1a1f2e] transition-colors`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white font-medium line-clamp-1">{t.title}</p>
-                          {t.project && <p className="text-[11px] text-slate-500 mt-0.5">{t.project.name}</p>}
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">
-                            Returns {fmtDate(t.show_date!)}
-                          </span>
-                          <button type="button"
-                            onClick={() => unschedulePt(t.id)}
-                            className="text-[10px] text-slate-600 hover:text-blue-400 transition-colors whitespace-nowrap border border-[#2a3045] rounded px-2 py-0.5 hover:border-blue-500/40">
-                            Unschedule
-                          </button>
-                        </div>
+            <div className="flex-1 overflow-y-auto">
+              {scheduledPt.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-xs text-slate-600">No scheduled project tasks</div>
+              ) : (
+                <div className="divide-y divide-[#2a3045]/60">
+                  {scheduledPt.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between px-4 py-2.5 gap-2 hover:bg-[#1a1f2e] transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium line-clamp-1">{t.title}</p>
+                        {t.project && <p className="text-[11px] text-slate-500 mt-0.5">{t.project.name}</p>}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">{fmtDate(t.show_date!)}</span>
+                        <button type="button" title="Unschedule" onClick={() => unschedulePt(t.id)}
+                          className="text-slate-600 hover:text-blue-400 transition-colors p-1 rounded hover:bg-[#2a3045]">
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
+            </div>
+          </div>
 
-              {/* Product tasks scheduled */}
-              {scheduledPd.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="rounded-md bg-purple-500/10 p-1">
-                      <Package className="h-3.5 w-3.5 text-purple-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Product Tasks</span>
-                    <span className="rounded-full bg-[#2a3045] px-1.5 text-[10px] text-slate-500">{scheduledPd.length}</span>
-                  </div>
-                  <div className="rounded-lg border border-[#2a3045] overflow-hidden">
-                    {scheduledPd.map((t, i) => (
-                      <div key={t.id}
-                        className={`flex items-center justify-between px-4 py-2.5 gap-3 ${i > 0 ? "border-t border-[#2a3045]/60" : ""} hover:bg-[#1a1f2e] transition-colors`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white font-medium line-clamp-1">{t.title}</p>
-                          {t.product?.project_name && <p className="text-[11px] text-slate-500 mt-0.5">{t.product.project_name}</p>}
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">
-                            Returns {fmtDate(t.show_date!)}
-                          </span>
-                          <button type="button"
-                            onClick={() => unschedulePd(t.id)}
-                            className="text-[10px] text-slate-600 hover:text-blue-400 transition-colors whitespace-nowrap border border-[#2a3045] rounded px-2 py-0.5 hover:border-blue-500/40">
-                            Unschedule
-                          </button>
-                        </div>
+          {/* Product tasks scheduled column */}
+          <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
+              <div className="flex items-center gap-2">
+                <div className="rounded-md bg-purple-500/10 p-1.5">
+                  <Package className="h-3.5 w-3.5 text-purple-400" />
+                </div>
+                <span className="text-sm font-semibold text-white">Product Tasks</span>
+                <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{scheduledPd.length}</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {scheduledPd.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-xs text-slate-600">No scheduled product tasks</div>
+              ) : (
+                <div className="divide-y divide-[#2a3045]/60">
+                  {scheduledPd.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between px-4 py-2.5 gap-2 hover:bg-[#1a1f2e] transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium line-clamp-1">{t.title}</p>
+                        {t.product?.project_name && <p className="text-[11px] text-slate-500 mt-0.5">{t.product.project_name}</p>}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">{fmtDate(t.show_date!)}</span>
+                        <button type="button" title="Unschedule" onClick={() => unschedulePd(t.id)}
+                          className="text-slate-600 hover:text-blue-400 transition-colors p-1 rounded hover:bg-[#2a3045]">
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
+            </div>
+          </div>
 
-              {/* Client enquiry scheduled */}
-              {scheduledCl.length > 0 && (
-                <section>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="rounded-md bg-blue-500/10 p-1">
-                      <UserPlus className="h-3.5 w-3.5 text-blue-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Client Enquiry</span>
-                    <span className="rounded-full bg-[#2a3045] px-1.5 text-[10px] text-slate-500">{scheduledCl.length}</span>
-                  </div>
-                  <div className="rounded-lg border border-[#2a3045] overflow-hidden">
-                    {scheduledCl.map((l, i) => (
-                      <div key={l.id}
-                        className={`flex items-center justify-between px-4 py-2.5 gap-3 ${i > 0 ? "border-t border-[#2a3045]/60" : ""} hover:bg-[#1a1f2e] transition-colors`}>
-                        <div className="flex-1 min-w-0">
-                          <Link href={`/client-leads/${l.id}`} className="text-sm text-white hover:text-blue-400 font-medium line-clamp-1 transition-colors block">
-                            {l.title}
-                          </Link>
-                          <span className={`mt-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[l.status] ?? ""}`}>
-                            {STATUS_DISPLAY[l.status] ?? l.status}
-                          </span>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">
-                            Returns {fmtDate(clScheduledFiltered[l.id])}
-                          </span>
-                          <button type="button"
-                            onClick={() => unscheduleCl(l.id)}
-                            className="text-[10px] text-slate-600 hover:text-blue-400 transition-colors whitespace-nowrap border border-[#2a3045] rounded px-2 py-0.5 hover:border-blue-500/40">
-                            Unschedule
-                          </button>
-                        </div>
+          {/* Client enquiry scheduled column */}
+          <div className="flex min-h-[200px] w-full lg:w-1/3 flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#1a1f2e] border-b border-[#2a3045]">
+              <div className="flex items-center gap-2">
+                <div className="rounded-md bg-blue-500/10 p-1.5">
+                  <UserPlus className="h-3.5 w-3.5 text-blue-400" />
+                </div>
+                <span className="text-sm font-semibold text-white">Client Enquiry</span>
+                <span className="rounded-full bg-[#2a3045] px-1.5 py-0.5 text-[10px] text-slate-400">{scheduledCl.length}</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {scheduledCl.length === 0 ? (
+                <div className="flex h-32 items-center justify-center text-xs text-slate-600">No scheduled enquiries</div>
+              ) : (
+                <div className="divide-y divide-[#2a3045]/60">
+                  {scheduledCl.map((l) => (
+                    <div key={l.id} className="flex items-center justify-between px-4 py-2.5 gap-2 hover:bg-[#1a1f2e] transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/client-leads/${l.id}`} className="text-sm text-white hover:text-blue-400 font-medium line-clamp-1 transition-colors block">{l.title}</Link>
+                        <span className={`mt-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[l.status] ?? ""}`}>{STATUS_DISPLAY[l.status] ?? l.status}</span>
                       </div>
-                    ))}
-                  </div>
-                </section>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        <span className="text-[11px] text-orange-400 font-medium whitespace-nowrap">{fmtDate(clScheduledFiltered[l.id])}</span>
+                        <button type="button" title="Unschedule" onClick={() => unscheduleCl(l.id)}
+                          className="text-slate-600 hover:text-blue-400 transition-colors p-1 rounded hover:bg-[#2a3045]">
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
       )}
+
 
       {/* ── CURRENT TAB ── */}
       {viewTab === "current" && (
@@ -548,6 +543,8 @@ export default function MyWorkPage() {
                           {t.stage?.name
                             ? <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-slate-400 bg-slate-500/10 border-slate-500/20 whitespace-nowrap">{t.stage.name}</span>
                             : <span className="text-slate-700 text-xs">—</span>}
+                          {t.priority && <div className="mt-0.5 text-[10px] capitalize text-slate-500">{t.priority}</div>}
+                          {t.target_date && <div className="text-[10px] text-slate-600">{fmtDate(t.target_date)}</div>}
                         </td>
                         <td className="pr-3 py-2.5">
                           <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -635,6 +632,8 @@ export default function MyWorkPage() {
                           {t.stage?.name
                             ? <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-slate-400 bg-slate-500/10 border-slate-500/20 whitespace-nowrap">{t.stage.name}</span>
                             : <span className="text-slate-700 text-xs">—</span>}
+                          {t.priority && <div className="mt-0.5 text-[10px] capitalize text-slate-500">{t.priority}</div>}
+                          {t.due_date && <div className="text-[10px] text-slate-600">{fmtDate(t.due_date)}</div>}
                         </td>
                         <td className="pr-3 py-2.5">
                           <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">

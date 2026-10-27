@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, AlertTriangle, RefreshCw, Search } from 'lucide-react';
+import { Radio, Plus, Loader2, AlertTriangle, RefreshCw, Search, Trash2, Download } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -41,6 +41,8 @@ export default function BroadcastsPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<BroadcastStatus | 'all'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -297,6 +299,63 @@ export default function BroadcastsPage() {
     };
   }, [anySending]);
 
+  const filteredBroadcasts = useMemo(() => broadcasts.filter((b) => {
+    const matchesSearch = !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  }), [broadcasts, searchQuery, statusFilter]);
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filteredBroadcasts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredBroadcasts.map((b) => b.id)));
+    }
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0 || bulkDeleting) return;
+    if (!confirm(`Delete ${selectedIds.size} broadcast${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all([...selectedIds].map((id) =>
+        fetch(`/api/broadcasts/${id}`, { method: 'DELETE' })
+      ));
+      setBroadcasts((prev) => prev.filter((b) => !selectedIds.has(b.id)));
+      setSelectedIds(new Set());
+      toast.success(`Deleted ${selectedIds.size} broadcast${selectedIds.size > 1 ? 's' : ''}`);
+    } catch {
+      toast.error('Some deletes failed — please refresh');
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  function exportAsExcel() {
+    const rows = filteredBroadcasts.filter((b) => selectedIds.has(b.id));
+    const header = ['Name', 'Recipients', 'Status', 'Date'];
+    const lines = [header, ...rows.map((b) => [
+      b.name,
+      String(b.total_recipients),
+      b.status,
+      new Date(b.created_at).toLocaleDateString(),
+    ])];
+    const csv = lines.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'broadcasts.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -430,75 +489,101 @@ export default function BroadcastsPage() {
           </GatedButton>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">{t('table.name')}</TableHead>
-                <TableHead className="hidden text-right text-muted-foreground sm:table-cell">
-                  {t('table.recipients')}
-                </TableHead>
-                <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
-                <TableHead className="hidden text-muted-foreground sm:table-cell">{t('table.date')}</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {broadcasts.filter((b) => {
-                const matchesSearch = !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase());
-                const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
-                return matchesSearch && matchesStatus;
-              }).map((broadcast) => {
-                const status = getBroadcastStatus(broadcast.status);
-                return (
-                  <TableRow
-                    key={broadcast.id}
-                    className="cursor-pointer border-border hover:bg-muted/50"
-                    onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
-                  >
-                    <TableCell className="font-medium text-foreground">
-                      {broadcast.name}
-                    </TableCell>
-                    <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
-                      {broadcast.total_recipients}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${status.classes}`}
-                      >
-                        {status.pulse && (
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400" />
-                          </span>
+        <div className="space-y-2">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2">
+              <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10" onClick={bulkDelete} disabled={bulkDeleting}>
+                {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                Delete
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2 text-xs" onClick={exportAsExcel}>
+                <Download className="h-3 w-3" />
+                Export CSV
+              </Button>
+              <button type="button" className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedIds(new Set())}>Clear</button>
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="w-10 pl-4">
+                    <input
+                      type="checkbox"
+                      checked={filteredBroadcasts.length > 0 && selectedIds.size === filteredBroadcasts.length}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    />
+                  </TableHead>
+                  <TableHead className="text-muted-foreground">{t('table.name')}</TableHead>
+                  <TableHead className="hidden text-right text-muted-foreground sm:table-cell">
+                    {t('table.recipients')}
+                  </TableHead>
+                  <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
+                  <TableHead className="hidden text-muted-foreground sm:table-cell">{t('table.date')}</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredBroadcasts.map((broadcast) => {
+                  const status = getBroadcastStatus(broadcast.status);
+                  return (
+                    <TableRow
+                      key={broadcast.id}
+                      className="cursor-pointer border-border hover:bg-muted/50"
+                      onClick={() => router.push(`/broadcasts/${broadcast.id}`)}
+                    >
+                      <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(broadcast.id)}
+                          onChange={() => toggleSelect(broadcast.id)}
+                          className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        {broadcast.name}
+                      </TableCell>
+                      <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
+                        {broadcast.total_recipients}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${status.classes}`}>
+                          {status.pulse && (
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75" />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400" />
+                            </span>
+                          )}
+                          {tStatus(status.label)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="hidden text-muted-foreground sm:table-cell">
+                        {new Date(broadcast.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        {broadcast.status === 'failed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 px-2 text-xs text-orange-400 border-orange-500/30 hover:bg-orange-500/10"
+                            disabled={retryingId === broadcast.id}
+                            onClick={(e) => retryBroadcast(e, broadcast.id)}
+                          >
+                            {retryingId === broadcast.id
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : <RefreshCw className="h-3 w-3" />}
+                            Retry
+                          </Button>
                         )}
-                        {tStatus(status.label)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {new Date(broadcast.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      {broadcast.status === 'failed' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 px-2 text-xs text-orange-400 border-orange-500/30 hover:bg-orange-500/10"
-                          disabled={retryingId === broadcast.id}
-                          onClick={(e) => retryBroadcast(e, broadcast.id)}
-                        >
-                          {retryingId === broadcast.id
-                            ? <Loader2 className="h-3 w-3 animate-spin" />
-                            : <RefreshCw className="h-3 w-3" />}
-                          Retry
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
     </div>

@@ -50,6 +50,7 @@ const PAGE_REGISTRY: Record<string, React.ComponentType> = {
   "/notifications": dynamic(() => import("@/app/(dashboard)/notifications/page")),
   "/lead-finder": dynamic(() => import("@/app/(dashboard)/lead-finder/page")),
   "/kanban": dynamic(() => import("@/app/(dashboard)/kanban/page")),
+  "/leads/generate": dynamic(() => import("@/app/(dashboard)/leads/generate/page")),
 };
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,7 @@ const ALL_PAGES = [
   { href: "/notifications", label: "notifications", group: "Personal" },
   { href: "/daily-tasks", label: "dailyTasksTodo", group: "Personal" },
   { href: "/inbox", label: "messages", group: "Personal" },
+  { href: "/leads/generate", label: "leadSourcing", group: "Sales" },
 ].filter((p) => p.href !== "/my-pages" && p.href in PAGE_REGISTRY);
 
 const LABEL_MAP: Record<string, string> = {

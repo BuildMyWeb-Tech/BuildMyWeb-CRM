@@ -21,6 +21,7 @@ interface TaskStats {
 
 interface ProjectWithTaskCount extends Project {
   task_count: number;
+  scheduled_task_count: number;
 }
 
 
@@ -49,13 +50,14 @@ export default function DailyTasksPage() {
 
       const { data: tasks } = await supabase
         .from("project_tasks")
-        .select("id, project_id, stage_id, due_date, pipeline_stages(name)")
+        .select("id, project_id, stage_id, due_date, show_date, pipeline_stages(name)")
         .eq("account_id", accountId);
 
       if (!tasks) return;
 
       let inProgress = 0, pending = 0, overdue = 0;
       const projectCountMap: Record<string, number> = {};
+      const projectScheduledMap: Record<string, number> = {};
       const stageCountMap: Record<string, number> = {};
 
       for (const t of tasks) {
@@ -63,7 +65,12 @@ export default function DailyTasksPage() {
         if (stageName.includes("progress") || stageName.includes("doing")) inProgress++;
         else if (stageName.includes("pending") || stageName.includes("todo") || stageName.includes("to do")) pending++;
         if (t.due_date && t.due_date < today) overdue++;
-        projectCountMap[t.project_id] = (projectCountMap[t.project_id] ?? 0) + 1;
+        const isScheduled = !!(t.show_date && t.show_date > today);
+        if (isScheduled) {
+          projectScheduledMap[t.project_id] = (projectScheduledMap[t.project_id] ?? 0) + 1;
+        } else {
+          projectCountMap[t.project_id] = (projectCountMap[t.project_id] ?? 0) + 1;
+        }
         const key = (t.pipeline_stages as { name?: string } | null)?.name ?? "Unknown";
         stageCountMap[key] = (stageCountMap[key] ?? 0) + 1;
       }
@@ -77,7 +84,11 @@ export default function DailyTasksPage() {
   .order("name");
 
       if (projectsData) {
-        setProjects(projectsData.map((p) => ({ ...p, task_count: projectCountMap[p.id] ?? 0 })));
+        setProjects(projectsData.map((p) => ({
+          ...p,
+          task_count: projectCountMap[p.id] ?? 0,
+          scheduled_task_count: projectScheduledMap[p.id] ?? 0,
+        })));
       }
 
     } finally {
@@ -201,6 +212,7 @@ export default function DailyTasksPage() {
           {/* Projects by Status — drag & drop */}
         <ProjectsPanel
           projects={projects}
+          taskCounts={Object.fromEntries(projects.map((p) => [p.id, { current: p.task_count, scheduled: p.scheduled_task_count }]))}
           onStatusChange={async (projectId, newStatus) => {
             try {
               const res = await fetch(`/api/projects/${projectId}`, {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Package, Plus, Trash2, ChevronUp, ChevronDown,
+  Package, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight,
   ChevronsUpDown, Loader2, X, LayoutList, LayoutGrid, Eye, EyeOff, Share2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -380,13 +380,34 @@ export default function ProductTasksPage() {
     try { return JSON.parse(window.localStorage.getItem(LS_HIDE) ?? "{}") as Record<string, string>; } catch { return {}; }
   });
   const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+  const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  const [moveTaskId, setMoveTaskId] = useState<string | null>(null);
+  const [moveStageId, setMoveStageId] = useState<string>("__none__");
+  const [moveSaving, setMoveSaving] = useState(false);
 
-  function hideUntilPt(id: string, date: string) {
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (!hideMenuId) return;
+      const btn = eyeBtnRef.current.get(hideMenuId);
+      if (btn && btn.contains(e.target as Node)) return;
+      setHideMenuId(null);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [hideMenuId]);
+
+  async function hideUntilPt(id: string, date: string) {
     setHideMap((prev) => {
       const next = { ...prev, [id]: date };
       window.localStorage.setItem(LS_HIDE, JSON.stringify(next));
       return next;
     });
+    await fetch(`/api/product-tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ show_date: date }),
+    });
+    setTasks(prev => (prev ?? []).map(t => t.id === id ? { ...t, show_date: date } : t));
   }
 
   const load = useCallback(async () => {
@@ -457,7 +478,6 @@ export default function ProductTasksPage() {
       }
       if (productFilter !== "all" && t.product_id !== productFilter) return false;
       if (overdueOnly && !(t.due_date && t.due_date < todayStr)) return false;
-      if (hideMap[t.id] && hideMap[t.id] > todayStr) return false;
       return true;
     })
     .sort((a, b) => {
@@ -549,6 +569,47 @@ export default function ProductTasksPage() {
           stages={stages}
           members={members}
         />
+      )}
+
+      {/* Move to Stage modal */}
+      {moveTaskId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#2a3045] bg-[#1a1f2e] p-6 shadow-2xl">
+            <p className="font-semibold text-white mb-1">Move Task</p>
+            <p className="text-xs text-slate-500 mb-4 line-clamp-1">{tasks?.find(t => t.id === moveTaskId)?.title}</p>
+            <label className="text-xs text-slate-400 mb-1.5 block">Select Stage</label>
+            <select value={moveStageId} onChange={(e) => setMoveStageId(e.target.value)}
+              className="w-full rounded-lg border border-[#2a3045] bg-[#0f1117] px-3 py-2 text-sm text-slate-300 focus:border-teal-500 focus:outline-none mb-4">
+              <option value="__none__">None</option>
+              {[...stages].sort((a, b) => a.position - b.position).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setMoveTaskId(null)}
+                className="rounded-lg border border-[#2a3045] px-4 py-2 text-sm text-slate-400 hover:text-white">
+                Cancel
+              </button>
+              <button type="button" disabled={moveSaving}
+                onClick={async () => {
+                  setMoveSaving(true);
+                  try {
+                    await fetch(`/api/product-tasks/${moveTaskId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ stage_id: moveStageId === "__none__" ? null : moveStageId }),
+                    });
+                    setMoveTaskId(null);
+                    load();
+                    toast.success("Task moved");
+                  } finally { setMoveSaving(false); }
+                }}
+                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-50">
+                {moveSaving ? "Moving…" : "Move"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">
@@ -780,13 +841,39 @@ export default function ProductTasksPage() {
                           onClick={() => openEdit(task)}
                           className={`border-b border-[#2a3045] last:border-0 hover:bg-[#1a1f2e] transition-colors cursor-pointer ${isSelected ? "bg-teal-500/5" : ""}`}>
                           <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input type="checkbox" checked={isSelected}
-                              onChange={(e) => setSelectedIds((prev) => {
-                                const next = new Set(prev);
-                                e.target.checked ? next.add(task.id) : next.delete(task.id);
-                                return next;
-                              })}
-                              className="h-3.5 w-3.5 rounded border-[#3a4055] bg-transparent accent-teal-500 cursor-pointer" />
+                            <div className="flex items-center gap-1.5">
+                              <input type="checkbox" checked={isSelected}
+                                onChange={(e) => setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  e.target.checked ? next.add(task.id) : next.delete(task.id);
+                                  return next;
+                                })}
+                                className="h-3.5 w-3.5 rounded border-[#3a4055] bg-transparent accent-teal-500 cursor-pointer" />
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  title="Hide row"
+                                  ref={(el) => { eyeBtnRef.current.set(task.id, el); }}
+                                  onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
+                                  className="rounded p-0.5 text-slate-600 hover:text-slate-300 transition-colors">
+                                  <Eye className="h-3 w-3" />
+                                </button>
+                                {hideMenuId === task.id && (
+                                  <div className="absolute left-0 top-5 z-[200] w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
+                                    <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
+                                      onClick={() => { hideUntilPt(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
+                                      Hide until tomorrow
+                                    </button>
+                                    <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
+                                      Hide until date
+                                      <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
+                                        min={new Date().toISOString().split("T")[0]}
+                                        onChange={(e) => { if (e.target.value) { hideUntilPt(task.id, e.target.value); setHideMenuId(null); } }} />
+                                    </label>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 font-medium max-w-xs">
                             <span className={`line-clamp-1 ${isOverdue ? "text-red-400" : "text-white"}`}>{task.title}</span>
@@ -832,27 +919,11 @@ export default function ProductTasksPage() {
                                 className="rounded p-1 text-slate-500 hover:text-green-400 transition-colors">
                                 <Share2 className="h-3.5 w-3.5" />
                               </button>
-                              <div className="relative">
-                                <button type="button" title="Hide row"
-                                  onClick={(e) => { e.stopPropagation(); setHideMenuId(prev => prev === task.id ? null : task.id); }}
-                                  className="rounded p-1 text-slate-500 hover:text-slate-300 transition-colors">
-                                  <Eye className="h-3.5 w-3.5" />
-                                </button>
-                                {hideMenuId === task.id && (
-                                  <div className="absolute right-0 top-6 z-50 w-44 rounded-md border border-[#2a3045] bg-[#0f1117] shadow-lg py-1" onClick={e => e.stopPropagation()}>
-                                    <button type="button" className="w-full px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-[#1a1f2e]"
-                                      onClick={() => { hideUntilPt(task.id, (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()); setHideMenuId(null); }}>
-                                      Hide until tomorrow
-                                    </button>
-                                    <label className="flex flex-col px-3 py-1.5 text-xs text-slate-300 hover:bg-[#1a1f2e] cursor-pointer gap-1">
-                                      Hide until date
-                                      <input type="date" className="bg-[#1a1f2e] border border-[#2a3045] rounded px-1 py-0.5 text-xs text-slate-200"
-                                        min={new Date().toISOString().split("T")[0]}
-                                        onChange={(e) => { if (e.target.value) { hideUntilPt(task.id, e.target.value); setHideMenuId(null); } }} />
-                                    </label>
-                                  </div>
-                                )}
-                              </div>
+                              <button type="button" title="Move task to stage"
+                                onClick={(e) => { e.stopPropagation(); setMoveTaskId(task.id); setMoveStageId(task.stage_id ?? "__none__"); }}
+                                className="rounded p-1 text-slate-500 hover:text-blue-400 transition-colors">
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </td>
                         </tr>
