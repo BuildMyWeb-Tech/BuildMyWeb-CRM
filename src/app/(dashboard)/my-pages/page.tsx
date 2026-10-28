@@ -275,7 +275,6 @@ export default function MyPagesPage() {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-foreground">My Pages</h1>
-          <p className="text-xs text-muted-foreground">Combine any CRM pages into one workspace — your layout is saved automatically.</p>
         </div>
         <button
           type="button"

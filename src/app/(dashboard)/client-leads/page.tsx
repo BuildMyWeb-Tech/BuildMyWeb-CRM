@@ -305,6 +305,14 @@ export default function ClientLeadsPage() {
         initial={editTarget}
         members={members}
         onSaved={load}
+        initialShowDate={editTarget ? (schedMap[editTarget.id] ?? "") : ""}
+        onShowDateChange={(id, date) => {
+          const next = { ...schedMap };
+          if (date) next[id] = date;
+          else delete next[id];
+          setSchedMap(next);
+          clSchedSave(next);
+        }}
       />
 
       <div className="flex h-[calc(100vh-8rem)] lg:h-[calc(100vh-4rem)] overflow-hidden bg-[#0f1117]">

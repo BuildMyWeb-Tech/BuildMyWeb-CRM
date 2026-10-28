@@ -52,24 +52,18 @@ export default function LeadSourcingPage() {
       if (!res.ok) { setError(data?.error ?? "Something went wrong."); return; }
       const businesses: SearchBusiness[] = data.businesses ?? [];
       setPreview((prev) => {
-        if (prev) {
-          // "Add more" mode — append, dedup by placeId
-          const existingIds = new Set(prev.map((b) => b.placeId));
-          const newOnes = businesses.filter((b) => !b.placeId || !existingIds.has(b.placeId));
-          return [...prev, ...newOnes];
-        }
-        return businesses;
-      });
-      // Select all new rows by default
-      setSelected((prev) => {
-        const s = new Set(prev);
-        if (!preview) {
-          businesses.forEach((_, i) => s.add(i));
-        } else {
-          const base = preview.length;
-          businesses.forEach((_, i) => s.add(base + i));
-        }
-        return s;
+        const base = prev ?? [];
+        const existingIds = new Set(base.map((b) => b.placeId).filter(Boolean));
+        const existingPhones = new Set(base.map((b) => b.phone).filter(Boolean));
+        const newOnes = businesses.filter(
+          (b) =>
+            (!b.placeId || !existingIds.has(b.placeId)) &&
+            (!b.phone || !existingPhones.has(b.phone)),
+        );
+        const merged = [...base, ...newOnes];
+        // Select all rows (including newly added)
+        setSelected(new Set(merged.map((_, i) => i)));
+        return merged;
       });
     } catch {
       setError("Could not reach the server. Try again.");

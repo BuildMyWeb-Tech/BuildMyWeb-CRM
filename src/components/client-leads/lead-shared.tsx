@@ -605,12 +605,16 @@ export function LeadFormDialog({
   initial,
   members,
   onSaved,
+  initialShowDate,
+  onShowDateChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: ClientLead | null;
   members: AccountMember[];
   onSaved: () => void;
+  initialShowDate?: string;
+  onShowDateChange?: (id: string, date: string | null) => void;
 }) {
   const [title, setTitle] = useState("");
   const [phone, setPhone] = useState("");
@@ -620,6 +624,7 @@ export function LeadFormDialog({
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpTime, setFollowUpTime] = useState("");
   const [allocatedUserIds, setAllocatedUserIds] = useState<string[]>([]);
+  const [showDate, setShowDate] = useState("");
   // Only meaningful when creating (initial === null) — once a lead
   // exists, adding more tasks goes through the card's own "+" (see
   // TaskChecklist), same UI either way, just after the lead exists
@@ -643,11 +648,12 @@ export function LeadFormDialog({
     setAllocatedUserIds(
       initial?.allocated_user_ids?.length ? initial.allocated_user_ids : initial?.allocated_user_id ? [initial.allocated_user_id] : [],
     );
+    setShowDate(initialShowDate ?? "");
     setNewTasks([""]);
     // mark mounted after initial load so debounce doesn't fire on first render
     const t = setTimeout(() => { mountedRef.current = true; }, 200);
     return () => clearTimeout(t);
-  }, [open, initial]);
+  }, [open, initial, initialShowDate]);
 
   // Auto-save debounce (edit mode only)
   useEffect(() => {
@@ -726,6 +732,11 @@ export function LeadFormDialog({
             body: JSON.stringify({ title: taskTitle }),
           });
         }
+        // apply show date for the newly-created lead
+        if (onShowDateChange) onShowDateChange(lead.id, showDate || null);
+      } else {
+        // update show date on edit
+        if (onShowDateChange) onShowDateChange(initial.id, showDate || null);
       }
 
       onOpenChange(false);
@@ -807,6 +818,18 @@ export function LeadFormDialog({
           <div className="grid gap-2">
             <Label className="text-muted-foreground">Notes</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="border-border bg-muted text-foreground" rows={3} />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-muted-foreground">Schedule until (show date)</Label>
+            <Input
+              type="date"
+              value={showDate}
+              onChange={(e) => setShowDate(e.target.value)}
+              className="border-border bg-muted text-foreground"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Set a date to move this lead to &quot;Scheduled&quot; tab until then. Leave blank to keep in &quot;Current&quot;.
+            </p>
           </div>
           {!initial && (
             <div className="grid gap-2">
