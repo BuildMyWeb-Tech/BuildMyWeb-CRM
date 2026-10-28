@@ -6,8 +6,9 @@ import { cn } from '@/lib/utils';
 import type { SelectedContact } from './qr-step1-recipients';
 import type { MediaAttachment } from './qr-step2-compose';
 
-const MIN_INTERVAL_MS = 500;
-const DEFAULT_INTERVAL_MS = 1000;
+const MIN_INTERVAL_MS = 700;
+const MAX_INTERVAL_MS = 5000;
+const DEFAULT_INTERVAL_MS = 1500;
 
 interface Props {
   recipients: SelectedContact[];
@@ -69,12 +70,8 @@ export function QrStep3Review({
     return d;
   }
 
-  function validateInterval(): number | null {
-    const ms = Math.round(intervalSec * 1000);
-    if (ms < MIN_INTERVAL_MS) {
-      return null;
-    }
-    return ms;
+  function validateInterval(): number {
+    return Math.max(MIN_INTERVAL_MS, Math.round(intervalSec * 1000));
   }
 
   async function handleSubmit() {
@@ -82,7 +79,6 @@ export function QrStep3Review({
     if (sendMode === 'scheduled' && scheduledAt === null) return; // error set
 
     const sendIntervalMs = validateInterval();
-    if (sendIntervalMs === null) return;
 
     await onSend({
       scheduledAt,
@@ -215,24 +211,21 @@ export function QrStep3Review({
       {/* Send interval */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">
-          Sending interval (seconds between messages)
+          Delay between messages: <span className="text-muted-foreground">{intervalSec.toFixed(1)}s</span>
         </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min="0.5"
-            step="0.5"
-            value={intervalSec}
-            onChange={(e) => setIntervalSec(parseFloat(e.target.value) || 1)}
-            className="w-24 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <span className="text-xs text-muted-foreground">
-            Minimum 0.5 s · Default 1 s · Higher values reduce delivery speed
-          </span>
+        <input
+          type="range"
+          min={MIN_INTERVAL_MS}
+          max={MAX_INTERVAL_MS}
+          step={100}
+          value={Math.round(intervalSec * 1000)}
+          onChange={(e) => setIntervalSec(Number(e.target.value) / 1000)}
+          className="w-full accent-primary"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>0.7s fast</span>
+          <span>5s safe</span>
         </div>
-        {intervalSec * 1000 < MIN_INTERVAL_MS && (
-          <p className="text-xs text-red-400">Minimum interval is 0.5 seconds.</p>
-        )}
       </div>
 
       {/* Navigation */}
@@ -247,11 +240,11 @@ export function QrStep3Review({
         </button>
         <button
           type="button"
-          disabled={isSubmitting || willSendCount === 0 || intervalSec * 1000 < MIN_INTERVAL_MS}
+          disabled={isSubmitting || willSendCount === 0}
           onClick={handleSubmit}
           className={cn(
             'flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-colors',
-            !isSubmitting && willSendCount > 0 && intervalSec * 1000 >= MIN_INTERVAL_MS
+            !isSubmitting && willSendCount > 0
               ? 'bg-primary text-primary-foreground hover:bg-primary/90'
               : 'cursor-not-allowed bg-muted text-muted-foreground',
           )}

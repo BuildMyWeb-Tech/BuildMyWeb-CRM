@@ -1,28 +1,32 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { MessageSquare, ImagePlus, Video, X, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { MessageSquare, ImagePlus, Video, Volume2, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import type { SelectedContact } from './qr-step1-recipients';
 
 const MAX_TEXT_LENGTH = 4096;
-const MAX_MEDIA_BYTES = 16 * 1024 * 1024; // 16 MB
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // 25 MB (matching GYM)
 
 const ACCEPTED_IMAGE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ACCEPTED_VIDEO = ['video/mp4', 'video/3gpp'];
-const ACCEPTED_MIME = [...ACCEPTED_IMAGE, ...ACCEPTED_VIDEO];
+const ACCEPTED_AUDIO = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/aac', 'audio/mp4', 'audio/webm'];
+const ACCEPTED_MIME = [...ACCEPTED_IMAGE, ...ACCEPTED_VIDEO, ...ACCEPTED_AUDIO];
 
-function mimeToMediaType(mime: string): 'image' | 'video' {
-  return mime.startsWith('video/') ? 'video' : 'image';
+function mimeToMediaType(mime: string): 'image' | 'video' | 'audio' {
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'image';
 }
 
 export interface MediaAttachment {
   url: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   filename: string;
   mimetype: string;
   caption: string;
+  localPreview?: string; // object URL for immediate preview
 }
 
 interface Props {
@@ -49,20 +53,33 @@ export function QrStep2Compose({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const trimmed = messageText.trim();
-  const canNext = trimmed.length > 0 && trimmed.length <= MAX_TEXT_LENGTH;
+  // Allow either text OR media (matching GYM: either message or mediaUrl is fine)
+  const canNext = (trimmed.length > 0 || media !== null) && trimmed.length <= MAX_TEXT_LENGTH;
   const validCount = recipients.filter((r) => r.hasValidPhone).length;
 
   async function handleFile(file: File) {
     setUploadError(null);
 
     if (!ACCEPTED_MIME.includes(file.type)) {
-      setUploadError(`Unsupported file type: ${file.type}. Use JPEG, PNG, WebP, GIF, MP4, or 3GPP.`);
+      setUploadError(`Unsupported file type: ${file.type}. Use JPEG, PNG, WebP, GIF, MP4, 3GPP, MP3, OGG, WAV, or AAC.`);
       return;
     }
     if (file.size > MAX_MEDIA_BYTES) {
-      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 16 MB.`);
+      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 25 MB.`);
       return;
     }
+
+    // Show local preview immediately (GYM pattern)
+    const localPreview = URL.createObjectURL(file);
+    const mediaType = mimeToMediaType(file.type);
+    onMediaChange({
+      url: '',
+      type: mediaType,
+      filename: file.name,
+      mimetype: file.type,
+      caption: media?.caption ?? '',
+      localPreview,
+    });
 
     setUploading(true);
     try {
@@ -80,13 +97,16 @@ export function QrStep2Compose({
 
       onMediaChange({
         url: urlData.publicUrl,
-        type: mimeToMediaType(file.type),
+        type: mediaType,
         filename: file.name,
         mimetype: file.type,
         caption: media?.caption ?? '',
+        localPreview,
       });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed.');
+      onMediaChange(null);
+      URL.revokeObjectURL(localPreview);
     } finally {
       setUploading(false);
     }
@@ -105,9 +125,12 @@ export function QrStep2Compose({
   }
 
   function removeMedia() {
+    if (media?.localPreview) URL.revokeObjectURL(media.localPreview);
     onMediaChange(null);
     setUploadError(null);
   }
+
+  const MediaIcon = media?.type === 'video' ? Video : media?.type === 'audio' ? Volume2 : ImagePlus;
 
   return (
     <div className="space-y-5">
@@ -123,6 +146,7 @@ export function QrStep2Compose({
         <label className="flex items-center gap-1.5 text-sm font-medium text-foreground">
           <MessageSquare className="h-4 w-4" />
           Message
+          <span className="font-normal text-muted-foreground text-xs">(optional if media is attached)</span>
         </label>
         <textarea
           value={messageText}
@@ -133,7 +157,7 @@ export function QrStep2Compose({
           className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 resize-none"
         />
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{trimmed.length === 0 ? 'Required' : ''}</span>
+          <span>{!canNext && trimmed.length === 0 && !media ? 'Write a message or attach media' : ''}</span>
           <span className={cn(messageText.length > MAX_TEXT_LENGTH * 0.9 ? 'text-orange-400' : '')}>
             {messageText.length} / {MAX_TEXT_LENGTH}
           </span>
@@ -150,16 +174,16 @@ export function QrStep2Compose({
         {media ? (
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted">
-                {media.type === 'video' ? (
-                  <Video className="h-5 w-5 text-muted-foreground" />
-                ) : (
+              {/* Preview thumbnail */}
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-muted overflow-hidden">
+                {media.type === 'image' && media.localPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={media.url}
-                    alt="attachment preview"
-                    className="h-12 w-12 rounded-md object-cover"
-                  />
+                  <img src={media.localPreview} alt="preview" className="h-14 w-14 rounded-md object-cover" />
+                ) : media.type === 'image' && media.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={media.url} alt="preview" className="h-14 w-14 rounded-md object-cover" />
+                ) : (
+                  <MediaIcon className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
               <div className="flex-1 min-w-0 space-y-1.5">
@@ -174,12 +198,21 @@ export function QrStep2Compose({
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
+                {/* Upload status */}
+                {uploading ? (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-500">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Uploading…
+                  </p>
+                ) : media.url ? (
+                  <p className="flex items-center gap-1.5 text-xs text-green-500">
+                    <CheckCircle2 className="h-3 w-3" /> Uploaded
+                  </p>
+                ) : null}
+                {/* Caption */}
                 <input
                   type="text"
                   value={media.caption}
-                  onChange={(e) =>
-                    onMediaChange({ ...media, caption: e.target.value })
-                  }
+                  onChange={(e) => onMediaChange({ ...media, caption: e.target.value })}
                   placeholder="Add a caption (optional)"
                   className="w-full rounded border border-border bg-muted/40 px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary/30"
                 />
@@ -199,10 +232,10 @@ export function QrStep2Compose({
               <>
                 <ImagePlus className="h-6 w-6 text-muted-foreground" />
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Click or drag & drop an image or video
+                  Click or drag & drop an image, video or audio
                 </p>
                 <p className="text-xs text-muted-foreground/70">
-                  JPEG, PNG, WebP, GIF, MP4, 3GPP · max 16 MB
+                  JPEG, PNG, WebP, GIF, MP4, 3GPP, MP3, OGG, WAV · max 25 MB
                 </p>
               </>
             )}
