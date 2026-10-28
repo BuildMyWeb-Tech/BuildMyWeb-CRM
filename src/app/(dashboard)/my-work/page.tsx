@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown, ChevronUp, ChevronsUpDown, Loader2,
-  ClipboardList, Package, UserPlus, Eye, EyeOff, Share2, Calendar, Clock, RotateCcw,
+  ClipboardList, Package, UserPlus, Eye, EyeOff, Share2, Calendar, Clock, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createClient } from "@/lib/supabase/client";
@@ -344,6 +344,10 @@ export default function MyWorkPage() {
             <span><span className="font-semibold text-white">{currentPt.length}</span> project</span>
             <span><span className="font-semibold text-white">{currentPd.length}</span> product</span>
             <span><span className="font-semibold text-white">{currentCl.length}</span> enquiries</span>
+            <button type="button" onClick={load} title="Refresh"
+              className="text-slate-500 hover:text-white transition-colors p-1 rounded hover:bg-[#2a3045]">
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
         {/* Tab bar */}
@@ -604,8 +608,11 @@ export default function MyWorkPage() {
                   <thead className="sticky top-0 z-10 bg-[#0f1117] border-b border-[#2a3045]">
                     <tr>
                       <th className="px-4 py-2 text-left">
-                        <SortBtn label="Task" active={pdSort === "title"} dir={pdDir}
-                          onClick={() => toggle("title", pdSort, pdDir, setPdSort, setPdDir, LS_SORT_PD)} />
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Task</span>
+                          <SortBtn label="Product" active={pdSort === "title"} dir={pdDir}
+                            onClick={() => toggle("title", pdSort, pdDir, setPdSort, setPdDir, LS_SORT_PD)} />
+                        </div>
                       </th>
                       <th className="px-3 py-2 text-left">
                         <SortBtn label="Stage" active={pdSort === "stage"} dir={pdDir}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useMemo, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   UserPlus, Plus, Loader2, MoreVertical,
   List as ListIcon, LayoutGrid, Search, ArrowUpRight, ExternalLink,
   PauseCircle, PlayCircle, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle,
-  FolderOpen, Info, Sparkles, Calendar, Pencil, Share2,
+  FolderOpen, Info, Sparkles, Calendar, Pencil, Share2, EyeOff, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,17 +33,31 @@ async function fetchLeads(): Promise<ClientLead[]> {
   return (await res.json()).leads ?? [];
 }
 
-type TabKey = "all" | "discussion" | "hold" | "converted" | "rejected";
+type TabKey = "current" | "scheduled" | "all";
 type SortField = "title" | "priority" | "assignee" | "follow_up" | "status";
 type SortDir = "asc" | "desc";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "current", label: "Current" },
+  { key: "scheduled", label: "Scheduled" },
   { key: "all", label: "All" },
-  { key: "discussion", label: "Discussion" },
-  { key: "hold", label: "Hold" },
-  { key: "converted", label: "Converted" },
-  { key: "rejected", label: "Rejected" },
 ];
+
+const CL_SCHED_KEY = "cl-sched-map"; // localStorage key: Record<id, dateStr>
+
+function clSchedLoad(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(CL_SCHED_KEY) ?? "{}"); } catch { return {}; }
+}
+function clSchedSave(map: Record<string, string>) {
+  try { localStorage.setItem(CL_SCHED_KEY, JSON.stringify(map)); } catch {}
+}
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
+function fmtSchedDate(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
@@ -103,7 +118,12 @@ export default function ClientLeadsPage() {
     try { return window.localStorage.getItem("cl-view") === "grid" ? "grid" : "table"; } catch { return "table"; }
   });
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [activeTab, setActiveTab] = useState<TabKey>("current");
+  const [schedMap, setSchedMap] = useState<Record<string, string>>(() => clSchedLoad());
+  const [hideMenuId, setHideMenuId] = useState<string | null>(null);
+  const [hideMenuPos, setHideMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const eyeBtnRef = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  const hideMenuRef = useRef<HTMLDivElement | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<"all" | LeadPriority>(() => {
     try { return (window.localStorage.getItem("cl-priority") as LeadPriority) || "all"; } catch { return "all"; }
   });
@@ -116,6 +136,29 @@ export default function ClientLeadsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ClientLead | null>(null);
+
+  useEffect(() => {
+    if (!hideMenuId) return;
+    function handler(e: MouseEvent) {
+      const btn = eyeBtnRef.current.get(hideMenuId!);
+      const menu = hideMenuRef.current;
+      if (btn?.contains(e.target as Node) || menu?.contains(e.target as Node)) return;
+      setHideMenuId(null); setHideMenuPos(null);
+    }
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [hideMenuId]);
+
+  function scheduleCl(id: string, date: string) {
+    const next = { ...schedMap, [id]: date };
+    setSchedMap(next); clSchedSave(next);
+    setHideMenuId(null); setHideMenuPos(null);
+  }
+  function unscheduleCl(id: string) {
+    const next = { ...schedMap };
+    delete next[id];
+    setSchedMap(next); clSchedSave(next);
+  }
 
   function changeViewMode(mode: "table" | "grid") {
     setViewMode(mode);
@@ -138,17 +181,17 @@ export default function ClientLeadsPage() {
   const membersById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
   const allLeads = leads ?? [];
 
+  const today = todayStr();
   const tabCounts = useMemo(() => {
-    const counts: Record<TabKey, number> = { all: 0, discussion: 0, hold: 0, converted: 0, rejected: 0 };
+    const counts: Record<TabKey, number> = { current: 0, scheduled: 0, all: 0 };
     for (const lead of allLeads) {
       counts.all++;
-      if (lead.status === "in_discussion") counts.discussion++;
-      if (lead.status === "hold") counts.hold++;
-      if (lead.status === "confirmed") counts.converted++;
-      if (lead.status === "rejected") counts.rejected++;
+      const sd = schedMap[lead.id];
+      if (sd && sd > today) counts.scheduled++;
+      else counts.current++;
     }
     return counts;
-  }, [allLeads]);
+  }, [allLeads, schedMap, today]);
 
   const stats = useMemo(() => ({
     total: allLeads.length,
@@ -165,10 +208,10 @@ export default function ClientLeadsPage() {
 
   const visibleLeads = useMemo(() => allLeads
     .filter((lead) => {
-      if (activeTab === "discussion" && lead.status !== "in_discussion") return false;
-      if (activeTab === "hold" && lead.status !== "hold") return false;
-      if (activeTab === "converted" && lead.status !== "confirmed") return false;
-      if (activeTab === "rejected" && lead.status !== "rejected") return false;
+      const sd = schedMap[lead.id];
+      const isScheduled = !!(sd && sd > today);
+      if (activeTab === "current" && isScheduled) return false;
+      if (activeTab === "scheduled" && !isScheduled) return false;
       if (priorityFilter !== "all" && lead.priority !== priorityFilter) return false;
       if (peopleFilter !== "all") {
         const ids = lead.allocated_user_ids?.length ? lead.allocated_user_ids : lead.allocated_user_id ? [lead.allocated_user_id] : [];
@@ -202,9 +245,9 @@ export default function ClientLeadsPage() {
         return dir * a.next_follow_up_at.localeCompare(b.next_follow_up_at);
       }
       return 0;
-    }), [allLeads, activeTab, priorityFilter, peopleFilter, statusFilter, search, overdueOnly, sortField, sortDir]);
+    }), [allLeads, activeTab, schedMap, today, priorityFilter, peopleFilter, statusFilter, search, overdueOnly, sortField, sortDir]);
 
-  const isFiltered = priorityFilter !== "all" || peopleFilter !== "all" || statusFilter !== "all" || overdueOnly || search.trim() !== "" || activeTab !== "all";
+  const isFiltered = priorityFilter !== "all" || peopleFilter !== "all" || statusFilter !== "all" || overdueOnly || search.trim() !== "" || activeTab !== "current";
 
   async function handleConfirm(lead: ClientLead) {
     if (!window.confirm(`Confirm "${lead.title}" as a client? This moves it into Client Directory.`)) return;
@@ -487,12 +530,36 @@ export default function ClientLeadsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[lead.status] ?? "text-slate-400"}`}>
-                              {STATUS_DISPLAY[lead.status] ?? lead.status}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[lead.status] ?? "text-slate-400"}`}>
+                                {STATUS_DISPLAY[lead.status] ?? lead.status}
+                              </span>
+                              {schedMap[lead.id] && schedMap[lead.id] > today && (
+                                <span className="text-[10px] text-orange-400">Until {fmtSchedDate(schedMap[lead.id])}</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
+                              {schedMap[lead.id] && schedMap[lead.id] > today ? (
+                                <button type="button" title="Unschedule" onClick={() => unscheduleCl(lead.id)}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg text-orange-400 hover:bg-[#2a3045] hover:text-orange-300 transition-colors">
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </button>
+                              ) : (
+                                <button type="button" title="Schedule for later"
+                                  ref={(el) => { eyeBtnRef.current.set(lead.id, el); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (hideMenuId === lead.id) { setHideMenuId(null); setHideMenuPos(null); return; }
+                                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                    setHideMenuPos({ top: rect.bottom + 4, left: rect.left });
+                                    setHideMenuId(lead.id);
+                                  }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-orange-400 transition-colors">
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                               <button type="button" title="Share via WhatsApp"
                                 onClick={(e) => { e.stopPropagation(); const base = typeof window !== "undefined" ? window.location.origin : ""; const name = lead.title || "Client"; const text = `Hi, please check this client enquiry in BuildMyWeb CRM:\n*${name}*\nLogin at: ${base}/client-leads/${lead.id}`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank"); }}
                                 className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-[#2a3045] hover:text-green-400 transition-colors">
@@ -610,6 +677,25 @@ export default function ClientLeadsPage() {
           </div>
         </div>
       </div>
+
+      {/* Schedule portal menu */}
+      {hideMenuId && hideMenuPos && typeof window !== "undefined" && createPortal(
+        <div ref={hideMenuRef}
+          style={{ position: "fixed", top: hideMenuPos.top, left: hideMenuPos.left, zIndex: 9999 }}
+          className="rounded-lg border border-[#2a3045] bg-[#1a1f2e] py-1 shadow-xl min-w-[160px]">
+          <button type="button" className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-[#2a3045] transition-colors"
+            onClick={() => scheduleCl(hideMenuId, tomorrowStr())}>
+            Hide until tomorrow
+          </button>
+          <label className="block px-3 py-2 text-sm text-slate-300 hover:bg-[#2a3045] transition-colors cursor-pointer">
+            <span className="block text-[11px] text-slate-500 mb-1">Pick date</span>
+            <input type="date" min={tomorrowStr()}
+              className="w-full rounded border border-[#2a3045] bg-[#0f1117] px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+              onChange={(e) => { if (e.target.value) scheduleCl(hideMenuId, e.target.value); }} />
+          </label>
+        </div>,
+        document.body
+      )}
     </>
   );
 }

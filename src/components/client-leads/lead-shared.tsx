@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, X, Pencil, Check, ArrowUpRight, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -626,9 +626,12 @@ export function LeadFormDialog({
   // instead of before.
   const [newTasks, setNewTasks] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { mountedRef.current = false; return; }
+    setAutoSaved(false);
     setTitle(initial?.title ?? "");
     setPhone(initial?.phone ?? "");
     setNotes(initial?.notes ?? "");
@@ -641,7 +644,37 @@ export function LeadFormDialog({
       initial?.allocated_user_ids?.length ? initial.allocated_user_ids : initial?.allocated_user_id ? [initial.allocated_user_id] : [],
     );
     setNewTasks([""]);
+    // mark mounted after initial load so debounce doesn't fire on first render
+    const t = setTimeout(() => { mountedRef.current = true; }, 200);
+    return () => clearTimeout(t);
   }, [open, initial]);
+
+  // Auto-save debounce (edit mode only)
+  useEffect(() => {
+    if (!initial || !mountedRef.current || !title.trim()) return;
+    const t = setTimeout(async () => {
+      const { iso, hasTime } = combineDateTime(followUpDate, followUpTime);
+      const payload = {
+        title: title.trim(),
+        phone: phone.trim() || null,
+        notes: notes.trim() || null,
+        priority,
+        source: source || null,
+        next_follow_up_at: iso,
+        next_follow_up_has_time: hasTime,
+        allocated_user_id: allocatedUserIds[0] ?? null,
+        allocated_user_ids: allocatedUserIds,
+      };
+      const res = await fetch(`/api/client-leads/${initial.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) { setAutoSaved(true); onSaved(); }
+    }, 800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, phone, notes, priority, source, followUpDate, followUpTime, allocatedUserIds]);
 
   function updateTaskDraft(index: number, value: string) {
     setNewTasks((prev) => prev.map((t, i) => (i === index ? value : t)));
@@ -707,7 +740,10 @@ export function LeadFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg bg-popover border-border max-h-[88vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
-          <DialogTitle className="text-popover-foreground">{initial ? `Edit ${initial.title}` : "New lead"}</DialogTitle>
+          <DialogTitle className="text-popover-foreground flex items-center gap-2">
+          {initial ? `Edit ${initial.title}` : "New lead"}
+          {initial && autoSaved && <span className="text-[10px] font-normal text-green-500">Auto-saved</span>}
+        </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">

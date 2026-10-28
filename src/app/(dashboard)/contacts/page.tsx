@@ -58,7 +58,9 @@ import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { useTranslations } from 'next-intl';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [25, 50] as const;
+type PageSizeOption = typeof PAGE_SIZE_OPTIONS[number];
+type CampaignRow = { name: string; category: string | null; count: number };
 
 interface ContactWithTags extends Contact {
   tags?: Tag[];
@@ -74,12 +76,19 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(25);
   const [totalCount, setTotalCount] = useState(0);
   // Tag filter — contacts shown must have ANY of these tags (OR).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   // Campaign filter — contacts with a matching campaign_name.
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<string[]>([]);
+
+  // Campaign list view state
+  const [campaignView, setCampaignView] = useState(false);
+  const [campaignRows, setCampaignRows] = useState<CampaignRow[]>([]);
+  const [campaignRowsLoading, setCampaignRowsLoading] = useState(false);
+  const [deletingCampaign, setDeletingCampaign] = useState<string | null>(null);
 
   // Modals
   const [formOpen, setFormOpen] = useState(false);
@@ -118,6 +127,36 @@ export default function ContactsPage() {
     }
   }, [supabase]);
 
+  const fetchCampaignRows = useCallback(async () => {
+    setCampaignRowsLoading(true);
+    const { data } = await supabase
+      .from('contacts')
+      .select('campaign_name, search_category')
+      .not('campaign_name', 'is', null);
+    if (data) {
+      const map = new Map<string, { category: string | null; count: number }>();
+      for (const row of data) {
+        const name = row.campaign_name as string;
+        if (!name) continue;
+        if (!map.has(name)) map.set(name, { category: (row.search_category as string | null) ?? null, count: 0 });
+        map.get(name)!.count++;
+      }
+      setCampaignRows([...map.entries()].map(([name, v]) => ({ name, category: v.category, count: v.count })).sort((a, b) => a.name.localeCompare(b.name)));
+    }
+    setCampaignRowsLoading(false);
+  }, [supabase]);
+
+  async function handleDeleteCampaign(campaignName: string) {
+    if (!window.confirm(`Delete all contacts in campaign "${campaignName}"? This cannot be undone.`)) return;
+    setDeletingCampaign(campaignName);
+    const { error } = await supabase.from('contacts').delete().eq('campaign_name', campaignName);
+    setDeletingCampaign(null);
+    if (error) { toast.error('Failed to delete campaign'); return; }
+    toast.success(`Campaign "${campaignName}" deleted`);
+    fetchCampaigns();
+    fetchCampaignRows();
+  }
+
   const fetchTags = useCallback(async () => {
     const { data } = await supabase.from('tags').select('*');
     if (data) {
@@ -141,8 +180,8 @@ export default function ContactsPage() {
     // act on rows the user can no longer see.
     setSelected(new Set());
 
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
     const term = search.trim();
 
     let contactRows: Contact[];
@@ -156,7 +195,7 @@ export default function ContactsPage() {
       const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
         p_tag_ids: selectedTagIds,
         p_search: term || null,
-        p_limit: PAGE_SIZE,
+        p_limit: pageSize,
         p_offset: from,
       });
       if (seq !== fetchSeq.current) return; // superseded by a newer fetch
@@ -226,7 +265,7 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, selectedCampaign, tagsMap, t]);
+  }, [supabase, page, pageSize, search, selectedTagIds, selectedCampaign, tagsMap, t]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -338,7 +377,7 @@ export default function ContactsPage() {
     setBulkDeleteOpen(false);
   }
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const totalPages = Math.ceil(totalCount / pageSize);
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
 
@@ -374,6 +413,14 @@ export default function ContactsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant={campaignView ? "default" : "outline"}
+            onClick={() => { setCampaignView((v) => { if (!v) fetchCampaignRows(); return !v; }); }}
+            className={campaignView ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-muted"}
+          >
+            <Users className="size-4" />
+            Campaigns
+          </Button>
           {canEditSettings && (
             <Button
               variant="outline"
@@ -406,7 +453,50 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Search + tag filter */}
+      {/* Campaign list view */}
+      {campaignView && (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">Campaigns</span>
+            {campaignRowsLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+          </div>
+          {campaignRows.length === 0 && !campaignRowsLoading ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">No campaigns found</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead>Campaign Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Contacts</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaignRows.map((row) => (
+                  <TableRow key={row.name} className="border-border hover:bg-muted/30 cursor-pointer"
+                    onClick={() => { setCampaignView(false); setSelectedCampaign(row.name); setPage(0); }}>
+                    <TableCell className="font-medium text-foreground">{row.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.category ?? '—'}</TableCell>
+                    <TableCell className="text-foreground">{row.count}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm"
+                        disabled={deletingCampaign === row.name}
+                        onClick={() => handleDeleteCampaign(row.name)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2">
+                        {deletingCampaign === row.name ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      )}
+
+      {/* Search + tag filter + table + pagination */}
+      {!campaignView && <>
       <div className="space-y-2">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative w-full max-w-sm">
@@ -738,15 +828,27 @@ export default function ContactsPage() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {t('showingPagination', {
-              start: page * PAGE_SIZE + 1,
-              end: Math.min((page + 1) * PAGE_SIZE, totalCount),
-              total: totalCount
-            })}
-          </p>
+      {(totalPages > 1 || totalCount > 0) && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              {t('showingPagination', {
+                start: page * pageSize + 1,
+                end: Math.min((page + 1) * pageSize, totalCount),
+                total: totalCount
+              })}
+            </p>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">Show</span>
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <button key={n} type="button"
+                  onClick={() => { setPageSize(n); setPage(0); }}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${pageSize === n ? 'bg-primary/20 border-primary/40 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
@@ -772,6 +874,7 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+      </>}
 
       {/* Contact Form Dialog */}
       <ContactForm

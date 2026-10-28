@@ -106,27 +106,33 @@ async function placesTextSearch(query: string, apiKey: string, pageToken?: strin
 
 async function searchGooglePlaces(keyword: string, location: string, maxResults: number, apiKey: string): Promise<Business[]> {
   const query = `${keyword} in ${location}`
+  const seen = new Set<string>()
+  const results: Business[] = []
+  let nextToken: string | undefined
 
-  const data1 = await placesTextSearch(query, apiKey)
-  let rawPlaces: PlacesPlace[] = data1.places ?? []
-  let nextToken = data1.nextPageToken
-
-  // Fetch page 2 if needed and available
-  if (rawPlaces.length < maxResults && nextToken) {
-    await new Promise((r) => setTimeout(r, 2000))
+  // Keep fetching pages until we have maxResults unique results or run out of pages
+  // (max 5 pages to avoid infinite loops; Places API typically has 3 pages max)
+  for (let page = 0; page < 5; page++) {
+    if (page > 0) await new Promise((r) => setTimeout(r, 2000)) // rate limit
     try {
-      const data2 = await placesTextSearch(query, apiKey, nextToken)
-      rawPlaces = [...rawPlaces, ...(data2.places ?? [])]
+      const data = await placesTextSearch(query, apiKey, nextToken)
+      const places = data.places ?? []
+      for (const place of places) {
+        const biz = normalizeBusiness(place)
+        if (!biz.placeId || seen.has(biz.placeId)) continue
+        seen.add(biz.placeId)
+        results.push(biz)
+      }
+      nextToken = data.nextPageToken
+      if (!nextToken || results.length >= maxResults) break
     } catch (err) {
-      console.warn('[leads/generate] page 2 failed:', err instanceof Error ? err.message : err)
+      if (page === 0) throw err
+      console.warn(`[leads/generate] page ${page + 1} failed:`, err instanceof Error ? err.message : err)
+      break
     }
   }
 
-  // Normalize, dedup by placeId, trim to maxResults, sort by rating
-  const seen = new Set<string>()
-  return rawPlaces
-    .map(normalizeBusiness)
-    .filter((b) => { if (!b.placeId || seen.has(b.placeId)) return false; seen.add(b.placeId); return true })
+  return results
     .slice(0, maxResults)
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
 }
@@ -147,22 +153,28 @@ export async function POST(request: Request) {
   const count        = Math.min(Math.max(parseInt(body.count, 10) || 30, 1), 60)
   const campaignName = typeof body.campaign_name === 'string' ? body.campaign_name.trim() : null
 
-  if (!niche || !location) {
+  // If the frontend passes pre-fetched businesses (preview mode), skip the Places call
+  const previewBusinesses: Business[] | null = Array.isArray(body.businesses) && body.businesses.length > 0 ? body.businesses as Business[] : null
+
+  if (!previewBusinesses && (!niche || !location)) {
     return NextResponse.json({ error: 'niche and location are required' }, { status: 400 })
   }
 
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY
-  if (!apiKey) {
-    return NextResponse.json({ error: 'GOOGLE_PLACES_API_KEY is not configured on the server.' }, { status: 500 })
-  }
-
   let businesses: Business[]
-  try {
-    businesses = await searchGooglePlaces(niche, location, count, apiKey)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[leads/generate] Google Places search failed:', msg)
-    return NextResponse.json({ error: msg }, { status: 502 })
+  if (previewBusinesses) {
+    businesses = previewBusinesses
+  } else {
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: 'GOOGLE_PLACES_API_KEY is not configured on the server.' }, { status: 500 })
+    }
+    try {
+      businesses = await searchGooglePlaces(niche, location, count, apiKey)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[leads/generate] Google Places search failed:', msg)
+      return NextResponse.json({ error: msg }, { status: 502 })
+    }
   }
 
   const db = supabaseAdmin()

@@ -325,13 +325,14 @@ export default function BroadcastsPage() {
     if (selectedIds.size === 0 || bulkDeleting) return;
     if (!confirm(`Delete ${selectedIds.size} broadcast${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
     setBulkDeleting(true);
+    const ids = [...selectedIds];
     try {
-      await Promise.all([...selectedIds].map((id) =>
-        fetch(`/api/broadcasts/${id}`, { method: 'DELETE' })
-      ));
+      const supabase = createClient();
+      const { error } = await supabase.from('broadcasts').delete().in('id', ids);
+      if (error) throw error;
       setBroadcasts((prev) => prev.filter((b) => !selectedIds.has(b.id)));
       setSelectedIds(new Set());
-      toast.success(`Deleted ${selectedIds.size} broadcast${selectedIds.size > 1 ? 's' : ''}`);
+      toast.success(`Deleted ${ids.length} broadcast${ids.length > 1 ? 's' : ''}`);
     } catch {
       toast.error('Some deletes failed — please refresh');
     } finally {
