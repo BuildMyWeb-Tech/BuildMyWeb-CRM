@@ -160,6 +160,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/activity-log", labelKey: "activityLog", icon: Clock, minRole: "admin", pageKey: "activity_log" },
       { href: "/whatsapp-connect", labelKey: "whatsappConnect", icon: Zap, minRole: "admin" },
       { href: "/office/invoices", labelKey: "invoices", icon: FileText, minRole: "admin" },
+      { href: "/office/quotations", labelKey: "quotationGenerator", icon: PenSquare, minRole: "admin" },
     ],
   },
 ];

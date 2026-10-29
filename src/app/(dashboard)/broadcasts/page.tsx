@@ -19,6 +19,10 @@ import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import { InlineQrWizard } from '@/components/broadcasts/inline-qr-wizard';
+import { InlineCloudWizard } from '@/components/broadcasts/inline-cloud-wizard';
+
+type InlineView = 'list' | 'new-qr' | 'new';
 
 /**
  * Poll cadence while any broadcast is sending. Kept modest so we don't
@@ -34,6 +38,7 @@ export default function BroadcastsPage() {
   const t = useTranslations('Broadcasts.page');
   const tStatus = useTranslations('Broadcasts.status');
   const canCreate = useCan('send-messages');
+  const [inlineView, setInlineView] = useState<InlineView>('list');
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -376,6 +381,24 @@ export default function BroadcastsPage() {
     );
   }
 
+  // Inline wizard views — render instead of the list
+  if (inlineView === 'new-qr') {
+    return (
+      <InlineQrWizard
+        onCancel={() => setInlineView('list')}
+        onSuccess={(id) => { setInlineView('list'); fetchBroadcasts(); router.push(`/broadcasts/${id}`); }}
+      />
+    );
+  }
+  if (inlineView === 'new') {
+    return (
+      <InlineCloudWizard
+        onCancel={() => setInlineView('list')}
+        onSuccess={(id) => { setInlineView('list'); fetchBroadcasts(); router.push(`/broadcasts/${id}`); }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* QR worker offline warning */}
@@ -428,7 +451,7 @@ export default function BroadcastsPage() {
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"
-            onClick={() => router.push('/broadcasts/new-qr')}
+            onClick={() => setInlineView('new-qr')}
             className="border border-border bg-background text-foreground hover:bg-muted"
           >
             <Plus className="h-4 w-4" />
@@ -437,7 +460,7 @@ export default function BroadcastsPage() {
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"
-            onClick={() => router.push('/broadcasts/new')}
+            onClick={() => setInlineView('new')}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
@@ -482,7 +505,7 @@ export default function BroadcastsPage() {
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"
-            onClick={() => router.push('/broadcasts/new')}
+            onClick={() => setInlineView('new')}
             className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
