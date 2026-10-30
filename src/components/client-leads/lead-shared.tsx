@@ -625,6 +625,7 @@ export function LeadFormDialog({
   const [followUpTime, setFollowUpTime] = useState("");
   const [allocatedUserIds, setAllocatedUserIds] = useState<string[]>([]);
   const [showDate, setShowDate] = useState("");
+  const [autoFollowUp, setAutoFollowUp] = useState(false);
   // Only meaningful when creating (initial === null) — once a lead
   // exists, adding more tasks goes through the card's own "+" (see
   // TaskChecklist), same UI either way, just after the lead exists
@@ -734,6 +735,26 @@ export function LeadFormDialog({
         }
         // apply show date for the newly-created lead
         if (onShowDateChange) onShowDateChange(lead.id, showDate || null);
+        // auto follow-up sequence: D+1, D+3, D+7
+        if (autoFollowUp) {
+          const base = Date.now();
+          const offsets = [1, 3, 7];
+          for (const days of offsets) {
+            const d = new Date(base + days * 86400000);
+            await fetch(`/api/client-leads/${lead.id}/tasks`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: `Follow-up Day ${days} — ${trimmed}` }),
+            }).catch(() => {});
+          }
+          // Set first follow-up at D+1
+          const d1 = new Date(base + 86400000).toISOString();
+          await fetch(`/api/client-leads/${lead.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ next_follow_up_at: d1, next_follow_up_has_time: false }),
+          }).catch(() => {});
+        }
       } else {
         // update show date on edit
         if (onShowDateChange) onShowDateChange(initial.id, showDate || null);
@@ -831,6 +852,21 @@ export function LeadFormDialog({
               Set a date to move this lead to &quot;Scheduled&quot; tab until then. Leave blank to keep in &quot;Current&quot;.
             </p>
           </div>
+          {!initial && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+              <input
+                type="checkbox"
+                id="auto-follow-up"
+                checked={autoFollowUp}
+                onChange={(e) => setAutoFollowUp(e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-500"
+              />
+              <label htmlFor="auto-follow-up" className="text-xs text-slate-300 cursor-pointer flex-1">
+                <span className="font-medium text-blue-400">Auto Follow-up Sequence</span>
+                {" "}— auto-schedule tasks at Day 1, 3 &amp; 7 and set first follow-up tomorrow
+              </label>
+            </div>
+          )}
           {!initial && (
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Tasks</Label>

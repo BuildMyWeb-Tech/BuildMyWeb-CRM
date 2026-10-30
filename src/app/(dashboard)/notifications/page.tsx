@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { Notification } from "@/types";
-import { Bell, CheckCheck, Clock, Loader2, UserPlus } from "lucide-react";
+import { Bell, CheckCheck, Clock, Loader2, UserPlus, Filter } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -129,6 +129,8 @@ export default function NotificationsPage() {
     [markRead, router],
   );
 
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "unread" | "tasks" | "leads" | "system">("all");
+
   const unreadIds = notifications?.filter((n) => !n.read_at).map((n) => n.id) ?? [];
 
   const markAllRead = useCallback(async () => {
@@ -169,13 +171,29 @@ export default function NotificationsPage() {
     );
   }
 
+  const filteredNotifications = notifications.filter((n) => {
+    if (categoryFilter === "unread") return !n.read_at;
+    if (categoryFilter === "tasks") return n.type === "task_assigned" || n.type === "task_overdue" || n.type === "task_completed";
+    if (categoryFilter === "leads") return n.type === "lead_follow_up_due" || n.type === "conversation_assigned";
+    if (categoryFilter === "system") return n.type === "system" || n.type === "mentioned";
+    return true;
+  });
+
+  const categoryTabs = [
+    { key: "all" as const, label: "All", count: notifications.length },
+    { key: "unread" as const, label: "Unread", count: unreadIds.length },
+    { key: "tasks" as const, label: "Tasks", count: notifications.filter((n) => n.type === "task_assigned" || n.type === "task_overdue" || n.type === "task_completed").length },
+    { key: "leads" as const, label: "Leads", count: notifications.filter((n) => n.type === "lead_follow_up_due" || n.type === "conversation_assigned").length },
+    { key: "system" as const, label: "System", count: notifications.filter((n) => n.type === "system" || n.type === "mentioned").length },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+          <h1 className="text-2xl font-bold text-foreground">Notification Center</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Conversations other teammates assign to you show up here.
+            All activity — tasks, leads, messages, and system events.
           </p>
         </div>
         <Button
@@ -193,7 +211,26 @@ export default function NotificationsPage() {
         </Button>
       </div>
 
-      {notifications.length === 0 ? (
+      {/* Category tabs */}
+      <div className="flex items-center gap-1 border-b border-border pb-0 -mb-4">
+        {categoryTabs.map((tab) => (
+          <button key={tab.key} type="button" onClick={() => setCategoryFilter(tab.key)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              categoryFilter === tab.key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            {tab.label}
+            {tab.count > 0 && (
+              <span className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                categoryFilter === tab.key ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+              )}>{tab.count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {filteredNotifications.length === 0 ? (
         <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/40">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <Bell className="h-6 w-6 text-primary" />
@@ -208,7 +245,7 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {notifications.map((n) => {
+          {filteredNotifications.map((n) => {
             const Icon = TYPE_ICON[n.type] ?? Bell;
             const isUnread = !n.read_at;
             return (

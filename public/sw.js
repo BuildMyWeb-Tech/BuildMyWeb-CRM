@@ -1,21 +1,81 @@
-// Minimal service worker for PWA installability + push notifications.
-// No caching — this is a live CRM. Always hit the network.
+// PWA Service Worker — offline-first for key CRM pages, network-first for API/dynamic data
 
-self.addEventListener("install", () => {
+const CACHE_VERSION = "bmw-crm-v1";
+const STATIC_CACHE = `${CACHE_VERSION}-static`;
+const PAGE_CACHE = `${CACHE_VERSION}-pages`;
+
+// Key pages to cache for offline access
+const PRECACHE_ROUTES = [
+  "/",
+  "/client-leads",
+  "/daily-tasks",
+  "/notifications",
+  "/broadcasts",
+  "/contacts",
+  "/offline",
+];
+
+self.addEventListener("install", (event) => {
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then((cache) =>
+      cache.addAll(["/offline", "/icons/icon-192.png", "/icons/icon-512.png"]).catch(() => {})
+    )
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== STATIC_CACHE && k !== PAGE_CACHE).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (event) => {
-  // Pure passthrough — always hit the network, never serve from a cache.
-  event.respondWith(fetch(event.request));
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip non-GET, cross-origin, API, auth, Supabase requests
+  if (request.method !== "GET") return;
+  if (!url.origin.includes(self.location.origin)) return;
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
+  if (url.hostname.includes("supabase") || url.hostname.includes("facebook")) return;
+
+  // Network-first for _next (JS/CSS chunks) — fallback to cache on failure
+  if (url.pathname.startsWith("/_next/")) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(STATIC_CACHE).then((c) => c.put(request, clone)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // For key CRM pages: network-first, cache on success, serve cached version offline
+  event.respondWith(
+    fetch(request)
+      .then((res) => {
+        if (res.ok && PRECACHE_ROUTES.some((r) => url.pathname === r || url.pathname.startsWith(r + "/"))) {
+          const clone = res.clone();
+          caches.open(PAGE_CACHE).then((c) => c.put(request, clone)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => {
+        return caches.match(request).then((cached) => {
+          if (cached) return cached;
+          return caches.match("/offline").then((offlinePage) => offlinePage ?? new Response("Offline", { status: 503 }));
+        });
+      })
+  );
 });
 
 // ── Push notification handler ─────────────────────────────────────────────────
-// The server sends a push with JSON payload: { title, body, url }
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload = { title: "BuildMyWeb CRM", body: "", url: "/" };

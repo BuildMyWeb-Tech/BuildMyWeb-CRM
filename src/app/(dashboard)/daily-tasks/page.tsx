@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle,
+  ListTodo, CheckSquare, Clock, AlertTriangle, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { UnifiedTasksView, ProjectsPanel } from "@/components/daily-tasks/unified-tasks-view";
 import { toast } from "sonner";
 
+import Link from "next/link";
 import type { Project } from "@/types";
 
 interface TaskStats {
@@ -143,11 +144,17 @@ export default function DailyTasksPage() {
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Header */}
         <div className="shrink-0 px-4 pt-4 pb-4 sm:px-6 sm:pt-6">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="rounded-lg bg-blue-500/10 p-2">
-              <ListTodo className="h-5 w-5 text-blue-400" />
+          <div className="flex items-center justify-between gap-2.5 mb-1">
+            <div className="flex items-center gap-2.5">
+              <div className="rounded-lg bg-blue-500/10 p-2">
+                <ListTodo className="h-5 w-5 text-blue-400" />
+              </div>
+              <h1 className="text-xl font-bold text-white sm:text-2xl">Project Tasks</h1>
             </div>
-            <h1 className="text-xl font-bold text-white sm:text-2xl">Project Tasks</h1>
+            <Link href="/daily-tasks/recurring"
+              className="flex items-center gap-1.5 rounded-lg border border-[#2a3045] bg-[#1a1f2e] px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:border-blue-500/40 transition-colors">
+              <RotateCcw className="h-3.5 w-3.5" /> Recurring
+            </Link>
           </div>
         </div>
 

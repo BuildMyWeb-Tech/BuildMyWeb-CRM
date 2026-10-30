@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Radio, Plus, Loader2, AlertTriangle, RefreshCw, Search, Trash2, Download } from 'lucide-react';
+import { Radio, Plus, Loader2, AlertTriangle, RefreshCw, Search, Trash2, Download, BarChart3, TrendingUp } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -448,6 +448,12 @@ export default function BroadcastsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => router.push('/broadcasts/analytics')} className="border-[#2a3045] text-slate-300 hover:text-white">
+            <BarChart3 className="h-4 w-4 mr-1" /> Analytics
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => router.push('/broadcasts/campaign-roi')} className="border-[#2a3045] text-slate-300 hover:text-white">
+            <TrendingUp className="h-4 w-4 mr-1" /> ROI
+          </Button>
           <GatedButton
             canAct={canCreate}
             gateReason="create broadcasts"

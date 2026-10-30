@@ -8,7 +8,7 @@ import {
   List as ListIcon, LayoutGrid, Search, ArrowUpRight, ExternalLink,
   PauseCircle, PlayCircle, CheckCircle2, XCircle,
   ChevronDown, ChevronUp, ChevronsUpDown, AlertTriangle,
-  FolderOpen, Info, Sparkles, Calendar, Pencil, Share2, EyeOff, RotateCcw,
+  FolderOpen, Info, Sparkles, Calendar, Pencil, Share2, EyeOff, RotateCcw, GripVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ async function fetchLeads(): Promise<ClientLead[]> {
 }
 
 type TabKey = "current" | "scheduled" | "all";
-type SortField = "title" | "priority" | "assignee" | "follow_up" | "status";
+type SortField = "title" | "priority" | "assignee" | "follow_up" | "status" | "manual";
 type SortDir = "asc" | "desc";
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -57,6 +57,37 @@ function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); retur
 function fmtSchedDate(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function leadScore(lead: ClientLead): number {
+  let s = 0;
+  if (lead.priority === "high") s += 40;
+  else if (lead.priority === "medium") s += 25;
+  else s += 10;
+  if (lead.phone) s += 15;
+  if (lead.notes) s += 10;
+  if (lead.status === "in_discussion") s += 20;
+  else if (lead.status === "hold") s += 8;
+  else if (lead.status === "confirmed") s += 15;
+  const fu = lead.next_follow_up_at ? new Date(lead.next_follow_up_at) : null;
+  if (fu && fu >= new Date()) s += 5;
+  const tasks = (lead.tasks ?? []) as { is_done: boolean }[];
+  if (tasks.some((t) => !t.is_done)) s += 5;
+  return Math.min(100, s);
+}
+
+function scoreColor(score: number) {
+  if (score >= 70) return "bg-green-500/20 text-green-400 border-green-500/30";
+  if (score >= 40) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+  return "bg-red-500/20 text-red-400 border-red-500/30";
+}
+
+const CL_MANUAL_ORDER_KEY = "cl-manual-order";
+function clManualLoad(): Record<string, string[]> {
+  try { return JSON.parse(localStorage.getItem(CL_MANUAL_ORDER_KEY) ?? "{}"); } catch { return {}; }
+}
+function clManualSave(map: Record<string, string[]>) {
+  try { localStorage.setItem(CL_MANUAL_ORDER_KEY, JSON.stringify(map)); } catch {}
 }
 
 function getInitials(name: string) {
@@ -134,6 +165,9 @@ export default function ClientLeadsPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [sortField, setSortField] = useState<SortField>("status");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [manualOrderMap, setManualOrderMap] = useState<Record<string, string[]>>(() => clManualLoad());
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ClientLead | null>(null);
 
@@ -177,6 +211,27 @@ export default function ClientLeadsPage() {
     if (sortField === field) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("asc"); }
   }
+
+  function handleDragStart(id: string) { setDragId(id); }
+  function handleDragOver(e: React.DragEvent, id: string) { e.preventDefault(); setDragOverId(id); }
+  function handleDrop(e: React.DragEvent, targetId: string) {
+    e.preventDefault();
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const ids = visibleLeads.map((l) => l.id);
+    const fromIdx = ids.indexOf(dragId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) { setDragId(null); setDragOverId(null); return; }
+    const reordered = [...ids];
+    reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, dragId);
+    const next = { ...manualOrderMap, [activeTab]: reordered };
+    setManualOrderMap(next);
+    clManualSave(next);
+    setSortField("manual");
+    setDragId(null);
+    setDragOverId(null);
+  }
+  function handleDragEnd() { setDragId(null); setDragOverId(null); }
 
   const membersById = useMemo(() => new Map(members.map((m) => [m.user_id, m])), [members]);
   const allLeads = leads ?? [];
@@ -229,6 +284,10 @@ export default function ClientLeadsPage() {
       return true;
     })
     .sort((a, b) => {
+      if (sortField === "manual") {
+        const order = manualOrderMap[activeTab] ?? [];
+        return (order.indexOf(a.id) ?? 9999) - (order.indexOf(b.id) ?? 9999);
+      }
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortField === "priority") return dir * ((PRIORITY_ORDER[a.priority ?? "low"] ?? 9) - (PRIORITY_ORDER[b.priority ?? "low"] ?? 9));
       if (sortField === "status") return dir * (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
@@ -245,7 +304,7 @@ export default function ClientLeadsPage() {
         return dir * a.next_follow_up_at.localeCompare(b.next_follow_up_at);
       }
       return 0;
-    }), [allLeads, activeTab, schedMap, today, priorityFilter, peopleFilter, statusFilter, search, overdueOnly, sortField, sortDir]);
+    }), [allLeads, activeTab, schedMap, today, priorityFilter, peopleFilter, statusFilter, search, overdueOnly, sortField, sortDir, manualOrderMap]);
 
   const isFiltered = priorityFilter !== "all" || peopleFilter !== "all" || statusFilter !== "all" || overdueOnly || search.trim() !== "" || activeTab !== "current";
 
@@ -465,6 +524,7 @@ export default function ClientLeadsPage() {
                 <table className="w-full min-w-[600px] text-sm">
                   <thead>
                     <tr className="border-b border-[#2a3045] bg-[#1a1f2e] text-left text-[11px] uppercase tracking-wider text-slate-500">
+                      <th className="w-8 px-2 py-3" title="Drag to reorder"><GripVertical className="h-3.5 w-3.5 text-slate-600 mx-auto" /></th>
                       <th className="w-10 px-4 py-3">
                         <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
                       </th>
@@ -475,6 +535,7 @@ export default function ClientLeadsPage() {
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="priority" label="Priority" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
+                      <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wider">Score</th>
                       <th className="px-4 py-3 font-medium">
                         <ColHeader field="assignee" label="Assigned To" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                       </th>
@@ -493,8 +554,16 @@ export default function ClientLeadsPage() {
                       const fu = followUpState(lead.next_follow_up_at, lead.status);
                       return (
                         <tr key={lead.id}
+                          draggable
+                          onDragStart={() => handleDragStart(lead.id)}
+                          onDragOver={(e) => handleDragOver(e, lead.id)}
+                          onDrop={(e) => handleDrop(e, lead.id)}
+                          onDragEnd={handleDragEnd}
                           onClick={() => canUpdate && openEdit(lead)}
-                          className={`border-b border-[#2a3045] last:border-0 transition-colors hover:bg-[#1a1f2e] ${canUpdate ? "cursor-pointer" : ""}`}>
+                          className={`border-b border-[#2a3045] last:border-0 transition-colors hover:bg-[#1a1f2e] ${canUpdate ? "cursor-pointer" : ""} ${dragOverId === lead.id ? "bg-blue-500/5 border-blue-500/40" : ""} ${dragId === lead.id ? "opacity-40" : ""}`}>
+                          <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <GripVertical className="h-4 w-4 text-slate-600 cursor-grab active:cursor-grabbing mx-auto" />
+                          </td>
                           <td className="px-4 py-3">
                             <input type="checkbox" className="h-4 w-4 rounded border-[#2a3045] bg-transparent accent-blue-500" />
                           </td>
@@ -526,6 +595,13 @@ export default function ClientLeadsPage() {
                             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_BADGE[lead.priority ?? ""] ?? "text-slate-400"}`}>
                               {lead.priority}
                             </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {(() => { const sc = leadScore(lead); return (
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${scoreColor(sc)}`} title="Lead score">
+                                {sc}
+                              </span>
+                            ); })()}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
                             {allocatedNames || <span className="text-xs italic text-slate-600">Unassigned</span>}

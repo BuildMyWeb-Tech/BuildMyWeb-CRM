@@ -130,6 +130,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/pipelines", labelKey: "pipelines", icon: GitBranch, minRole: "viewer", pageKey: "pipelines" },
       { href: "/broadcasts", labelKey: "broadcasts", icon: Radio, minRole: "agent", pageKey: "broadcasts" },
       { href: "/automations", labelKey: "automations", icon: Zap, minRole: "agent", pageKey: "automations" },
+      { href: "/automations/keyword-replies", labelKey: "keywordAutoReply", icon: Zap, minRole: "agent" },
       { href: "/flows", labelKey: "flows", icon: Workflow, minRole: "agent", beta: true, pageKey: "flows" },
       { href: "/agents", labelKey: "aiAgents", icon: Bot, minRole: "agent", pageKey: "ai_agents" },
       { href: "/workspace", labelKey: "workspace", icon: Layers, minRole: "viewer", pageKey: "workspace" },
@@ -161,6 +162,7 @@ export const CRM_MODULES: CrmModule[] = [
       { href: "/whatsapp-connect", labelKey: "whatsappConnect", icon: Zap, minRole: "admin" },
       { href: "/office/invoices", labelKey: "invoices", icon: FileText, minRole: "admin" },
       { href: "/office/quotations", labelKey: "quotationGenerator", icon: PenSquare, minRole: "admin" },
+      { href: "/office/firebase-config", labelKey: "firebasePushConfig", icon: Zap, minRole: "admin" },
     ],
   },
 ];

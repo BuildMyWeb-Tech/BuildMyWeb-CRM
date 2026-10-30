@@ -148,6 +148,29 @@ export function TaskForm({
       onOpenChange(false);
       onSaved();
       toast.success(isEditing ? "Task updated." : "Task created.");
+
+      // @mention detection — notify mentioned team members
+      const mentionRegex = /@(\w[\w\s]*?)(?=\s|$|[^a-zA-Z\s])/g;
+      const desc = description.trim();
+      if (desc) {
+        const mentions = [...desc.matchAll(mentionRegex)].map((m) => m[1].toLowerCase().trim());
+        for (const mention of mentions) {
+          const member = members.find((m) => m.full_name?.toLowerCase().includes(mention));
+          if (member?.user_id) {
+            try {
+              const supabaseC = createClient();
+              await supabaseC.from("notifications").insert({
+                account_id: accountId,
+                user_id: member.user_id,
+                type: "mentioned",
+                title: `You were mentioned in a task`,
+                body: `"${trimmedTitle}" — "${desc.slice(0, 80)}${desc.length > 80 ? "…" : ""}"`,
+                read_at: null,
+              });
+            } catch { /* ignore mention notification errors */ }
+          }
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -238,11 +261,12 @@ export function TaskForm({
           </div>
 
           <div className="grid gap-2">
-            <Label className="text-muted-foreground">Description</Label>
+            <Label className="text-muted-foreground">Description <span className="text-[10px] font-normal text-muted-foreground/60">— use @name to mention a teammate</span></Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="border-border bg-muted text-foreground"
+              placeholder="Describe the task… @mention someone to notify them"
               rows={3}
             />
           </div>

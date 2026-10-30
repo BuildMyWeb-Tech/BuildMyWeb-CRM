@@ -880,6 +880,53 @@ async function processMessage(
     })
   }
 
+  // Keyword auto-reply: check account keyword rules and send matching reply
+  if (!flowConsumed && inboundText.trim()) {
+    try {
+      const { data: settingsRow } = await supabaseAdmin()
+        .from('account_settings')
+        .select('keyword_replies')
+        .eq('account_id', accountId)
+        .maybeSingle()
+      const keywordRules = (settingsRow?.keyword_replies ?? []) as Array<{
+        id: string; keyword: string; match_type: string; reply: string; is_active: boolean
+      }>
+      const msgLower = inboundText.trim().toLowerCase()
+      const matched = keywordRules.find((r) => {
+        if (!r.is_active) return false
+        const kw = r.keyword.toLowerCase()
+        if (r.match_type === 'exact') return msgLower === kw
+        if (r.match_type === 'starts_with') return msgLower.startsWith(kw)
+        return msgLower.includes(kw)
+      })
+      if (matched) {
+        // Use Cloud API to send reply via the whatsapp config
+        const { data: wpConfig } = await supabaseAdmin()
+          .from('whatsapp_config')
+          .select('phone_number_id, access_token')
+          .eq('account_id', accountId)
+          .maybeSingle()
+        if (wpConfig?.phone_number_id && wpConfig?.access_token) {
+          await fetch(
+            `https://graph.facebook.com/v19.0/${wpConfig.phone_number_id}/messages`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${wpConfig.access_token}` },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: message.from,
+                type: 'text',
+                text: { body: matched.reply },
+              }),
+            }
+          ).catch((err) => console.error('[keyword-reply] send failed:', err))
+        }
+      }
+    } catch (err) {
+      console.error('[keyword-reply] error:', err)
+    }
+  }
+
   // message.received webhook (public API). Awaited — not fire-and-forget
   // — because we're inside the route's `after()` block, which only keeps
   // the function alive for promises it can see; a detached promise could

@@ -41,6 +41,8 @@
     "expenses": "Expenses",
     "invoices": "Invoices",
     "quotationGenerator": "Quotation Generator",
+    "keywordAutoReply": "Keyword Auto-Reply",
+    "firebasePushConfig": "Push Notifications",
     "reviews": "Client Reviews",
     "moduleClients": "Clients",
     "projects": "Projects",
